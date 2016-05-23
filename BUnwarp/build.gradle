@@ -1,0 +1,43 @@
+apply plugin: 'java'
+apply plugin: 'eclipse'
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+//  compile 'org.jgrapht:jgrapht-core:0.9.1'
+}
+
+eclipse {
+  project {
+    natures += ['icy.icy4eclipse.core.icynature']
+  }
+  classpath {
+    file {
+      withXml {
+          def node = it.asNode()
+          
+          // clean src
+          node.classpathentry.findAll{
+            it.@kind == 'src'
+          }.each{
+            node.remove(it)
+          }
+          
+          // clean var
+          node.classpathentry.findAll{
+            it.@kind == 'var'
+          }.each{
+            node.remove(it)
+          }
+          
+          // set src and var
+          node.appendNode('classpathentry', [kind: 'src', path: 'src'])
+          node.appendNode('classpathentry', [kind: 'var', path: 'ICY_HOME/icy.jar'])
+          node.appendNode('classpathentry', [kind: 'var', path: 'ICY_HOME/plugins/adufour/blocks/Blocks.jar'])
+          node.appendNode('classpathentry', [kind: 'var', path: 'ICY_HOME/plugins/adufour/ezplug/EzPlug.jar'])
+      }
+    }
+  }
+}
