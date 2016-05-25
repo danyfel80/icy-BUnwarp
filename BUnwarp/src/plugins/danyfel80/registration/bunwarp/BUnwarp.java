@@ -1,10 +1,13 @@
 package plugins.danyfel80.registration.bunwarp;
 
+import java.util.List;
+
 import algorithms.danyfel80.registration.bunwarp.BUnwarpper;
 import algorithms.danyfel80.registration.bunwarp.MaximumScaleDeformationEnum;
 import algorithms.danyfel80.registration.bunwarp.MinimumScaleDeformationEnum;
 import algorithms.danyfel80.registration.bunwarp.RegistrationModeEnum;
 import icy.gui.dialog.MessageDialog;
+import icy.roi.ROI;
 import plugins.adufour.blocks.lang.Block;
 import plugins.adufour.blocks.util.VarList;
 import plugins.adufour.ezplug.EzGroup;
@@ -17,6 +20,8 @@ import plugins.adufour.ezplug.EzVarEnum;
 import plugins.adufour.ezplug.EzVarInteger;
 import plugins.adufour.ezplug.EzVarListener;
 import plugins.adufour.ezplug.EzVarSequence;
+import plugins.kernel.roi.roi2d.ROI2DPoint;
+import plugins.kernel.roi.roi2d.ROI2DPolygon;
 
 /**
  * @author Daniel Felipe Gonzalez Obando
@@ -101,7 +106,6 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 	@Override
 	public void declareOutput(VarList outputMap) {
 		// TODO Auto-generated method stub
-
 	}
 
 	/*
@@ -141,9 +145,24 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 		if (validateInput() != 0) {
 			return;
 		}
-		BUnwarpper bu = new BUnwarpper(inSrcSeq.getValue(), inTgtSeq.getValue(), inMode.getValue(),
-		    inSubsampleFactor.getValue(), inIniDef.getValue(), inFnlDef.getValue(), inDivWeight.getValue(),
-		    inCurlWeight.getValue(), inLandmarkWeight.getValue(), inConsistencyWeight.getValue(), inImageWeight.getValue(),
+
+		List<? extends ROI> srcLandmarks = inSrcSeq.getValue().getROIs(ROI2DPoint.class);
+		List<? extends ROI> tgtLandmarks = inTgtSeq.getValue().getROIs(ROI2DPoint.class);
+
+		ROI2DPolygon srcMask = null;
+		ROI2DPolygon tgtMask = null;
+		if (inSrcSeq.getValue().getROICount(ROI2DPolygon.class) > 0) {
+			srcMask = (ROI2DPolygon) inSrcSeq.getValue().getROIs(ROI2DPolygon.class).get(0);
+		}
+		if (inSrcSeq.getValue().getROICount(ROI2DPolygon.class) > 0) {
+			tgtMask = (ROI2DPolygon) inSrcSeq.getValue().getROIs(ROI2DPolygon.class).get(0);
+		}
+
+		@SuppressWarnings("unchecked")
+		BUnwarpper bu = new BUnwarpper(inSrcSeq.getValue(), inTgtSeq.getValue(), (List<ROI2DPoint>) srcLandmarks,
+		    (List<ROI2DPoint>) tgtLandmarks, srcMask, tgtMask, inMode.getValue(), inSubsampleFactor.getValue(),
+		    inIniDef.getValue(), inFnlDef.getValue(), inDivWeight.getValue(), inCurlWeight.getValue(),
+		    inLandmarkWeight.getValue(), inConsistencyWeight.getValue(), inImageWeight.getValue(),
 		    inStopThreshold.getValue(), inShowProcess.getValue(), this);
 		bu.start();
 		try {
@@ -155,13 +174,19 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 		} catch (InterruptedException e) {
 			System.err.println("Thread interrupted: " + e.getMessage());
 		}
-		
+
 	}
 
 	private int validateInput() {
 		if (inSrcSeq.getValue() == null || inTgtSeq.getValue() == null) {
 			MessageDialog.showDialog("Error", "Please choose two valid images", MessageDialog.ERROR_MESSAGE);
 			return 1;
+		}
+		if (inSrcSeq.getValue().getROICount(ROI2DPolygon.class) > 1
+		    || inTgtSeq.getValue().getROICount(ROI2DPolygon.class) > 1) {
+			MessageDialog.showDialog("Error", "Please define a single mask for each input sequence.",
+			    MessageDialog.ERROR_MESSAGE);
+			return 2;
 		}
 		return 0;
 	}
