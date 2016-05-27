@@ -3,7 +3,6 @@ package algorithms.danyfel80.registration.bunwarp;
 import java.util.Stack;
 
 import icy.image.IcyBufferedImage;
-import icy.sequence.Sequence;
 
 /**
  * @author Daniel Felipe Gonzalez Obando
@@ -53,10 +52,10 @@ public class BSplineModel extends Thread {
 	private int pyramidDepth;
 	/** current pyramid depth */
 	private int currentDepth;
-	/** smallest image width */
-	private int smallestWidth;
-	/** smallest image height */
-	private int smallestHeight;
+//	/** smallest image width */
+//	private int smallestWidth;
+//	/** smallest image height */
+//	private int smallestHeight;
 	/** flag to check target image */
 	private boolean isTarget;
 	/** flag to check if the coefficients are mirrored */
@@ -807,8 +806,8 @@ public class BSplineModel extends Thread {
 				this.subCoeffs = halfCoefficient;
 			}
 		}
-		smallestWidth = halfWidth;
-		smallestHeight = halfHeight;
+//		smallestWidth = halfWidth;
+//		smallestHeight = halfHeight;
 		currentDepth = pyramidDepth + 1;
 
 		// if(this.bSubsampledOutput && this.subCoeffs != null)
@@ -1081,8 +1080,8 @@ public class BSplineModel extends Thread {
 				this.subCoeffs = halfCoefficient;
 			}
 		}
-		smallestWidth = halfWidth;
-		smallestHeight = halfHeight;
+//		smallestWidth = halfWidth;
+//		smallestHeight = halfHeight;
 		currentDepth = pyramidDepth + 1;
 
 		// if(this.bSubsampledOutput && this.subCoeffs != null)

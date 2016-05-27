@@ -1404,6 +1404,7 @@ public class Transformation {
 			state = 0;
 		int s = minScaleDeformation;
 		int currentDepth = targetModel.getCurrentDepth();
+		@SuppressWarnings("unused") // TODO remove
 		int workload = 0;
 		while (state != -1) {
 			// Update the deformation coefficients only in states 0 and 1
@@ -3776,8 +3777,8 @@ public class Transformation {
 	                                                                                          // spline
 	                                                                                          // coefficients
 	    final double[][] cy, boolean bIsReverse) {
-		BSplineModel auxTarget = targetModel;
-		BSplineModel auxSource = sourceModel;
+//		BSplineModel auxTarget = targetModel;
+//		BSplineModel auxSource = sourceModel;
 		ROI2DPolygon auxTargetMsk = targetMask;
 		ROI2DPolygon auxSourceMsk = sourceMask;
 		int auxTargetWidth = this.originalTargetIBI.getWidth();
@@ -3786,8 +3787,8 @@ public class Transformation {
 
 		// Change if necessary
 		if (bIsReverse) {
-			auxTarget = sourceModel;
-			auxSource = targetModel;
+			//auxTarget = sourceModel;
+			//auxSource = targetModel;
 			auxTargetMsk = sourceMask;
 			auxSourceMsk = targetMask;
 			auxTargetWidth = this.originalSourceIBI.getWidth();
