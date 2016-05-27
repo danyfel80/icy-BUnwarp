@@ -1,14 +1,29 @@
-package algorithms.danyfel80.registration.bunwarp;
+package algorithms.danyfel80.registration.bunwarp.old;
 
 /**
  * @author Daniel Felipe Gonzalez Obando
  */
 public class MathTools {
 
-	/** float epsilon */
-	private static final double FLT_EPSILON = (double) Float.intBitsToFloat((int) 0x33FFFFFF);
-	/** maximum number of iteration for the Singular Value Decomposition */
 	private static final int MAX_SVD_ITERATIONS = 1000;
+	private static final double FLT_EPSILON = (double) Float.intBitsToFloat((int) 0x33FFFFFF);;
+
+	/**
+	 * B-spline 03.
+	 * 
+	 * @param x
+	 */
+	public static double Bspline03(double x) {
+		x = Math.abs(x);
+		if (x < 1.0F) {
+			return (0.5F * x * x * (x - 2.0F) + (2.0F / 3.0F));
+		} else if (x < 2.0F) {
+			x -= 2.0F;
+			return (x * x * x / (-6.0F));
+		} else {
+			return (0.0F);
+		}
+	}
 
 	/**
 	 * N choose K.
@@ -41,7 +56,7 @@ public class MathTools {
 	 * @param V
 	 *          untransposed orthogonal matrix
 	 */
-	public static void singularValueDecomposition(final double[][] U, final double[] W, final double[][] V) {
+	public static void singularValueDecomposition(double[][] U, double[] W, double[][] V) {
 		final int lines = U.length;
 		final int columns = U[0].length;
 		final double[] rv1 = new double[columns];
@@ -281,30 +296,13 @@ public class MathTools {
 	 * @param a
 	 * @param b
 	 */
-	public static double EuclideanNorm(final double a, final double b) {
+	private static double EuclideanNorm(double a, double b) {
 		final double absa = Math.abs(a);
 		final double absb = Math.abs(b);
 		if (absb < absa) {
 			return (absa * Math.sqrt(1.0 + (absb * absb / (absa * absa))));
 		} else {
 			return ((absb == 0.0F) ? (0.0F) : (absb * Math.sqrt(1.0 + (absa * absa / (absb * absb)))));
-		}
-	}
-
-	/**
-	 * B-spline 03.
-	 *
-	 * @param x
-	 */
-	public static double Bspline03(double x) {
-		x = Math.abs(x);
-		if (x < 1.0F) {
-			return (0.5F * x * x * (x - 2.0F) + (2.0F / 3.0F));
-		} else if (x < 2.0F) {
-			x -= 2.0F;
-			return (x * x * x / (-6.0F));
-		} else {
-			return (0.0F);
 		}
 	}
 
@@ -321,7 +319,7 @@ public class MathTools {
 	 *          output, inverted matrix
 	 * @return under-constrained flag
 	 */
-	public static boolean invertMatrixSVD(int Ydim, int Xdim, final double[][] B, final double[][] iB) {
+	public static boolean invertMatrixSVD(int Ydim, int Xdim, double[][] B, double[][] iB) {
 		boolean underconstrained = false;
 
 		final double[] W = new double[Xdim];
@@ -374,7 +372,7 @@ public class MathTools {
 	 *          An input vector b[line] of size (line)
 	 * @return An output vector x[column] of size (column)
 	 */
-	public static double[] linearLeastSquares(final double[][] A, final double[] b) {
+	public static double[] linearLeastSquares(double[][] A, double[] b) {
 		if (A == null || A.length == 0)
 			return null;
 		final int lines = A.length;
@@ -424,7 +422,7 @@ public class MathTools {
 	 * @param R
 	 *          An output (column x column) square matrix R[column][column]
 	 */
-	public static void QRdecomposition(final double[][] Q, final double[][] R) {
+	private static void QRdecomposition(double[][] Q, double[][] R) {
 		final int lines = Q.length;
 		final int columns = Q[0].length;
 		final double[][] A = new double[lines][columns];
@@ -467,4 +465,5 @@ public class MathTools {
 			}
 		}
 	}
+
 }

@@ -7,7 +7,9 @@ import algorithms.danyfel80.registration.bunwarp.MaximumScaleDeformationEnum;
 import algorithms.danyfel80.registration.bunwarp.MinimumScaleDeformationEnum;
 import algorithms.danyfel80.registration.bunwarp.RegistrationModeEnum;
 import icy.gui.dialog.MessageDialog;
+import icy.image.IcyBufferedImage;
 import icy.roi.ROI;
+import icy.sequence.Sequence;
 import plugins.adufour.blocks.lang.Block;
 import plugins.adufour.blocks.util.VarList;
 import plugins.adufour.ezplug.EzGroup;
@@ -71,7 +73,14 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 	// Output variables
 
 	// Internal variables
+	Sequence srcSeq;
+	Sequence tgtSeq;
 
+	IcyBufferedImage originalSrcIBI;
+	IcyBufferedImage originalTgtIBI;
+	
+	private boolean isPluginInterrupted;
+			
 	/*
 	 * (non-Javadoc)
 	 * 
@@ -125,6 +134,7 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 		inLandmarkWeight.setValue(0d);
 		inImageWeight.setValue(1d);
 		inConsistencyWeight.setValue(10d);
+		inStopThreshold.setValue(1e-2);
 
 		inMode.addVarChangeListener(new EzVarListener<RegistrationModeEnum>() {
 
@@ -142,35 +152,36 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 	 */
 	@Override
 	protected void execute() {
+		this.isPluginInterrupted = false;
 		if (validateInput() != 0) {
 			return;
 		}
+		srcSeq = inSrcSeq.getValue();
+		tgtSeq = inTgtSeq.getValue();
+		originalSrcIBI = srcSeq.getFirstImage();
+		originalTgtIBI = tgtSeq.getFirstImage();
 
-		List<? extends ROI> srcLandmarks = inSrcSeq.getValue().getROIs(ROI2DPoint.class);
-		List<? extends ROI> tgtLandmarks = inTgtSeq.getValue().getROIs(ROI2DPoint.class);
+		List<? extends ROI> srcLandmarks = srcSeq.getROIs(ROI2DPoint.class);
+		List<? extends ROI> tgtLandmarks = tgtSeq.getROIs(ROI2DPoint.class);
 
 		ROI2DPolygon srcMask = null;
 		ROI2DPolygon tgtMask = null;
-		if (inSrcSeq.getValue().getROICount(ROI2DPolygon.class) > 0) {
-			srcMask = (ROI2DPolygon) inSrcSeq.getValue().getROIs(ROI2DPolygon.class).get(0);
+		if (srcSeq.getROICount(ROI2DPolygon.class) > 0) {
+			srcMask = (ROI2DPolygon) srcSeq.getROIs(ROI2DPolygon.class).get(0);
 		}
-		if (inSrcSeq.getValue().getROICount(ROI2DPolygon.class) > 0) {
-			tgtMask = (ROI2DPolygon) inSrcSeq.getValue().getROIs(ROI2DPolygon.class).get(0);
+		if (tgtSeq.getROICount(ROI2DPolygon.class) > 0) {
+			tgtMask = (ROI2DPolygon) tgtSeq.getROIs(ROI2DPolygon.class).get(0);
 		}
 
 		@SuppressWarnings("unchecked")
-		BUnwarpper bu = new BUnwarpper(inSrcSeq.getValue(), inTgtSeq.getValue(), (List<ROI2DPoint>) srcLandmarks,
-		    (List<ROI2DPoint>) tgtLandmarks, srcMask, tgtMask, inMode.getValue(), inSubsampleFactor.getValue(),
-		    inIniDef.getValue(), inFnlDef.getValue(), inDivWeight.getValue(), inCurlWeight.getValue(),
-		    inLandmarkWeight.getValue(), inConsistencyWeight.getValue(), inImageWeight.getValue(),
-		    inStopThreshold.getValue(), inShowProcess.getValue(), this);
+		BUnwarpper bu = new BUnwarpper(srcSeq, tgtSeq, (List<ROI2DPoint>) srcLandmarks,
+		    (List<ROI2DPoint>) tgtLandmarks, srcMask, tgtMask, inSubsampleFactor.getValue(),
+		    inIniDef.getValue().getNumber(), inFnlDef.getValue().getNumber(), 0, inDivWeight.getValue(), inCurlWeight.getValue(),
+		    inLandmarkWeight.getValue(), inImageWeight.getValue(), inConsistencyWeight.getValue(),
+		    inStopThreshold.getValue(), inShowProcess.getValue()? 2: 1, inShowProcess.getValue(), inMode.getValue().getNumber(), this);
 		bu.start();
 		try {
 			bu.join();
-			addSequence(bu.getDirectTransform());
-			if (inMode.getValue() != RegistrationModeEnum.MONO) {
-				addSequence(bu.getInverseTransform());
-			}
 		} catch (InterruptedException e) {
 			System.err.println("Thread interrupted: " + e.getMessage());
 		}
@@ -198,8 +209,7 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 	 */
 	@Override
 	public void stopExecution() {
-		// TODO Auto-generated method stub
-
+		isPluginInterrupted = true;
 	}
 
 	/*
@@ -212,5 +222,20 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 		// TODO Auto-generated method stub
 
 	}
+	
+	public boolean isPluginInterrumped() {
+		return this.isPluginInterrupted;
+	}
+
+	public void restoreAll() {
+		ungrayInputImages();
+		// TODO ProgressBar.resetProgressBar();
+		Runtime.getRuntime().gc();
+	}
+
+	private void ungrayInputImages() {
+		srcSeq.setImage(0, 0, originalSrcIBI);
+		tgtSeq.setImage(0, 0, originalTgtIBI);
+	};
 
 }

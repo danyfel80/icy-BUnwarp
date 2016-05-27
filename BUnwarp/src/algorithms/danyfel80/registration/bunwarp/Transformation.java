@@ -1,56 +1,41 @@
 package algorithms.danyfel80.registration.bunwarp;
 
-import plugins.adufour.ezplug.EzPlug;
-import plugins.kernel.roi.roi2d.ROI2DPoint;
-import plugins.kernel.roi.roi2d.ROI2DPolygon;
-
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
-import java.awt.image.BufferedImage;
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Vector;
 
-import icy.gui.dialog.SaveDialog;
 import icy.image.IcyBufferedImage;
+import icy.image.IcyBufferedImageUtil;
 import icy.sequence.Sequence;
-import icy.sequence.SequenceUtil;
 import icy.type.DataType;
+import icy.type.collection.array.Array2DUtil;
+import plugins.adufour.ezplug.EzPlug;
+import plugins.danyfel80.registration.bunwarp.BUnwarp;
+import plugins.kernel.roi.roi2d.ROI2DPoint;
+import plugins.kernel.roi.roi2d.ROI2DPolygon;
 
 /**
- * Class to perform the transformation for bUnwarpJ:
- * <p>
- * <ul>
- * <li>It stores the information about the bidirectional or unidirectional
- * registration.</li>
- * <li>It produces the registration results and the corresponding output if
- * called from dialog.</li>
- * <li>The main registration methods are
- * <code>doBidirectionalRegistration</code> (bidirectional) and
- * <code>doUnidirectionalRegistration</code> (unidirectional).</li>
- * <li>The intermediate states of the registration are displayed in separate
- * windows (depending on the value of <code>outputLevel</code>.</li>
- * </ul>
+ * @author Daniel Felipe Gonzalez Obando
+ *
  */
 public class Transformation {
 
-	// Private variables
-
 	/** float epsilon */
-	private final double FLT_EPSILON = (double) Float.intBitsToFloat((int) 0x33FFFFFF);
+	private static final double FLT_EPSILON = (double) Float.intBitsToFloat((int) 0x33FFFFFF);
 	/**
 	 * pyramid flag to indicate the image information is taken from the pyramid
 	 */
-	private final boolean PYRAMID = true;
+	private static final boolean PYRAMID = true;
 	/**
 	 * original flag to indicate the image information is taken from the original
 	 * image
 	 */
-	private final boolean ORIGINAL = false;
+	private static final boolean ORIGINAL = false;
+
 	/** degree of the B-splines involved in the transformation */
 	private final int transformationSplineDegree = 3;
 
@@ -59,7 +44,7 @@ public class Transformation {
 	private Sequence outputSeq1;
 	/** reference to the second output image */
 	private Sequence outputSeq2;
-	/** reference to the plugin interface */
+	/** pointer to the BUnwarp EzPlug */
 	private EzPlug plugin;
 
 	// Images
@@ -70,17 +55,17 @@ public class Transformation {
 	/**
 	 * pointer to the source image model (source image represented by B-splines)
 	 */
-	private BSplineModel srcModel;
+	private BSplineModel sourceModel;
 	/**
 	 * pointer to the target image model (target image represented by B-splines)
 	 */
-	private BSplineModel tgtModel;
+	private BSplineModel targetModel;
 
-	// Original image processors
-	/** initial source image processor */
-	private Sequence originalSourceSeq;
-	/** initial target image processor */
-	private Sequence originalTargetSeq;
+	// Original buffered images
+	/** initial source buffered image */
+	private IcyBufferedImage originalSourceIBI;
+	/** initial target buffered image */
+	private IcyBufferedImage originalTargetIBI;
 
 	// Landmarks
 	/** pointer to the source landmarks */
@@ -93,12 +78,6 @@ public class Transformation {
 	private ROI2DPolygon sourceMask;
 	/** pointer to the target mask */
 	private ROI2DPolygon targetMask;
-
-	// Initial Affine Matrices
-	/** initial affine matrix for the source image */
-	private double[][] sourceAffineMatrix = null;
-	/** initial affine matrix for the target image */
-	private double[][] targetAffineMatrix = null;
 
 	// Initial affine matrix pre-process
 	/** percentage of shear correction in initial matrix */
@@ -173,9 +152,9 @@ public class Transformation {
 
 	// Transformation parameters
 	/** minimum scale deformation */
-	private int minScaleDef;
+	private int minScaleDeformation;
 	/** maximum scale deformation */
-	private int maxScaleDef;
+	private int maxScaleDeformation;
 	/** minimum scale image */
 	private int minScaleImage;
 	/** flag to specify the level of resolution in the output */
@@ -195,11 +174,7 @@ public class Transformation {
 	/** stopping threshold */
 	private double stopThreshold;
 	/** level of accuracy */
-	private RegistrationModeEnum accurateMode;
-	/** direct transformation file name */
-	private String dirTFileName;
-	/** inverse transformation file name */
-	private String invTFileName;
+	private int accurateMode;
 
 	// Transformation estimate
 	/** number of intervals to place B-spline coefficients */
@@ -245,141 +220,28 @@ public class Transformation {
 	/** regularization P12 (target to source) matrix */
 	private double[][] P12_TargetToSource;
 
-	/*
-	 * .................................................................... Public
-	 * methods
-	 * ....................................................................
-	 */
-
-	/**
-	 * Create an instance of Transformation.
-	 *
-	 * @param srcSeq
-	 *          Image representation for the source
-	 * @param tgtSeq
-	 *          Image representation for the target
-	 * @param srcModel
-	 *          Source image model
-	 * @param tgtModel
-	 *          Target image model
-	 * @param srcLandmarks
-	 *          Landmarks in the source image
-	 * @param tgtLandmarks
-	 *          Landmarks in the target image
-	 * @param srcMask
-	 *          Source image mask
-	 * @param tgtMask
-	 *          Target image mask
-	 * @param srcAffineMatrix
-	 *          Source initial affine matrix
-	 * @param tgtAffineMatrix
-	 *          Source initial affine matrix
-	 * @param minScaleDef
-	 *          Minimum scale deformation
-	 * @param maxScaleDef
-	 *          Maximum scale deformation
-	 * @param minScaleImage
-	 *          Minimum image scale
-	 * @param divWeight
-	 *          Divergence weight
-	 * @param curlWeight
-	 *          Curl weight
-	 * @param landmarkWeight
-	 *          Landmark weight
-	 * @param imageWeight
-	 *          Weight for image similarity
-	 * @param consistencyWeight
-	 *          Weight for the deformations consistency
-	 * @param stopThreshold
-	 *          Stopping threshold
-	 * @param outputLevel
-	 *          Flag to specify the level of resolution in the output
-	 * @param showMarquardtOptim
-	 *          Flag to show the optimizer
-	 * @param accurateMode
-	 *          Level of accuracy
-	 * @param dirTFileName
-	 *          Direct transformation file name
-	 * @param invTFileName
-	 *          Inverse transformation file name
-	 * @param outputSeq1
-	 *          Pointer to the first output image
-	 * @param outputSeq2
-	 *          Pointer to the second output image
-	 * @param plugin
-	 *          Pointer to the icy plugin
-	 */
-	public Transformation(final Sequence srcSeq, final Sequence tgtSeq, final BSplineModel srcModel,
-	    final BSplineModel tgtModel, final List<ROI2DPoint> srcLandmarks, final List<ROI2DPoint> tgtLandmarks,
-	    final ROI2DPolygon srcMask, final ROI2DPolygon tgtMask, final double[][] srcAffineMatrix,
-	    final double[][] tgtAffineMatrix, final int minScaleDef, final int maxScaleDef, final int minScaleImage,
-	    final double divWeight, final double curlWeight, final double landmarkWeight, final double imageWeight,
-	    final double consistencyWeight, final double stopThreshold, final int outputLevel,
-	    final boolean showMarquardtOptim, final RegistrationModeEnum accurate_mode, final String dirTFileName,
-	    final String invTFileName, final Sequence outputSeq1, final Sequence outputSeq2, final EzPlug plugin) {
-		this.sourceSeq = srcSeq;
-		this.targetSeq = tgtSeq;
-		this.srcModel = srcModel;
-		this.tgtModel = tgtModel;
-		this.sourceLandmarks = srcLandmarks;
-		this.targetLandmarks = tgtLandmarks;
-		this.sourceMask = srcMask;
-		this.targetMask = tgtMask;
-		this.sourceAffineMatrix = srcAffineMatrix;
-		this.targetAffineMatrix = tgtAffineMatrix;
-		this.minScaleDef = minScaleDef;
-		this.maxScaleDef = maxScaleDef;
-		this.minScaleImage = minScaleImage;
-		this.divWeight = divWeight;
-		this.curlWeight = curlWeight;
-		this.landmarkWeight = landmarkWeight;
-		this.imageWeight = imageWeight;
-		this.consistencyWeight = consistencyWeight;
-		this.stopThreshold = stopThreshold;
-		this.outputLevel = outputLevel;
-		this.showMarquardtOptim = showMarquardtOptim;
-		this.accurateMode = accurate_mode;
-		this.dirTFileName = dirTFileName;
-		this.invTFileName = invTFileName;
-		this.outputSeq1 = outputSeq1;
-		this.outputSeq2 = outputSeq2;
-		this.plugin = plugin;
-
-		this.originalSourceSeq = srcSeq;
-		this.originalTargetSeq = tgtSeq;
-
-		this.sourceWidth = srcModel.getWidth();
-		this.sourceHeight = srcModel.getHeight();
-		this.targetWidth = tgtModel.getWidth();
-		this.targetHeight = tgtModel.getHeight();
-	}
-
 	/**
 	 * Create an instance of Transformation.
 	 * 
-	 * @param srcSeq
+	 * @param sourceSeq
 	 *          Image representation for the source
-	 * @param tgtSeq
+	 * @param targetSeq
 	 *          Image representation for the target
-	 * @param srcModel
+	 * @param sourceModel
 	 *          Source image model
-	 * @param tgtModel
+	 * @param targetModel
 	 *          Target image model
-	 * @param srcLandmarks
+	 * @param sourceLandmarks
 	 *          Landmarks in the source image
-	 * @param tgtLandmarks
+	 * @param targetLandmarks
 	 *          Landmarks in the target image
-	 * @param srcMask
-	 *          source image mask
-	 * @param tgtMask
-	 *          target image mask
-	 * @param srcAffineMatrix
-	 *          Source initial affine matrix
-	 * @param tgtAffineMatrix
-	 *          Target initial affine matrix
-	 * @param minScaleDef
+	 * @param sourceMask
+	 *          Source image mask
+	 * @param targetMask
+	 *          Target image mask
+	 * @param minScaleDeformation
 	 *          Minimum scale deformation
-	 * @param maxScaleDef
+	 * @param maxScaleDeformation
 	 *          Maximum scale deformation
 	 * @param minScaleImage
 	 *          Minimum image scale
@@ -401,43 +263,30 @@ public class Transformation {
 	 *          Flag to show the optimizer
 	 * @param accurateMode
 	 *          Level of accuracy
-	 * @param dirTFileName
-	 *          Direct transformation file name
-	 * @param invTFileName
-	 *          Inverse transformation file name
-	 * @param outputSeq1
+	 * @param outputSequence1
 	 *          Pointer to the first output image
-	 * @param outputSeq2
+	 * @param outputSequence2
 	 *          Pointer to the second output image
 	 * @param plugin
-	 *          Pointer to the icy plugin
-	 * @param originalSourceSeq
-	 *          Original source sequence
-	 * @param originalTargetSeq
-	 *          Original target sequence
+	 *          Pointer to the BUnwarp EzPlug
 	 */
-	public Transformation(final Sequence srcSeq, final Sequence tgtSeq, final BSplineModel srcModel,
-	    final BSplineModel tgtModel, final List<ROI2DPoint> srcLandmarks, final List<ROI2DPoint> tgtLandmarks,
-	    final ROI2DPolygon srcMask, final ROI2DPolygon tgtMask, final double[][] srcAffineMatrix,
-	    final double[][] tgtAffineMatrix, final int minScaleDef, final int maxScaleDef, final int minScaleImage,
-	    final double divWeight, final double curlWeight, final double landmarkWeight, final double imageWeight,
-	    final double consistencyWeight, final double stopThreshold, final int outputLevel,
-	    final boolean showMarquardtOptim, final RegistrationModeEnum accurateMode, final String dirTFileName,
-	    final String invTFileName, final Sequence outputSeq1, final Sequence outputSeq2, final EzPlug plugin,
-	    final Sequence originalSourceSeq, final Sequence originalTargetSeq) {
-		this.sourceSeq = srcSeq;
-		this.targetSeq = tgtSeq;
-		this.srcModel = srcModel;
-		this.tgtModel = tgtModel;
-		this.sourceLandmarks = srcLandmarks;
-		this.targetLandmarks = tgtLandmarks;
-		this.sourceMask = srcMask;
-		this.targetMask = tgtMask;
-		this.sourceAffineMatrix = srcAffineMatrix;
-		this.targetAffineMatrix = tgtAffineMatrix;
-		this.minScaleDef = minScaleDef;
-		this.maxScaleDef = maxScaleDef;
-		this.minScaleImage = minScaleImage;
+	public Transformation(Sequence sourceSeq, Sequence targetSeq, BSplineModel sourceModel, BSplineModel targetModel,
+	    List<ROI2DPoint> sourceLandmarks, List<ROI2DPoint> targetLandmarks, ROI2DPolygon sourceMask,
+	    ROI2DPolygon targetMask, int minScaleDeformation, int maxScaleDeformation, int minScaleImage, double divWeight,
+	    double curlWeight, double landmarkWeight, double imageWeight, double consistencyWeight, double stopThreshold,
+	    int outputLevel, boolean showMarquardtOptim, int accurateMode, Sequence outputSequence1, Sequence outputSequence2,
+	    EzPlug plugin) {
+		this.sourceSeq = sourceSeq;
+		this.targetSeq = targetSeq;
+		this.sourceModel = sourceModel;
+		this.targetModel = targetModel;
+		this.sourceLandmarks = sourceLandmarks;
+		this.targetLandmarks = targetLandmarks;
+		this.sourceMask = sourceMask;
+		this.targetMask = targetMask;
+		this.minScaleDeformation = minScaleDeformation;
+		this.maxScaleDeformation = maxScaleDeformation;
+		this.minScaleImage = minScaleDeformation;
 		this.divWeight = divWeight;
 		this.curlWeight = curlWeight;
 		this.landmarkWeight = landmarkWeight;
@@ -447,359 +296,19 @@ public class Transformation {
 		this.outputLevel = outputLevel;
 		this.showMarquardtOptim = showMarquardtOptim;
 		this.accurateMode = accurateMode;
-		this.dirTFileName = dirTFileName;
-		this.invTFileName = invTFileName;
-		this.outputSeq1 = outputSeq1;
-		this.outputSeq2 = outputSeq2;
+		this.outputSeq1 = outputSequence1;
+		this.outputSeq2 = outputSequence2;
 		this.plugin = plugin;
 
-		this.originalSourceSeq = originalSourceSeq;
-		this.originalTargetSeq = originalTargetSeq;
+		this.originalSourceIBI = sourceSeq.getFirstImage();
+		this.originalTargetIBI = targetSeq.getFirstImage();
 
-		this.sourceWidth = srcModel.getWidth();
-		this.sourceHeight = srcModel.getHeight();
-		this.targetWidth = tgtModel.getWidth();
-		this.targetHeight = tgtModel.getHeight();
+		this.sourceWidth = sourceModel.getWidth();
+		this.sourceHeight = sourceModel.getHeight();
+		this.targetWidth = targetModel.getWidth();
+		this.targetHeight = targetModel.getHeight();
 	}
 
-	// ------------------------------------------------------------------
-	/**
-	 * Registration method. It applies the consistent and elastic registration
-	 * algorithm to the selected source and target images.
-	 */
-	public void doBidirectionalRegistration() {
-		// This function can only be applied with splines of an odd order
-
-		// Bring into consideration the image/coefficients at the smallest scale
-		srcModel.popFromPyramid();
-		tgtModel.popFromPyramid();
-
-		// size correction factor
-		int sizeCorrectionFactor = 0; // this.targetHeight / (1024 * (int)
-		                              // Math.pow(2,
-		                              // this.maxImageSubsamplingFactor));
-		// System.out.println("Size correction factor = " + sizeCorrectionFactor);
-
-		targetCurrentHeight = tgtModel.getCurrentHeight();
-		targetCurrentWidth = tgtModel.getCurrentWidth();
-
-		targetFactorHeight = tgtModel.getFactorHeight();
-		targetFactorWidth = tgtModel.getFactorWidth();
-
-		sourceCurrentHeight = srcModel.getCurrentHeight();
-		sourceCurrentWidth = srcModel.getCurrentWidth();
-
-		sourceFactorHeight = srcModel.getFactorHeight();
-		sourceFactorWidth = srcModel.getFactorWidth();
-
-		// Ask memory for the transformation coefficients
-		intervals = (int) Math.pow(2, minScaleDef + sizeCorrectionFactor);
-
-		cxTargetToSource = new double[intervals + 3][intervals + 3];
-		cyTargetToSource = new double[intervals + 3][intervals + 3];
-
-		// Build matrices for computing the regularization
-		buildRegularizationTemporary(intervals, false);
-		buildRegularizationTemporary(intervals, true);
-
-		// Ask for memory for the residues
-		final int K;
-		if (targetLandmarks != null) {
-			K = targetLandmarks.size();
-		} else {
-			K = 0;
-		}
-		double[] dxTargetToSource = new double[K];
-		double[] dyTargetToSource = new double[K];
-		computeInitialResidues(dxTargetToSource, dyTargetToSource, false);
-		computeInitialResidues(dxTargetToSource, dyTargetToSource, false);
-
-		// Compute the affine transformation FROM THE TARGET TO THE SOURCE
-		// coordinates
-		// Notice that this matrix is independent of the scale (unless it was loaded
-		// from
-		// file), but the residues are not
-		double[][] affineMatrix = null;
-		if (this.sourceAffineMatrix != null) {
-			affineMatrix = this.sourceAffineMatrix;
-			// Scale translations in the matrix.
-			affineMatrix[0][2] *= this.sourceFactorWidth;
-			affineMatrix[1][2] *= this.sourceFactorHeight;
-		} else {
-			// NOTE: after version 1.1 the landmarks are always used to calculate
-			// an initial affine transformation (whether the landmarks weight is 0 or
-			// not).
-			affineMatrix = computeAffineMatrix(false);
-		}
-
-		// Incorporate the affine transformation into the spline coefficient
-		for (int i = 0; i < intervals + 3; i++) {
-			final double v = (double) ((i - 1) * (targetCurrentHeight - 1)) / (double) intervals;
-			final double xv = affineMatrix[0][2] + affineMatrix[0][1] * v;
-			final double yv = affineMatrix[1][2] + affineMatrix[1][1] * v;
-			for (int j = 0; j < intervals + 3; j++) {
-				final double u = (double) ((j - 1) * (targetCurrentWidth - 1)) / (double) intervals;
-				cxTargetToSource[i][j] = xv + affineMatrix[0][0] * u;
-				cyTargetToSource[i][j] = yv + affineMatrix[1][0] * u;
-			}
-		}
-
-		// Compute the affine transformation FROM THE SOURCE TO THE TARGET
-		// coordinates
-		// Notice again that this matrix is independent of the scale, but the
-		// residues are not
-		// Ask for memory for the residues
-		final int K2;
-		if (sourceLandmarks != null) {
-			K2 = sourceLandmarks.size();
-		} else {
-			K2 = 0;
-		}
-		double[] dxSourceToTarget = new double[K2];
-		double[] dySourceToTarget = new double[K2];
-		computeInitialResidues(dxSourceToTarget, dySourceToTarget, true);
-		computeInitialResidues(dxSourceToTarget, dySourceToTarget, true);
-
-		cxSourceToTarget = new double[intervals + 3][intervals + 3];
-		cySourceToTarget = new double[intervals + 3][intervals + 3];
-
-		if (this.targetAffineMatrix != null) {
-			affineMatrix = this.targetAffineMatrix;
-			// Scale translations in the matrix.
-			affineMatrix[0][2] *= this.targetFactorWidth;
-			affineMatrix[1][2] *= this.targetFactorHeight;
-		} else {
-			// NOTE: after version 1.1 the landmarks are always used to calculate
-			// an initial affine transformation (whether the landmarks weight is 0 or
-			// not).
-			affineMatrix = computeAffineMatrix(true);
-		}
-
-		// Incorporate the affine transformation into the spline coefficient
-		for (int i = 0; i < intervals + 3; i++) {
-			final double v = (double) ((i - 1) * (sourceCurrentHeight - 1)) / (double) intervals;
-			final double xv = affineMatrix[0][2] + affineMatrix[0][1] * v;
-			final double yv = affineMatrix[1][2] + affineMatrix[1][1] * v;
-			for (int j = 0; j < intervals + 3; j++) {
-				final double u = (double) ((j - 1) * (sourceCurrentWidth - 1)) / (double) intervals;
-				cxSourceToTarget[i][j] = xv + affineMatrix[0][0] * u;
-				cySourceToTarget[i][j] = yv + affineMatrix[1][0] * u;
-			}
-		}
-
-		// Now refine with the different scales
-		int state; // state=-1 --> Finish
-		// state= 0 --> Increase deformation detail
-		// state= 1 --> Increase image detail
-		// state= 2 --> Do nothing until the finest image scale
-		if (minScaleDef == maxScaleDef)
-			state = 1;
-		else
-			state = 0;
-		int s = minScaleDef;
-		int step = 0;
-		computeTotalWorkload();
-
-		while (state != -1) {
-			int currentDepth = tgtModel.getCurrentDepth();
-
-			// Update the deformation coefficients only in states 0 and 1
-			if (state == 0 || state == 1) {
-				// Update the deformation coefficients with the error of the landmarks
-				// The following conditional is now useless but it is there to allow
-				// easy changes like applying the landmarks only in the coarsest
-				// deformation
-				if (s >= minScaleDef) {
-					// Number of intervals at this scale and ask for memory
-					intervals = (int) Math.pow(2, s + sizeCorrectionFactor);
-					final double[][] newcxTargetToSource = new double[intervals + 3][intervals + 3];
-					final double[][] newcyTargetToSource = new double[intervals + 3][intervals + 3];
-
-					final double[][] newcxSourceToTarget = new double[intervals + 3][intervals + 3];
-					final double[][] newcySourceToTarget = new double[intervals + 3][intervals + 3];
-
-					// Compute the coefficients at this scale
-					boolean underconstrained = true;
-					// FROM TARGET TO SOURCE.
-					if (divWeight == 0 && curlWeight == 0)
-						underconstrained = computeCoefficientsScale(intervals, dxTargetToSource, dyTargetToSource,
-						    newcxTargetToSource, newcyTargetToSource, false);
-					else
-						underconstrained = computeCoefficientsScaleWithRegularization(intervals, dxTargetToSource, dyTargetToSource,
-						    newcxTargetToSource, newcyTargetToSource, false);
-
-					// Incorporate information from the previous scale
-					if (!underconstrained || (step == 0 && landmarkWeight != 0)) {
-						for (int i = 0; i < intervals + 3; i++)
-							for (int j = 0; j < intervals + 3; j++) {
-								cxTargetToSource[i][j] += newcxTargetToSource[i][j];
-								cyTargetToSource[i][j] += newcyTargetToSource[i][j];
-							}
-					}
-
-					// FROM SOURCE TO TARGET.
-					underconstrained = true;
-					if (divWeight == 0 && curlWeight == 0)
-						underconstrained = computeCoefficientsScale(intervals, dxSourceToTarget, dySourceToTarget,
-						    newcxSourceToTarget, newcySourceToTarget, true);
-					else
-						underconstrained = computeCoefficientsScaleWithRegularization(intervals, dxSourceToTarget, dySourceToTarget,
-						    newcxSourceToTarget, newcySourceToTarget, true);
-
-					// Incorporate information from the previous scale
-					if (!underconstrained || (step == 0 && landmarkWeight != 0)) {
-						for (int i = 0; i < intervals + 3; i++)
-							for (int j = 0; j < intervals + 3; j++) {
-								cxSourceToTarget[i][j] += newcxSourceToTarget[i][j];
-								cySourceToTarget[i][j] += newcySourceToTarget[i][j];
-							}
-					}
-				}
-
-				// Optimize deformation coefficients
-				// if (imageWeight!=0)
-				optimizeCoeffs(intervals, stopThreshold, cxTargetToSource, cyTargetToSource, cxSourceToTarget,
-				    cySourceToTarget);
-			}
-
-			// Prepare for next iteration
-			step++;
-			switch (state) {
-			case 0:
-				// Finer details in the deformation
-				if (s < maxScaleDef) {
-					cxTargetToSource = propagateCoeffsToNextLevel(intervals, cxTargetToSource, 1);
-					cyTargetToSource = propagateCoeffsToNextLevel(intervals, cyTargetToSource, 1);
-					cxSourceToTarget = propagateCoeffsToNextLevel(intervals, cxSourceToTarget, 1);
-					cySourceToTarget = propagateCoeffsToNextLevel(intervals, cySourceToTarget, 1);
-					s++;
-					intervals *= 2;
-
-					// Prepare matrices for the regularization term
-					buildRegularizationTemporary(intervals, false);
-					buildRegularizationTemporary(intervals, true);
-
-					if (currentDepth > minScaleImage)
-						state = 1;
-					else
-						state = 0;
-				} else if (currentDepth > minScaleImage)
-					state = 1;
-				else
-					state = 2;
-				break;
-			case 1: // Finer details in the image, go on optimizing
-			case 2: // Finer details in the image, do not optimize
-				// Compute next state
-				if (state == 1) {
-					if (s == maxScaleDef && currentDepth == minScaleImage)
-						state = 2;
-					else if (s == maxScaleDef)
-						state = 1;
-					else
-						state = 0;
-				} else if (state == 2) {
-					if (currentDepth == 0)
-						state = -1;
-					else
-						state = 2;
-				}
-
-				// Pop another image and prepare the deformation
-				if (currentDepth != 0) {
-					double oldTargetCurrentHeight = targetCurrentHeight;
-					double oldTargetCurrentWidth = targetCurrentWidth;
-					double oldSourceCurrentHeight = sourceCurrentHeight;
-					double oldSourceCurrentWidth = sourceCurrentWidth;
-
-					srcModel.popFromPyramid();
-					tgtModel.popFromPyramid();
-
-					targetCurrentHeight = tgtModel.getCurrentHeight();
-					targetCurrentWidth = tgtModel.getCurrentWidth();
-					targetFactorHeight = tgtModel.getFactorHeight();
-					targetFactorWidth = tgtModel.getFactorWidth();
-
-					sourceCurrentHeight = srcModel.getCurrentHeight();
-					sourceCurrentWidth = srcModel.getCurrentWidth();
-					sourceFactorHeight = srcModel.getFactorHeight();
-					sourceFactorWidth = srcModel.getFactorWidth();
-
-					// Adapt the transformation to the new image size
-					double targetFactorY = (targetCurrentHeight - 1) / (oldTargetCurrentHeight - 1);
-					double targetFactorX = (targetCurrentWidth - 1) / (oldTargetCurrentWidth - 1);
-					double sourceFactorY = (sourceCurrentHeight - 1) / (oldSourceCurrentHeight - 1);
-					double sourceFactorX = (sourceCurrentWidth - 1) / (oldSourceCurrentWidth - 1);
-
-					for (int i = 0; i < intervals + 3; i++)
-						for (int j = 0; j < intervals + 3; j++) {
-							cxTargetToSource[i][j] *= targetFactorX;
-							cyTargetToSource[i][j] *= targetFactorY;
-							cxSourceToTarget[i][j] *= sourceFactorX;
-							cySourceToTarget[i][j] *= sourceFactorY;
-						}
-
-					// Prepare matrices for the regularization term
-					buildRegularizationTemporary(intervals, false);
-					buildRegularizationTemporary(intervals, true);
-				}
-				break;
-			}
-
-			// In accurate_mode reduce the stopping threshold for the last iteration
-			if ((state == 0 || state == 1) && s == maxScaleDef && currentDepth == minScaleImage + 1
-			    && accurateMode == RegistrationModeEnum.ACCURATE)
-				stopThreshold /= 10;
-
-		} // end while (state != -1).
-
-		// Adapt coefficients if necessary
-		if (srcModel.getOriginalImageWidth() > this.sourceCurrentWidth) {
-			if (srcModel.isSubOutput() || tgtModel.isSubOutput())
-				System.out.println("Adapting coefficients from " + this.sourceCurrentWidth + " to "
-				    + srcModel.getOriginalImageWidth() + "...");
-			// Adapt the transformation to the new image size
-			double targetFactorY = (tgtModel.getOriginalImageHeight() - 1) / (targetCurrentHeight - 1);
-			double targetFactorX = (tgtModel.getOriginalImageWidth() - 1) / (targetCurrentWidth - 1);
-			double sourceFactorY = (srcModel.getOriginalImageHeight() - 1) / (sourceCurrentHeight - 1);
-			double sourceFactorX = (srcModel.getOriginalImageWidth() - 1) / (sourceCurrentWidth - 1);
-
-			for (int i = 0; i < intervals + 3; i++)
-				for (int j = 0; j < intervals + 3; j++) {
-					cxTargetToSource[i][j] *= targetFactorX;
-					cyTargetToSource[i][j] *= targetFactorY;
-					cxSourceToTarget[i][j] *= sourceFactorX;
-					cySourceToTarget[i][j] *= sourceFactorY;
-				}
-			this.targetCurrentHeight = tgtModel.getOriginalImageHeight();
-			this.targetCurrentWidth = tgtModel.getOriginalImageWidth();
-			this.sourceCurrentHeight = srcModel.getOriginalImageHeight();
-			this.sourceCurrentWidth = srcModel.getOriginalImageWidth();
-		}
-
-		// Display final errors.
-		if (this.outputLevel == 2) {
-			if (this.imageWeight != 0) {
-				System.out.println(" Optimal direct similarity error = " + this.finalDirectSimilarityError);
-				System.out.println(" Optimal inverse similarity error = " + this.finalInverseSimilarityError);
-			}
-			if (this.curlWeight != 0 || this.divWeight != 0) {
-				System.out.println(" Optimal direct regularization error = " + this.finalDirectRegularizationError);
-				System.out.println(" Optimal inverse regularization error = " + this.finalInverseRegularizationError);
-			}
-			if (this.landmarkWeight != 0) {
-				System.out.println(" Optimal direct landmark error = " + this.finalDirectLandmarkError);
-				System.out.println(" Optimal inverse landmark error = " + this.finalInverseLandmarkError);
-			}
-			if (this.consistencyWeight != 0) {
-				System.out.println(" Optimal direct consistency error = " + this.finalDirectConsistencyError);
-				System.out.println(" Optimal inverse consistency error = " + this.finalInverseConsistencyError);
-			}
-		}
-
-	} // end doBidirectionalRegistration
-
-	// ------------------------------------------------------------------
 	/**
 	 * Unidirectional registration method. It applies unidirectional elastic
 	 * registration to the selected source and target images.
@@ -808,20 +317,20 @@ public class Transformation {
 		// This function can only be applied with splines of an odd order
 
 		// Bring into consideration the image/coefficients at the smallest scale
-		srcModel.popFromPyramid();
-		tgtModel.popFromPyramid();
+		sourceModel.popFromPyramid();
+		targetModel.popFromPyramid();
 
-		targetCurrentHeight = tgtModel.getCurrentHeight();
-		targetCurrentWidth = tgtModel.getCurrentWidth();
+		targetCurrentHeight = targetModel.getCurrentHeight();
+		targetCurrentWidth = targetModel.getCurrentWidth();
 
-		targetFactorHeight = tgtModel.getFactorHeight();
-		targetFactorWidth = tgtModel.getFactorWidth();
+		targetFactorHeight = targetModel.getFactorHeight();
+		targetFactorWidth = targetModel.getFactorWidth();
 
-		sourceCurrentHeight = srcModel.getCurrentHeight();
-		sourceCurrentWidth = srcModel.getCurrentWidth();
+		sourceCurrentHeight = sourceModel.getCurrentHeight();
+		sourceCurrentWidth = sourceModel.getCurrentWidth();
 
-		sourceFactorHeight = srcModel.getFactorHeight();
-		sourceFactorWidth = srcModel.getFactorWidth();
+		sourceFactorHeight = sourceModel.getFactorHeight();
+		sourceFactorWidth = sourceModel.getFactorWidth();
 
 		// size correction factor
 		int sizeCorrectionFactor = 0; // this.targetHeight / (1024 * (int)
@@ -830,7 +339,7 @@ public class Transformation {
 		// System.out.println("Size correction factor = " + sizeCorrectionFactor);
 
 		// Ask memory for the transformation coefficients
-		intervals = (int) Math.pow(2, minScaleDef + sizeCorrectionFactor);
+		intervals = (int) Math.pow(2, minScaleDeformation + sizeCorrectionFactor);
 
 		cxTargetToSource = new double[intervals + 3][intervals + 3];
 		cyTargetToSource = new double[intervals + 3][intervals + 3];
@@ -854,18 +363,7 @@ public class Transformation {
 		// from
 		// file), but the residues are not
 		double[][] affineMatrix = null;
-		if (this.sourceAffineMatrix != null) {
-			affineMatrix = this.sourceAffineMatrix;
-			// Scale translations in the matrix.
-			affineMatrix[0][2] *= this.sourceFactorWidth;
-			affineMatrix[1][2] *= this.sourceFactorHeight;
-		} else {
-			// NOTE: after version 1.1 the landmarks are always used to calculate
-			// an initial affine transformation (whether the landmarks weight is 0 or
-			// not).
-
-			affineMatrix = computeAffineMatrix(false);
-		}
+		affineMatrix = computeAffineMatrix(false);
 
 		// MiscTools.printMatrix("source affine matrix", affineMatrix);
 
@@ -886,16 +384,16 @@ public class Transformation {
 		// state= 0 --> Increase deformation detail
 		// state= 1 --> Increase image detail
 		// state= 2 --> Do nothing until the finest image scale
-		if (minScaleDef == maxScaleDef)
+		if (minScaleDeformation == maxScaleDeformation)
 			state = 1;
 		else
 			state = 0;
-		int s = minScaleDef;
+		int s = minScaleDeformation;
 		int step = 0;
 		computeTotalWorkload();
 
 		while (state != -1) {
-			int currentDepth = tgtModel.getCurrentDepth();
+			int currentDepth = targetModel.getCurrentDepth();
 
 			// Update the deformation coefficients only in states 0 and 1
 			if (state == 0 || state == 1) {
@@ -903,7 +401,7 @@ public class Transformation {
 				// The following conditional is now useless but it is there to allow
 				// easy changes like applying the landmarks only in the coarsest
 				// deformation
-				if (s >= minScaleDef) {
+				if (s >= minScaleDeformation) {
 					// Number of intervals at this scale and ask for memory
 					intervals = (int) Math.pow(2, s + sizeCorrectionFactor);
 					final double[][] newcxTargetToSource = new double[intervals + 3][intervals + 3];
@@ -940,7 +438,7 @@ public class Transformation {
 			switch (state) {
 			case 0:
 				// Finer details in the deformation
-				if (s < maxScaleDef) {
+				if (s < maxScaleDeformation) {
 					cxTargetToSource = propagateCoeffsToNextLevel(intervals, cxTargetToSource, 1);
 					cyTargetToSource = propagateCoeffsToNextLevel(intervals, cyTargetToSource, 1);
 					s++;
@@ -962,9 +460,9 @@ public class Transformation {
 			case 2: // Finer details in the image, do not optimize
 				// Compute next state
 				if (state == 1) {
-					if (s == maxScaleDef && currentDepth == minScaleImage)
+					if (s == maxScaleDeformation && currentDepth == minScaleImage)
 						state = 2;
-					else if (s == maxScaleDef)
+					else if (s == maxScaleDeformation)
 						state = 1;
 					else
 						state = 0;
@@ -980,18 +478,18 @@ public class Transformation {
 					double oldTargetCurrentHeight = targetCurrentHeight;
 					double oldTargetCurrentWidth = targetCurrentWidth;
 
-					srcModel.popFromPyramid();
-					tgtModel.popFromPyramid();
+					sourceModel.popFromPyramid();
+					targetModel.popFromPyramid();
 
-					targetCurrentHeight = tgtModel.getCurrentHeight();
-					targetCurrentWidth = tgtModel.getCurrentWidth();
-					targetFactorHeight = tgtModel.getFactorHeight();
-					targetFactorWidth = tgtModel.getFactorWidth();
+					targetCurrentHeight = targetModel.getCurrentHeight();
+					targetCurrentWidth = targetModel.getCurrentWidth();
+					targetFactorHeight = targetModel.getFactorHeight();
+					targetFactorWidth = targetModel.getFactorWidth();
 
-					sourceCurrentHeight = srcModel.getCurrentHeight();
-					sourceCurrentWidth = srcModel.getCurrentWidth();
-					sourceFactorHeight = srcModel.getFactorHeight();
-					sourceFactorWidth = srcModel.getFactorWidth();
+					sourceCurrentHeight = sourceModel.getCurrentHeight();
+					sourceCurrentWidth = sourceModel.getCurrentWidth();
+					sourceFactorHeight = sourceModel.getFactorHeight();
+					sourceFactorWidth = sourceModel.getFactorWidth();
 
 					// Adapt the transformation to the new image size
 					double targetFactorY = (targetCurrentHeight - 1) / (oldTargetCurrentHeight - 1);
@@ -1010,30 +508,30 @@ public class Transformation {
 			}
 
 			// In accurate_mode reduce the stopping threshold for the last iteration
-			if ((state == 0 || state == 1) && s == maxScaleDef && currentDepth == minScaleImage + 1
-			    && accurateMode == RegistrationModeEnum.ACCURATE)
+			if ((state == 0 || state == 1) && s == maxScaleDeformation && currentDepth == minScaleImage + 1
+			    && accurateMode == 1)
 				stopThreshold /= 10;
 
 		} // end while (state != -1).
 
 		// Adapt coefficients if necessary
-		if (srcModel.getOriginalImageWidth() > this.targetCurrentWidth) {
-			if (srcModel.isSubOutput() || tgtModel.isSubOutput())
+		if (sourceModel.getOriginalImageWidth() > this.targetCurrentWidth) {
+			if (sourceModel.isSubOutput() || targetModel.isSubOutput())
 				System.out.println("Adapting coefficients from " + this.sourceCurrentWidth + " to "
-				    + this.originalSourceSeq.getWidth() + "...");
+				    + this.originalSourceIBI.getWidth() + "...");
 			// Adapt the transformation to the new image size
-			double targetFactorY = (tgtModel.getOriginalImageHeight() - 1) / (targetCurrentHeight - 1);
-			double targetFactorX = (tgtModel.getOriginalImageWidth() - 1) / (targetCurrentWidth - 1);
+			double targetFactorY = (targetModel.getOriginalImageHeight() - 1) / (targetCurrentHeight - 1);
+			double targetFactorX = (targetModel.getOriginalImageWidth() - 1) / (targetCurrentWidth - 1);
 
 			for (int i = 0; i < intervals + 3; i++)
 				for (int j = 0; j < intervals + 3; j++) {
 					cxTargetToSource[i][j] *= targetFactorX;
 					cyTargetToSource[i][j] *= targetFactorY;
 				}
-			this.targetCurrentHeight = tgtModel.getOriginalImageHeight();
-			this.targetCurrentWidth = tgtModel.getOriginalImageWidth();
-			this.sourceCurrentHeight = srcModel.getOriginalImageHeight();
-			this.sourceCurrentWidth = srcModel.getOriginalImageWidth();
+			this.targetCurrentHeight = targetModel.getOriginalImageHeight();
+			this.targetCurrentWidth = targetModel.getOriginalImageWidth();
+			this.sourceCurrentHeight = sourceModel.getOriginalImageHeight();
+			this.sourceCurrentWidth = sourceModel.getOriginalImageWidth();
 		}
 
 		// Display final errors.
@@ -1052,525 +550,8 @@ public class Transformation {
 			}
 		}
 
-	} /* end doUnidirectionalRegistration */
-
-	/*--------------------------------------------------------------------------*/
-	/**
-	 * Evaluate the similarity between the images.
-	 *
-	 * @param bIsReverse
-	 *          determines the transformation direction (source-target=TRUE or
-	 *          target-source=FALSE)
-	 * @return image similarity value
-	 */
-	public double evaluateImageSimilarity(boolean bIsReverse) {
-		int int3 = intervals + 3;
-		int halfM = int3 * int3;
-		int M = halfM * 2;
-
-		double[] x = new double[M];
-		double[] grad = new double[M];
-
-		// Variables to allow registering in both directions.
-		BSplineModel auxTarget = tgtModel;
-		BSplineModel swx = swxTargetToSource;
-		BSplineModel swy = swyTargetToSource;
-		double[][] cx = cxTargetToSource;
-		double[][] cy = cyTargetToSource;
-
-		if (bIsReverse) {
-			auxTarget = srcModel;
-			swx = swxSourceToTarget;
-			swy = swySourceToTarget;
-			cx = cxSourceToTarget;
-			cy = cySourceToTarget;
-		}
-
-		for (int i = 0, p = 0; i < intervals + 3; i++)
-			for (int j = 0; j < intervals + 3; j++, p++) {
-				x[p] = cx[i][j];
-				x[halfM + p] = cy[i][j];
-			}
-
-		if (swx == null) {
-			swx = new BSplineModel(cx);
-			swy = new BSplineModel(cy);
-			swx.precomputedPrepareForInterpolation(auxTarget.getCurrentHeight(), auxTarget.getCurrentWidth(), intervals);
-			swy.precomputedPrepareForInterpolation(auxTarget.getCurrentHeight(), auxTarget.getCurrentWidth(), intervals);
-		}
-
-		if (swx.precomputedGetWidth() != auxTarget.getCurrentWidth()) {
-			swx.precomputedPrepareForInterpolation(auxTarget.getCurrentHeight(), auxTarget.getCurrentWidth(), intervals);
-			swy.precomputedPrepareForInterpolation(auxTarget.getCurrentHeight(), auxTarget.getCurrentWidth(), intervals);
-		}
-		// return evaluateSimilarity(x, intervals, grad, true, false, bIsReverse);
-		// double f = evaluateSimilarity(x, intervals, grad, true, false,
-		// bIsReverse);
-
-		double f2 = evaluateSimilarityMultiThread(x, intervals, grad, true, bIsReverse);
-
-		// System.out.println("f = " + f + " f2 = " + f2);
-		return f2;
 	}
 
-	// ------------------------------------------------------------------
-	/**
-	 * Get the deformation from the corresponding coefficients.
-	 *
-	 * @param transformation_x
-	 *          matrix to store the x- transformation
-	 * @param transformation_y
-	 *          matrix to store the y- transformation
-	 * @param bIsReverse
-	 *          flag to choose the deformation coefficients (source-target=TRUE or
-	 *          target-source=FALSE)
-	 */
-	public void getDeformation(final double[][] transformation_x, final double[][] transformation_y, boolean bIsReverse) {
-		// Variables to allow registering in both directions.
-		double[][] cx = cxTargetToSource;
-		double[][] cy = cyTargetToSource;
-		if (bIsReverse) {
-			cx = cxSourceToTarget;
-			cy = cySourceToTarget;
-		}
-		computeDeformation(intervals, cx, cy, transformation_x, transformation_y, bIsReverse);
-
-	} // end getDeformation
-
-	// ------------------------------------------------------------------
-	/**
-	 * Get the direct deformation X coefficients.
-	 *
-	 * @return coefficients array
-	 */
-	public double[][] getDirectDeformationCoefficientsX() {
-		return this.cxTargetToSource;
-
-	} // end getDirectDeformationCoefficientsX
-
-	// ------------------------------------------------------------------
-	/**
-	 * Get the direct deformation Y coefficients.
-	 *
-	 * @return coefficients array
-	 */
-	public double[][] getDirectDeformationCoefficientsY() {
-		return this.cyTargetToSource;
-
-	} // end getDirectDeformationCoefficientsY
-
-	// ------------------------------------------------------------------
-	/**
-	 * Get the inverse deformation X coefficients.
-	 *
-	 * @return coefficients array
-	 */
-	public double[][] getInverseDeformationCoefficientsX() {
-		return this.cxSourceToTarget;
-
-	} // end getInverseDeformationCoefficientsX
-
-	// ------------------------------------------------------------------
-	/**
-	 * Get the inverse deformation Y coefficients.
-	 *
-	 * @return coefficients array
-	 */
-	public double[][] getInverseDeformationCoefficientsY() {
-		return this.cySourceToTarget;
-
-	} // end getInverseDeformationCoefficientsY
-
-	// ------------------------------------------------------------------
-	/**
-	 * Get the current number of intervals between B-spline coefficients.
-	 *
-	 * @return coefficients array
-	 */
-	public int getIntervals() {
-		return this.intervals;
-
-	} // end getIntervals
-
-	// ------------------------------------------------------------------
-	/**
-	 * Apply the current transformation to a given point. Point coordinates must
-	 * be in real space (highest resolution). The transformation will take the
-	 * subsampling factor into account.
-	 *
-	 * @param u
-	 *          input, x- point coordinate
-	 * @param v
-	 *          input, y- point coordinate
-	 * @param xyF
-	 *          output, transformed point
-	 * @param bIsReverse
-	 *          flag to decide the transformation direction (direct-inverse)
-	 *          (source-target=TRUE or target-source=FALSE)
-	 */
-	public void transform(double u, double v, double[] xyF, boolean bIsReverse) {
-		// Variables to allow registering in both directions.
-		BSplineModel auxTarget = tgtModel;
-		BSplineModel swx = swxTargetToSource;
-		BSplineModel swy = swyTargetToSource;
-
-		if (bIsReverse) {
-			auxTarget = srcModel;
-			swx = swxSourceToTarget;
-			swy = swySourceToTarget;
-		}
-
-		// read subsampling factor
-		final double samplingFactor = srcModel.getSubsamplingFactor();
-
-		final double tu = (u / samplingFactor * intervals) / (double) (auxTarget.getCurrentWidth() - 1) + 1.0F;
-		final double tv = (v / samplingFactor * intervals) / (double) (auxTarget.getCurrentHeight() - 1) + 1.0F;
-
-		final boolean ORIGINAL = false;
-		swx.prepareForInterpolation(tu, tv, ORIGINAL);
-		xyF[0] = swx.interpolateI() * samplingFactor;
-		swy.prepareForInterpolation(tu, tv, ORIGINAL);
-		xyF[1] = swy.interpolateI() * samplingFactor;
-	}
-
-	/*
-	 * ....................................................................
-	 * Private methods
-	 * ....................................................................
-	 */
-
-	// ------------------------------------------------------------------
-	/**
-	 * Build the matrix for the landmark interpolation.
-	 *
-	 * @param intervals
-	 *          Intervals in the deformation
-	 * @param K
-	 *          Number of landmarks
-	 * @param B
-	 *          System matrix of the landmark interpolation
-	 * @param bIsReverse
-	 *          determines the transformation direction (source-target=TRUE or
-	 *          target-source=FALSE)
-	 */
-	private void build_Matrix_B(int intervals, // Intervals in the deformation
-	    int K, // Number of landmarks
-	    double[][] B, // System matrix of the landmark interpolation
-	    boolean bIsReverse) {
-
-		// Auxiliary variables to calculate inverse transformation
-		List<ROI2DPoint> auxTargetLandmarks = this.targetLandmarks;
-		double auxFactorWidth = this.targetFactorWidth;
-		double auxFactorHeight = this.targetFactorHeight;
-
-		if (bIsReverse) {
-			auxTargetLandmarks = this.sourceLandmarks;
-			auxFactorWidth = this.sourceFactorWidth;
-			auxFactorHeight = this.sourceFactorHeight;
-		}
-
-		if (auxTargetLandmarks != null) {
-			for (int k = 0; k < K; k++) {
-				final Point2D targetPoint = auxTargetLandmarks.get(k).getPoint();
-				double x = auxFactorWidth * targetPoint.getX();
-				double y = auxFactorHeight * targetPoint.getY();
-				final double[] bx = xWeight(x, intervals, true, bIsReverse);
-				final double[] by = yWeight(y, intervals, true, bIsReverse);
-				for (int i = 0; i < intervals + 3; i++)
-					for (int j = 0; j < intervals + 3; j++)
-						B[k][(intervals + 3) * i + j] = by[i] * bx[j];
-			}
-		}
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Build matrix Rq1q2.
-	 */
-	private void build_Matrix_Rq1q2(int intervals, double weight, int q1, int q2, double[][] R, boolean bIsReverse) {
-		build_Matrix_Rq1q2q3q4(intervals, weight, q1, q2, q1, q2, R, bIsReverse);
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Build matrix Rq1q2q3q4.
-	 */
-	private void build_Matrix_Rq1q2q3q4(int intervals, double weight, int q1, int q2, int q3, int q4, double[][] R,
-	    boolean bIsReverse) {
-		/*
-		 * Let's define alpha_q as the q-th derivative of a B-spline
-		 * 
-		 * q n d B (x) alpha_q(x)= -------------- q dx
-		 * 
-		 * eta_q1q2(x,s1,s2)=integral_0^Xdim alpha_q1(x/h-s1) alpha_q2(x/h-s2)
-		 * 
-		 */
-		double[][] etaq1q3 = new double[16][16];
-		int Ydim = tgtModel.getCurrentHeight();
-		int Xdim = tgtModel.getCurrentWidth();
-
-		if (bIsReverse) {
-			Ydim = srcModel.getCurrentHeight();
-			Xdim = srcModel.getCurrentWidth();
-		}
-
-		build_Matrix_R_geteta(etaq1q3, q1, q3, Xdim, intervals);
-
-		double[][] etaq2q4 = null;
-		if (q2 != q1 || q4 != q3 || Ydim != Xdim) {
-			etaq2q4 = new double[16][16];
-			build_Matrix_R_geteta(etaq2q4, q2, q4, Ydim, intervals);
-		} else
-			etaq2q4 = etaq1q3;
-
-		int M = intervals + 1;
-		int Mp = intervals + 3;
-		for (int l = -1; l <= M; l++)
-			for (int k = -1; k <= M; k++)
-				for (int n = -1; n <= M; n++)
-					for (int m = -1; m <= M; m++) {
-						int[] ip = new int[2];
-						int[] jp = new int[2];
-						boolean valid_i = build_Matrix_R_getetaindex(l, n, intervals, ip);
-						boolean valid_j = build_Matrix_R_getetaindex(k, m, intervals, jp);
-						if (valid_i && valid_j) {
-							int mn = (n + 1) * Mp + (m + 1);
-							int kl = (l + 1) * Mp + (k + 1);
-							R[kl][mn] += weight * etaq1q3[jp[0]][jp[1]] * etaq2q4[ip[0]][ip[1]];
-						}
-					}
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Compute the following integral
-	 * <P>
-	 * 
-	 * <PRE>
-	 * xF d^q1 3 x d^q2 3 x integral ----- B (--- - s1) ----- B (--- - s2) dx x0
-	 * dx^q1 h dx^q2 h
-	 * 
-	 * <PRE>
-	 */
-
-	private double build_Matrix_R_computeIntegral_aa(double x0, double xF, double s1, double s2, double h, int q1,
-	    int q2) {
-		// Computes the following integral
-		//
-		// xF d^q1 3 x d^q2 3 x
-		// integral ----- B (--- - s1) ----- B (--- - s2) dx
-		// x0 dx^q1 h dx^q2 h
-
-		// Form the spline coefficients
-		double[][] C = new double[3][3];
-		int[][] d = new int[3][3];
-		double[][] s = new double[3][3];
-		C[0][0] = 1;
-		C[0][1] = 0;
-		C[0][2] = 0;
-		C[1][0] = 1;
-		C[1][1] = -1;
-		C[1][2] = 0;
-		C[2][0] = 1;
-		C[2][1] = -2;
-		C[2][2] = 1;
-		d[0][0] = 3;
-		d[0][1] = 0;
-		d[0][2] = 0;
-		d[1][0] = 2;
-		d[1][1] = 2;
-		d[1][2] = 0;
-		d[2][0] = 1;
-		d[2][1] = 1;
-		d[2][2] = 1;
-		s[0][0] = 0;
-		s[0][1] = 0;
-		s[0][2] = 0;
-		s[1][0] = -0.5;
-		s[1][1] = 0.5;
-		s[1][2] = 0;
-		s[2][0] = 1;
-		s[2][1] = 0;
-		s[2][2] = -1;
-
-		// Compute the integral
-		double integral = 0;
-		for (int k = 0; k < 3; k++) {
-			double ck = C[q1][k];
-			if (ck == 0)
-				continue;
-			for (int l = 0; l < 3; l++) {
-				double cl = C[q2][l];
-				if (cl == 0)
-					continue;
-				integral += ck * cl
-				    * build_matrix_R_computeIntegral_BB(x0, xF, s1 + s[q1][k], s2 + s[q2][l], h, d[q1][k], d[q2][l]);
-			}
-		}
-		return integral;
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Compute the following integral
-	 * 
-	 * <PRE>
-	 *           xF   n1  x          n2  x
-	 *  integral     B  (--- - s1)  B  (--- - s2) dx
-	 *           x0       h              h
-	 * </PRE>
-	 */
-	private double build_matrix_R_computeIntegral_BB(double x0, double xF, double s1, double s2, double h, int n1,
-	    int n2) {
-		// Computes the following integral
-		//
-		// xF n1 x n2 x
-		// integral B (--- - s1) B (--- - s2) dx
-		// x0 h h
-
-		// Change the variable so that the h disappears
-		// X=x/h
-		double xFp = xF / h;
-		double x0p = x0 / h;
-
-		// Form the spline coefficients
-		double[] c1 = new double[n1 + 2];
-		double fact_n1 = 1;
-		for (int k = 2; k <= n1; k++)
-			fact_n1 *= k;
-		double sign = 1;
-		for (int k = 0; k <= n1 + 1; k++, sign *= -1)
-			c1[k] = sign * MathTools.nChooseK(n1 + 1, k) / fact_n1;
-
-		double[] c2 = new double[n2 + 2];
-		double fact_n2 = 1;
-		for (int k = 2; k <= n2; k++)
-			fact_n2 *= k;
-		sign = 1;
-		for (int k = 0; k <= n2 + 1; k++, sign *= -1)
-			c2[k] = sign * MathTools.nChooseK(n2 + 1, k) / fact_n2;
-
-		// Compute the integral
-		double n1_2 = (double) ((n1 + 1)) / 2.0;
-		double n2_2 = (double) ((n2 + 1)) / 2.0;
-		double integral = 0;
-		for (int k = 0; k <= n1 + 1; k++)
-			for (int l = 0; l <= n2 + 1; l++) {
-				integral += c1[k] * c2[l] * build_matrix_R_computeIntegral_xx(x0p, xFp, s1 + k - n1_2, s2 + l - n2_2, n1, n2);
-			}
-		return integral * h;
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * <P>
-	 * 
-	 * <PRE>
-	 * Computation of the integral:
-	 *             xF          q1       q2
-	 *    integral       (x-s1)   (x-s2)     dx
-	 *             x0          +        +
-	 * </PRE>
-	 */
-	private double build_matrix_R_computeIntegral_xx(double x0, double xF, double s1, double s2, int q1, int q2) {
-		// Computation of the integral
-		// xF q1 q2
-		// integral (x-s1) (x-s2) dx
-		// x0 + +
-
-		// Change of variable so that s1 is 0
-		// X=x-s1 => x-s2=X-(s2-s1)
-		double s2p = s2 - s1;
-		double xFp = xF - s1;
-		double x0p = x0 - s1;
-
-		// Now integrate
-		if (xFp < 0)
-			return 0;
-
-		// Move x0 to the first point where both integrals
-		// are distinct from 0
-		x0p = Math.max(x0p, Math.max(s2p, 0));
-		if (x0p > xFp)
-			return 0;
-
-		// There is something to integrate
-		// Evaluate the primitive at xF and x0
-		double IxFp = 0;
-		double Ix0p = 0;
-		for (int k = 0; k <= q2; k++) {
-			double aux = MathTools.nChooseK(q2, k) / (q1 + k + 1) * Math.pow(-s2p, q2 - k);
-			IxFp += Math.pow(xFp, q1 + k + 1) * aux;
-			Ix0p += Math.pow(x0p, q1 + k + 1) * aux;
-		}
-
-		return IxFp - Ix0p;
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Build matrix R, get eta.
-	 */
-	private void build_Matrix_R_geteta(double[][] etaq1q2, int q1, int q2, int dim, int intervals) {
-		boolean[][] done = new boolean[16][16];
-		// Clear
-		for (int i = 0; i < 16; i++)
-			for (int j = 0; j < 16; j++) {
-				etaq1q2[i][j] = 0;
-				done[i][j] = false;
-			}
-
-		// Compute each integral we need
-		int M = intervals + 1;
-		double h = (double) dim / intervals;
-		for (int ki1 = -1; ki1 <= M; ki1++)
-			for (int ki2 = -1; ki2 <= M; ki2++) {
-				int[] ip = new int[2];
-				boolean valid_i = build_Matrix_R_getetaindex(ki1, ki2, intervals, ip);
-				if (valid_i && !done[ip[0]][ip[1]]) {
-					etaq1q2[ip[0]][ip[1]] = build_Matrix_R_computeIntegral_aa(0, dim, ki1, ki2, h, q1, q2);
-					done[ip[0]][ip[1]] = true;
-				}
-			}
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Build matrix R, get eta index.
-	 */
-	private boolean build_Matrix_R_getetaindex(int ki1, int ki2, int intervals, int[] ip) {
-		ip[0] = 0;
-		ip[1] = 0;
-
-		// Determine the clipped inner limits of the intersection
-		int kir = Math.min(intervals, Math.min(ki1, ki2) + 2);
-		int kil = Math.max(0, Math.max(ki1, ki2) - 2);
-
-		if (kil >= kir)
-			return false;
-
-		// Determine which are the pieces of the
-		// function that lie in the intersection
-		int two_i = 1;
-		double ki;
-		for (int i = 0; i <= 3; i++, two_i *= 2) {
-			// First function
-			ki = ki1 + i - 1.5; // Middle sample of the piece i
-			if (kil <= ki && ki <= kir)
-				ip[0] += two_i;
-
-			// Second function
-			ki = ki2 + i - 1.5; // Middle sample of the piece i
-			if (kil <= ki && ki <= kir)
-				ip[1] += two_i;
-		}
-
-		ip[0]--;
-		ip[1]--;
-		return true;
-	}
-
-	// ------------------------------------------------------------------
 	/**
 	 * Build regularization temporary.
 	 *
@@ -1629,7 +610,342 @@ public class Transformation {
 		build_Matrix_Rq1q2q3q4(intervals, -2 * curlWeight, 1, 1, 2, 0, P12, bIsReverse);
 	}
 
-	// ------------------------------------------------------------------
+	/**
+	 * Build matrix Rq1q2.
+	 */
+	private void build_Matrix_Rq1q2(int intervals, double weight, int q1, int q2, double[][] R, boolean bIsReverse) {
+		build_Matrix_Rq1q2q3q4(intervals, weight, q1, q2, q1, q2, R, bIsReverse);
+	}
+
+	/**
+	 * Build matrix Rq1q2q3q4.
+	 */
+	private void build_Matrix_Rq1q2q3q4(int intervals, double weight, int q1, int q2, int q3, int q4, double[][] R,
+	    boolean bIsReverse) {
+		/*
+		 * Let's define alpha_q as the q-th derivative of a B-spline
+		 * 
+		 * q n d B (x) alpha_q(x)= -------------- q dx
+		 * 
+		 * eta_q1q2(x,s1,s2)=integral_0^Xdim alpha_q1(x/h-s1) alpha_q2(x/h-s2)
+		 * 
+		 */
+		double[][] etaq1q3 = new double[16][16];
+		int Ydim = targetModel.getCurrentHeight();
+		int Xdim = targetModel.getCurrentWidth();
+
+		if (bIsReverse) {
+			Ydim = sourceModel.getCurrentHeight();
+			Xdim = sourceModel.getCurrentWidth();
+		}
+
+		build_Matrix_R_geteta(etaq1q3, q1, q3, Xdim, intervals);
+
+		double[][] etaq2q4 = null;
+		if (q2 != q1 || q4 != q3 || Ydim != Xdim) {
+			etaq2q4 = new double[16][16];
+			build_Matrix_R_geteta(etaq2q4, q2, q4, Ydim, intervals);
+		} else
+			etaq2q4 = etaq1q3;
+
+		int M = intervals + 1;
+		int Mp = intervals + 3;
+		for (int l = -1; l <= M; l++)
+			for (int k = -1; k <= M; k++)
+				for (int n = -1; n <= M; n++)
+					for (int m = -1; m <= M; m++) {
+						int[] ip = new int[2];
+						int[] jp = new int[2];
+						boolean valid_i = build_Matrix_R_getetaIndex(l, n, intervals, ip);
+						boolean valid_j = build_Matrix_R_getetaIndex(k, m, intervals, jp);
+						if (valid_i && valid_j) {
+							int mn = (n + 1) * Mp + (m + 1);
+							int kl = (l + 1) * Mp + (k + 1);
+							R[kl][mn] += weight * etaq1q3[jp[0]][jp[1]] * etaq2q4[ip[0]][ip[1]];
+						}
+					}
+	}
+
+	/**
+	 * Build matrix R, get eta.
+	 */
+	private void build_Matrix_R_geteta(double[][] etaq1q2, int q1, int q2, int dim, int intervals) {
+		boolean[][] done = new boolean[16][16];
+		// Clear
+		for (int i = 0; i < 16; i++)
+			for (int j = 0; j < 16; j++) {
+				etaq1q2[i][j] = 0;
+				done[i][j] = false;
+			}
+
+		// Compute each integral we need
+		int M = intervals + 1;
+		double h = (double) dim / intervals;
+		for (int ki1 = -1; ki1 <= M; ki1++)
+			for (int ki2 = -1; ki2 <= M; ki2++) {
+				int[] ip = new int[2];
+				boolean valid_i = build_Matrix_R_getetaIndex(ki1, ki2, intervals, ip);
+				if (valid_i && !done[ip[0]][ip[1]]) {
+					etaq1q2[ip[0]][ip[1]] = build_Matrix_R_computeIntegral_aa(0, dim, ki1, ki2, h, q1, q2);
+					done[ip[0]][ip[1]] = true;
+				}
+			}
+	}
+
+	/**
+	 * Build matrix R, get eta index.
+	 */
+	private boolean build_Matrix_R_getetaIndex(int ki1, int ki2, int intervals, int[] ip) {
+		ip[0] = 0;
+		ip[1] = 0;
+
+		// Determine the clipped inner limits of the intersection
+		int kir = Math.min(intervals, Math.min(ki1, ki2) + 2);
+		int kil = Math.max(0, Math.max(ki1, ki2) - 2);
+
+		if (kil >= kir)
+			return false;
+
+		// Determine which are the pieces of the
+		// function that lie in the intersection
+		int two_i = 1;
+		double ki;
+		for (int i = 0; i <= 3; i++, two_i *= 2) {
+			// First function
+			ki = ki1 + i - 1.5; // Middle sample of the piece i
+			if (kil <= ki && ki <= kir)
+				ip[0] += two_i;
+
+			// Second function
+			ki = ki2 + i - 1.5; // Middle sample of the piece i
+			if (kil <= ki && ki <= kir)
+				ip[1] += two_i;
+		}
+
+		ip[0]--;
+		ip[1]--;
+		return true;
+	}
+
+	/**
+	 * Compute the following integral
+	 * <P>
+	 * 
+	 * <PRE>
+	 * xF d^q1 3 x d^q2 3 x integral ----- B (--- - s1) ----- B (--- - s2) dx x0
+	 * dx^q1 h dx^q2 h
+	 * 
+	 * <PRE>
+	 */
+	private double build_Matrix_R_computeIntegral_aa(double x0, double xF, double s1, double s2, double h, int q1,
+	    int q2) {
+		// Computes the following integral
+		//
+		// xF d^q1 3 x d^q2 3 x
+		// integral ----- B (--- - s1) ----- B (--- - s2) dx
+		// x0 dx^q1 h dx^q2 h
+
+		// Form the spline coefficients
+		double[][] C = new double[3][3];
+		int[][] d = new int[3][3];
+		double[][] s = new double[3][3];
+		C[0][0] = 1;
+		C[0][1] = 0;
+		C[0][2] = 0;
+		C[1][0] = 1;
+		C[1][1] = -1;
+		C[1][2] = 0;
+		C[2][0] = 1;
+		C[2][1] = -2;
+		C[2][2] = 1;
+		d[0][0] = 3;
+		d[0][1] = 0;
+		d[0][2] = 0;
+		d[1][0] = 2;
+		d[1][1] = 2;
+		d[1][2] = 0;
+		d[2][0] = 1;
+		d[2][1] = 1;
+		d[2][2] = 1;
+		s[0][0] = 0;
+		s[0][1] = 0;
+		s[0][2] = 0;
+		s[1][0] = -0.5;
+		s[1][1] = 0.5;
+		s[1][2] = 0;
+		s[2][0] = 1;
+		s[2][1] = 0;
+		s[2][2] = -1;
+
+		// Compute the integral
+		double integral = 0;
+		for (int k = 0; k < 3; k++) {
+			double ck = C[q1][k];
+			if (ck == 0)
+				continue;
+			for (int l = 0; l < 3; l++) {
+				double cl = C[q2][l];
+				if (cl == 0)
+					continue;
+				integral += ck * cl
+				    * build_matrix_R_computeIntegral_BB(x0, xF, s1 + s[q1][k], s2 + s[q2][l], h, d[q1][k], d[q2][l]);
+			}
+		}
+		return integral;
+	}
+
+	/**
+	 * Compute the following integral
+	 * 
+	 * <PRE>
+	 *           xF   n1  x          n2  x
+	 *  integral     B  (--- - s1)  B  (--- - s2) dx
+	 *           x0       h              h
+	 * </PRE>
+	 */
+	private double build_matrix_R_computeIntegral_BB(double x0, double xF, double s1, double s2, double h, int n1,
+	    int n2) {
+		// Computes the following integral
+		//
+		// xF n1 x n2 x
+		// integral B (--- - s1) B (--- - s2) dx
+		// x0 h h
+
+		// Change the variable so that the h disappears
+		// X=x/h
+		double xFp = xF / h;
+		double x0p = x0 / h;
+
+		// Form the spline coefficients
+		double[] c1 = new double[n1 + 2];
+		double fact_n1 = 1;
+		for (int k = 2; k <= n1; k++)
+			fact_n1 *= k;
+		double sign = 1;
+		for (int k = 0; k <= n1 + 1; k++, sign *= -1)
+			c1[k] = sign * MathTools.nChooseK(n1 + 1, k) / fact_n1;
+
+		double[] c2 = new double[n2 + 2];
+		double fact_n2 = 1;
+		for (int k = 2; k <= n2; k++)
+			fact_n2 *= k;
+		sign = 1;
+		for (int k = 0; k <= n2 + 1; k++, sign *= -1)
+			c2[k] = sign * MathTools.nChooseK(n2 + 1, k) / fact_n2;
+
+		// Compute the integral
+		double n1_2 = (double) ((n1 + 1)) / 2.0;
+		double n2_2 = (double) ((n2 + 1)) / 2.0;
+		double integral = 0;
+		for (int k = 0; k <= n1 + 1; k++)
+			for (int l = 0; l <= n2 + 1; l++) {
+				integral += c1[k] * c2[l] * build_matrix_R_computeIntegral_xx(x0p, xFp, s1 + k - n1_2, s2 + l - n2_2, n1, n2);
+			}
+		return integral * h;
+	}
+
+	/**
+	 * <P>
+	 * 
+	 * <PRE>
+	 * Computation of the integral:
+	 *             xF          q1       q2
+	 *    integral       (x-s1)   (x-s2)     dx
+	 *             x0          +        +
+	 * </PRE>
+	 */
+	private double build_matrix_R_computeIntegral_xx(double x0, double xF, double s1, double s2, int q1, int q2) {
+		// Computation of the integral
+		// xF q1 q2
+		// integral (x-s1) (x-s2) dx
+		// x0 + +
+
+		// Change of variable so that s1 is 0
+		// X=x-s1 => x-s2=X-(s2-s1)
+		double s2p = s2 - s1;
+		double xFp = xF - s1;
+		double x0p = x0 - s1;
+
+		// Now integrate
+		if (xFp < 0)
+			return 0;
+
+		// Move x0 to the first point where both integrals
+		// are distinct from 0
+		x0p = Math.max(x0p, Math.max(s2p, 0));
+		if (x0p > xFp)
+			return 0;
+
+		// There is something to integrate
+		// Evaluate the primitive at xF and x0
+		double IxFp = 0;
+		double Ix0p = 0;
+		for (int k = 0; k <= q2; k++) {
+			double aux = MathTools.nChooseK(q2, k) / (q1 + k + 1) * Math.pow(-s2p, q2 - k);
+			IxFp += Math.pow(xFp, q1 + k + 1) * aux;
+			Ix0p += Math.pow(x0p, q1 + k + 1) * aux;
+		}
+
+		return IxFp - Ix0p;
+	}
+
+	/**
+	 * Compute the initial residues for the landmarks.
+	 * <p>
+	 * NOTE: The output vectors should be already resized
+	 *
+	 * @param dx
+	 *          output, difference in x for each landmark
+	 * @param dy
+	 *          output, difference in y for each landmark
+	 * @param bIsReverse
+	 *          determines the transformation direction (source-target=TRUE or
+	 *          target-source=FALSE). The output vectors should be already resized
+	 */
+	private void computeInitialResidues(final double[] dx, final double[] dy,
+
+	    boolean bIsReverse) {
+
+		// Auxiliary variables for registering in both directions.
+		double auxFactorWidth = targetModel.getFactorWidth();
+		double auxFactorHeight = targetModel.getFactorHeight();
+		List<ROI2DPoint> auxSourcePh = this.sourceLandmarks;
+		List<ROI2DPoint> auxTargetPh = this.targetLandmarks;
+
+		if (bIsReverse) {
+			auxFactorWidth = sourceModel.getFactorWidth();
+			auxFactorHeight = sourceModel.getFactorHeight();
+			auxSourcePh = this.targetLandmarks;
+			auxTargetPh = this.sourceLandmarks;
+		}
+
+		List<Point2D> sourceVector = new ArrayList<>();
+		if (auxSourcePh != null) {
+			for (ROI2DPoint roi : auxSourcePh) {
+				sourceVector.add(roi.getPoint());
+			}
+		}
+
+		List<Point2D> targetVector = new ArrayList<>();
+		if (auxTargetPh != null) {
+			for (ROI2DPoint roi : auxTargetPh) {
+				targetVector.add(roi.getPoint());
+			}
+		}
+		// TODO check if K is correct
+		int K = 0;
+
+		if (auxTargetPh != null)
+			auxTargetPh.size();
+
+		for (int k = 0; k < K; k++) {
+			final Point2D sourcePoint = sourceVector.get(k);
+			final Point2D targetPoint = targetVector.get(k);
+			dx[k] = auxFactorWidth * (sourcePoint.getX() - targetPoint.getX());
+			dy[k] = auxFactorHeight * (sourcePoint.getY() - targetPoint.getY());
+		}
+	}
+
 	/**
 	 * Compute the affine matrix.
 	 *
@@ -1650,16 +966,16 @@ public class Transformation {
 		// Auxiliary variables to calculate inverse transformation
 		List<ROI2DPoint> auxSourcePh = sourceLandmarks;
 		List<ROI2DPoint> auxTargetPh = targetLandmarks;
-		BSplineModel auxSource = srcModel;
-		BSplineModel auxTarget = tgtModel;
+		BSplineModel auxSource = sourceModel;
+		BSplineModel auxTarget = targetModel;
 		double auxFactorWidth = this.targetFactorWidth;
 		double auxFactorHeight = this.targetFactorHeight;
 
 		if (bIsReverse) {
 			auxSourcePh = targetLandmarks;
 			auxTargetPh = sourceLandmarks;
-			auxSource = tgtModel;
-			auxTarget = srcModel;
+			auxSource = targetModel;
+			auxTarget = sourceModel;
 			auxFactorWidth = this.sourceFactorWidth;
 			auxFactorHeight = this.sourceFactorHeight;
 		}
@@ -1715,8 +1031,8 @@ public class Transformation {
 			final double v0 = auxFactorHeight * targetVector.get(0).getY();
 			final double u1 = auxFactorWidth * targetVector.get(1).getX();
 			final double v1 = auxFactorHeight * targetVector.get(1).getY();
-			sourceVector.add(new Point2D.Double(x1 + y0 - y1, x1 + y1 - x0));
-			targetVector.add(new Point2D.Double(u1 + v0 - v1, u1 + v1 - u0));
+			sourceVector.add(new Point2D.Double((int) (x1 + y0 - y1), (int) (x1 + y1 - x0)));
+			targetVector.add(new Point2D.Double((int) (u1 + v0 - v1), (int) (u1 + v1 - u0)));
 			removeLastPoint = 1;
 			n = 3;
 		default:
@@ -1728,10 +1044,10 @@ public class Transformation {
 			for (int k = 0; (k < n); k++) {
 				final Point2D sourcePoint = sourceVector.get(k);
 				final Point2D targetPoint = targetVector.get(k);
-				final double sx = auxFactorWidth * (double) sourcePoint.getX();
-				final double sy = auxFactorHeight * (double) sourcePoint.getY();
-				final double tx = auxFactorWidth * (double) targetPoint.getX();
-				final double ty = auxFactorHeight * (double) targetPoint.getY();
+				final double sx = auxFactorWidth * sourcePoint.getX();
+				final double sy = auxFactorHeight * sourcePoint.getY();
+				final double tx = auxFactorWidth * targetPoint.getX();
+				final double ty = auxFactorHeight * targetPoint.getY();
 				H[0][0] += tx * sx;
 				H[0][1] += tx * sy;
 				H[0][2] += tx;
@@ -1778,10 +1094,10 @@ public class Transformation {
 			}
 			break;
 		}
-		if (removeLastPoint != 0) {
+		if (removeLastPoint > 0) {
 			for (int i = 1; i <= removeLastPoint; i++) {
-				auxSourcePh.remove(n - i);
-				auxTargetPh.remove(n - i);
+				sourceVector.remove(n - i);
+				targetVector.remove(n - i);
 			}
 		}
 
@@ -1807,561 +1123,8 @@ public class Transformation {
 		// MiscTools.printMatrix("source affine matrix after reg", X);
 
 		return (X);
-	} // end computeAffineMatrix
-
-	// -------------------------------------------------------------------
-	/**
-	 * Regularize matrix to remove sharing, scaling, etc.
-	 * 
-	 * @param a
-	 *          affine transform
-	 * @param centerX
-	 *          image center x- coordinate
-	 * @param centerX
-	 *          image center y- coordinate
-	 */
-	public void regularizeMatrix(AffineTransform a, double centerX, double centerY) {
-
-		// Move to the center of the image
-		a.translate(centerX, centerY);
-
-		/*
-		 * System.out.println(" A: " + a.getScaleX() + " " + a.getShearY() + " " +
-		 * a.getShearX() + " " + a.getScaleY() + " " + a.getTranslateX() + " " + +
-		 * a.getTranslateY() );
-		 */
-
-		// retrieves scaling, shearing, rotation and translation from an affine
-		// transformation matrix A (which has translation values in the right
-		// column)
-		// by Daniel Berger for MIT-BCS Seung, April 19 2009
-
-		// We assume that sheary=0
-		// scalex=sqrt(A(1,1)*A(1,1)+A(2,1)*A(2,1));
-		final double a11 = a.getScaleX();
-		final double a21 = a.getShearY();
-		final double scaleX = Math.sqrt(a11 * a11 + a21 * a21);
-		// rotang=atan2(A(2,1)/scalex,A(1,1)/scalex);
-		final double rotang = Math.atan2(a21 / scaleX, a11 / scaleX);
-
-		// R=[[cos(-rotang) -sin(-rotang)];[sin(-rotang) cos(-rotang)]];
-
-		// rotate back shearx and scaley
-		// v=R*[A(1,2) A(2,2)]';
-		final double a12 = a.getShearX();
-		final double a22 = a.getScaleY();
-		final double shearX = Math.cos(-rotang) * a12 - Math.sin(-rotang) * a22;
-		final double scaleY = Math.sin(-rotang) * a12 + Math.cos(-rotang) * a22;
-
-		// rotate back translation
-		// v=R*[A(1,3) A(2,3)]';
-		final double transX = Math.cos(-rotang) * a.getTranslateX() - Math.sin(-rotang) * a.getTranslateY();
-		final double transY = Math.sin(-rotang) * a.getTranslateX() + Math.cos(-rotang) * a.getTranslateY();
-
-		// TWEAK
-
-		final double new_shearX = shearX * (1.0 - tweakShear);
-		// final double new_shearY = 0; // shearY * (1.0 - tweakShear);
-
-		final double avgScale = (scaleX + scaleY) / 2;
-		final double aspectRatio = scaleX / scaleY;
-		final double regAvgScale = avgScale * (1.0 - tweakScale) + 1.0 * tweakScale;
-		final double regAspectRatio = aspectRatio * (1.0 - tweakIso) + 1.0 * tweakIso;
-
-		// System.out.println("avgScale = " + avgScale + " aspectRatio = " +
-		// aspectRatio + "
-		// regAvgScale = " + regAvgScale + " regAspectRatio = " + regAspectRatio);
-
-		final double new_scaleY = (2.0 * regAvgScale) / (regAspectRatio + 1.0);
-		final double new_scaleX = regAspectRatio * new_scaleY;
-
-		final AffineTransform b = makeAffineMatrix(new_scaleX, new_scaleY, new_shearX, 0, rotang, transX, transY);
-
-		// System.out.println("new_scaleX = " + new_scaleX + " new_scaleY = " +
-		// new_scaleY + "
-		// new_shearX = " + new_shearX + " new_shearY = " + new_shearY);
-
-		// Move back the center
-		b.translate(-centerX, -centerY);
-
-		a.setTransform(b);
-
-	}// end method regularize
-
-	// ---------------------------------------------------------------------------------
-	/**
-	 * Makes an affine transformation matrix from the given scale, shear, rotation
-	 * and translation values if you want a uniquely retrievable matrix, give
-	 * sheary=0
-	 * 
-	 * @param scalex
-	 *          scaling in x
-	 * @param scaley
-	 *          scaling in y
-	 * @param shearx
-	 *          shearing in x
-	 * @param sheary
-	 *          shearing in y
-	 * @param rotang
-	 *          angle of rotation (in radians)
-	 * @param transx
-	 *          translation in x
-	 * @param transy
-	 *          translation in y
-	 * @return affine transformation matrix
-	 */
-	public static AffineTransform makeAffineMatrix(final double scalex, final double scaley, final double shearx,
-	    final double sheary, final double rotang, final double transx, final double transy) {
-		/*
-		 * %makes an affine transformation matrix from the given scale, shear,
-		 * %rotation and translation values %if you want a uniquely retrievable
-		 * matrix, give sheary=0 %by Daniel Berger for MIT-BCS Seung, April 19 2009
-		 * 
-		 * A=[[scalex shearx transx];[sheary scaley transy];[0 0 1]];
-		 * A=[[cos(rotang) -sin(rotang) 0];[sin(rotang) cos(rotang) 0];[0 0 1]] * A;
-		 */
-
-		final double m00 = Math.cos(rotang) * scalex - Math.sin(rotang) * sheary;
-		final double m01 = Math.cos(rotang) * shearx - Math.sin(rotang) * scaley;
-		final double m02 = Math.cos(rotang) * transx - Math.sin(rotang) * transy;
-
-		final double m10 = Math.sin(rotang) * scalex + Math.cos(rotang) * sheary;
-		final double m11 = Math.sin(rotang) * shearx + Math.cos(rotang) * scaley;
-		final double m12 = Math.sin(rotang) * transx + Math.cos(rotang) * transy;
-
-		return new AffineTransform(m00, m10, m01, m11, m02, m12);
-	} // end method makeAffineMatrix
-
-	// ------------------------------------------------------------------
-	/**
-	 * Compute the affine residues for the landmarks.
-	 * <p>
-	 * NOTE: The output vectors should be already resized
-	 *
-	 * @param affineMatrix
-	 *          Input
-	 * @param dx
-	 *          Output, difference in x for each landmark
-	 * @param dy
-	 *          Output, difference in y for each landmark
-	 * @param bIsReverse
-	 *          determines the transformation direction (source-target=TRUE or
-	 *          target-source=FALSE)
-	 * @deprecated
-	 */
-	private void computeAffineResidues(final double[][] affineMatrix, // Input
-	    final double[] dx, // output, difference in x for each landmark
-	    final double[] dy, // output, difference in y for each landmark
-	    // The output vectors should be already resized
-	    boolean bIsReverse) {
-		// Auxiliary variables to allow registering in both directions
-		double auxFactorWidth = tgtModel.getFactorWidth();
-		double auxFactorHeight = tgtModel.getFactorHeight();
-		List<ROI2DPoint> auxSourcePh = this.sourceLandmarks;
-		List<ROI2DPoint> auxTargetPh = this.targetLandmarks;
-		if (bIsReverse) {
-			auxFactorWidth = srcModel.getFactorWidth();
-			auxFactorHeight = srcModel.getFactorHeight();
-			auxSourcePh = this.targetLandmarks;
-			auxTargetPh = this.sourceLandmarks;
-		}
-
-		List<Point2D> sourceVector = new ArrayList<>();
-		if (auxSourcePh != null) {
-			for (ROI2DPoint roi : auxSourcePh) {
-				sourceVector.add(roi.getPoint());
-			}
-		}
-
-		List<Point2D> targetVector = new ArrayList<>();
-		if (auxTargetPh != null) {
-			for (ROI2DPoint roi : auxTargetPh) {
-				targetVector.add(roi.getPoint());
-			}
-		}
-
-		final int K = auxTargetPh.size();
-		for (int k = 0; k < K; k++) {
-			final Point2D sourcePoint = sourceVector.get(k);
-			final Point2D targetPoint = targetVector.get(k);
-
-			double u = auxFactorWidth * targetPoint.getX();
-			double v = auxFactorHeight * targetPoint.getY();
-
-			final double x = affineMatrix[0][2] + affineMatrix[0][0] * u + affineMatrix[0][1] * v;
-
-			final double y = affineMatrix[1][2] + affineMatrix[1][0] * u + affineMatrix[1][1] * v;
-
-			dx[k] = auxFactorWidth * sourcePoint.getX() - x;
-			dy[k] = auxFactorHeight * sourcePoint.getY() - y;
-		}
 	}
 
-	// ------------------------------------------------------------------
-	/**
-	 * Compute the coefficients at this scale.
-	 *
-	 * @param intervals
-	 *          input, number of intervals at this scale
-	 * @param dx
-	 *          input, x residue so far
-	 * @param dy
-	 *          input, y residue so far
-	 * @param cx
-	 *          output, x coefficients for splines
-	 * @param cy
-	 *          output, y coefficients for splines
-	 * @param bIsReverse
-	 *          determines the transformation direction (source-target=TRUE or
-	 *          target-source=FALSE)
-	 * @return under-constrained flag
-	 */
-	private boolean computeCoefficientsScale(final int intervals, // input, number
-	                                                              // of intervals
-	                                                              // at this scale
-	    final double[] dx, // input, x residue so far
-	    final double[] dy, // input, y residue so far
-	    final double[][] cx, // output, x coefficients for splines
-	    final double[][] cy, // output, y coefficients for splines
-	    boolean bIsReverse) {
-
-		List<ROI2DPoint> auxTargetPh = (bIsReverse) ? this.sourceLandmarks : this.targetLandmarks;
-
-		int K = 0;
-		if (auxTargetPh != null)
-			K = auxTargetPh.size();
-		boolean underconstrained = false;
-
-		if (0 < K) {
-			// Form the equation system Bc=d
-			final double[][] B = new double[K][(intervals + 3) * (intervals + 3)];
-			build_Matrix_B(intervals, K, B, bIsReverse);
-
-			// "Invert" the matrix B
-			int Nunk = (intervals + 3) * (intervals + 3);
-			double[][] iB = new double[Nunk][K];
-			underconstrained = MathTools.invertMatrixSVD(K, Nunk, B, iB);
-
-			// Now multiply iB times dx and dy respectively
-			int ij = 0;
-			for (int i = 0; i < intervals + 3; i++)
-				for (int j = 0; j < intervals + 3; j++) {
-					cx[i][j] = cy[i][j] = 0.0F;
-					for (int k = 0; k < K; k++) {
-						cx[i][j] += iB[ij][k] * dx[k];
-						cy[i][j] += iB[ij][k] * dy[k];
-					}
-					ij++;
-				}
-		}
-		return underconstrained;
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Compute the coefficients scale with regularization.
-	 *
-	 * @param intervals
-	 *          input, number of intervals at this scale
-	 * @param dx
-	 *          input, x residue so far
-	 * @param dy
-	 *          input, y residue so far
-	 * @param cx
-	 *          output, x coefficients for splines
-	 * @param cy
-	 *          output, y coefficients for splines
-	 * @param bIsReverse
-	 *          determines the transformation direction (source-target=TRUE or
-	 *          target-source=FALSE)
-	 * @return under-constrained flag
-	 */
-	private boolean computeCoefficientsScaleWithRegularization(final int intervals, // input,
-	                                                                                // number
-	                                                                                // of
-	                                                                                // intervals
-	                                                                                // at
-	                                                                                // this
-	                                                                                // scale
-	    final double[] dx, // input, x residue so far
-	    final double[] dy, // input, y residue so far
-	    final double[][] cx, // output, x coefficients for splines
-	    final double[][] cy, // output, y coefficients for splines
-	    boolean bIsReverse) {
-
-		double P11[][] = this.P11_TargetToSource;
-		double P12[][] = this.P12_TargetToSource;
-		double P22[][] = this.P22_TargetToSource;
-
-		List<ROI2DPoint> auxTargetPh = this.targetLandmarks;
-		if (bIsReverse) {
-			auxTargetPh = this.sourceLandmarks;
-			P11 = this.P11_SourceToTarget;
-			P12 = this.P12_SourceToTarget;
-			P22 = this.P22_SourceToTarget;
-		}
-
-		boolean underconstrained = true;
-		int K = 0;
-		if (auxTargetPh != null)
-			K = auxTargetPh.size();
-
-		if (0 < K) {
-			// M is the number of spline coefficients per row
-			int M = intervals + 3;
-			int M2 = M * M;
-
-			// Create A and b for the system Ac=b
-			final double[][] A = new double[2 * M2][2 * M2];
-			final double[] b = new double[2 * M2];
-			for (int i = 0; i < 2 * M2; i++) {
-				b[i] = 0.0;
-				for (int j = 0; j < 2 * M2; j++)
-					A[i][j] = 0.0;
-			}
-
-			// Get the matrix related to the landmarks
-			final double[][] B = new double[K][M2];
-			build_Matrix_B(intervals, K, B, bIsReverse);
-
-			// Fill the part of the equation system related to the landmarks
-			// Compute 2 * B^t * B
-			for (int i = 0; i < M2; i++) {
-				for (int j = i; j < M2; j++) {
-					double bitbj = 0; // bi^t * bj, i.e., column i x column j
-					for (int l = 0; l < K; l++)
-						bitbj += B[l][i] * B[l][j];
-					bitbj *= 2;
-					// int ij=i*M2+j;
-					A[M2 + i][M2 + j] = A[M2 + j][M2 + i] = A[i][j] = A[j][i] = bitbj;
-				}
-			}
-
-			// Compute 2 * B^t * [dx dy]
-			for (int i = 0; i < M2; i++) {
-				double bitdx = 0;
-				double bitdy = 0;
-				for (int l = 0; l < K; l++) {
-					bitdx += B[l][i] * dx[l];
-					bitdy += B[l][i] * dy[l];
-				}
-				bitdx *= 2;
-				bitdy *= 2;
-				b[i] = bitdx;
-				b[M2 + i] = bitdy;
-			}
-
-			// Get the matrices associated to the regularization
-			// Copy P11 symmetrized to the equation system
-			for (int i = 0; i < M2; i++)
-				for (int j = 0; j < M2; j++) {
-					double aux = P11[i][j];
-					A[i][j] += aux;
-					A[j][i] += aux;
-				}
-
-			// Copy P22 symmetrized to the equation system
-			for (int i = 0; i < M2; i++)
-				for (int j = 0; j < M2; j++) {
-					double aux = P22[i][j];
-					A[M2 + i][M2 + j] += aux;
-					A[M2 + j][M2 + i] += aux;
-				}
-
-			// Copy P12 and P12^t to their respective places
-			for (int i = 0; i < M2; i++)
-				for (int j = 0; j < M2; j++) {
-					A[i][M2 + j] = P12[i][j]; // P12
-					A[M2 + i][j] = P12[j][i]; // P12^t
-				}
-
-			// Now solve the system
-			// Invert the matrix A
-			double[][] iA = new double[2 * M2][2 * M2];
-			underconstrained = MathTools.invertMatrixSVD(2 * M2, 2 * M2, A, iA);
-
-			// Now multiply iB times b and distribute in cx and cy
-			int ij = 0;
-			for (int i = 0; i < intervals + 3; i++)
-				for (int j = 0; j < intervals + 3; j++) {
-					cx[i][j] = cy[i][j] = 0.0F;
-					for (int l = 0; l < 2 * M2; l++) {
-						cx[i][j] += iA[ij][l] * b[l];
-						cy[i][j] += iA[M2 + ij][l] * b[l];
-					}
-					ij++;
-				}
-		}
-		return underconstrained;
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Compute the initial residues for the landmarks.
-	 * <p>
-	 * NOTE: The output vectors should be already resized
-	 *
-	 * @param dx
-	 *          output, difference in x for each landmark
-	 * @param dy
-	 *          output, difference in y for each landmark
-	 * @param bIsReverse
-	 *          determines the transformation direction (source-target=TRUE or
-	 *          target-source=FALSE)
-	 */
-	private void computeInitialResidues(final double[] dx, // output, difference
-	                                                       // in x for each
-	                                                       // landmark
-	    final double[] dy, // output, difference in y for each landmark
-	    // The output vectors should be already resized
-	    boolean bIsReverse) {
-
-		// Auxiliary variables for registering in both directions.
-		double auxFactorWidth = tgtModel.getFactorWidth();
-		double auxFactorHeight = tgtModel.getFactorHeight();
-		List<ROI2DPoint> auxSourcePh = this.sourceLandmarks;
-		List<ROI2DPoint> auxTargetPh = this.targetLandmarks;
-
-		if (bIsReverse) {
-			auxFactorWidth = srcModel.getFactorWidth();
-			auxFactorHeight = srcModel.getFactorHeight();
-			auxSourcePh = this.targetLandmarks;
-			auxTargetPh = this.sourceLandmarks;
-		}
-
-		List<Point2D> sourceVector = new ArrayList<>();
-		if (auxSourcePh != null) {
-			for (ROI2DPoint roi : auxSourcePh) {
-				sourceVector.add(roi.getPoint());
-			}
-		}
-
-		List<Point2D> targetVector = new ArrayList<>();
-		if (auxTargetPh != null) {
-			for (ROI2DPoint roi : auxTargetPh) {
-				targetVector.add(roi.getPoint());
-			}
-		}
-
-		int K = 0;
-
-		// Modified from original code
-		if (auxTargetPh != null)
-			K = auxTargetPh.size();
-
-		for (int k = 0; k < K; k++) {
-			final Point2D sourcePoint = sourceVector.get(k);
-			final Point2D targetPoint = targetVector.get(k);
-			dx[k] = auxFactorWidth * (sourcePoint.getX() - targetPoint.getX());
-			dy[k] = auxFactorHeight * (sourcePoint.getY() - targetPoint.getY());
-		}
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Compute the deformation.
-	 *
-	 * @param intervals
-	 *          input, number of intervals
-	 * @param cx
-	 *          input, X B-spline coefficients
-	 * @param cy
-	 *          input, Y B-spline coefficients
-	 * @param transformation_x
-	 *          output, X transformation map
-	 * @param transformation_y
-	 *          output, Y transformation map
-	 * @param bIsReverse
-	 *          determines the transformation direction (source-target=TRUE or
-	 *          target-source=FALSE)
-	 */
-	private void computeDeformation(final int intervals, final double[][] cx, final double[][] cy,
-	    final double[][] transformation_x, final double[][] transformation_y, boolean bIsReverse) {
-
-		int auxTargetCurrentHeight = this.targetCurrentHeight;
-		int auxTargetCurrentWidth = this.targetCurrentWidth;
-
-		if (bIsReverse) {
-			auxTargetCurrentHeight = this.sourceCurrentHeight;
-			auxTargetCurrentWidth = this.sourceCurrentWidth;
-		}
-
-		/*
-		 * // Set these coefficients to an interpolator BSplineModel swx = new
-		 * BSplineModel(cx); BSplineModel swy = new BSplineModel(cy);
-		 * 
-		 * 
-		 * // Compute the transformation mapping for (int v=0;
-		 * v<auxTargetCurrentHeight; v++) { final double tv = (double)(v *
-		 * intervals) / (double)(auxTargetCurrentHeight - 1) + 1.0F; for (int u = 0;
-		 * u<auxTargetCurrentWidth; u++) { final double tu = (double)(u * intervals)
-		 * / (double)(auxTargetCurrentWidth - 1) + 1.0F;
-		 * swx.prepareForInterpolation(tu, tv, ORIGINAL); transformation_x[v][u] =
-		 * swx.interpolateI(); swy.prepareForInterpolation(tu, tv, ORIGINAL);
-		 * transformation_y[v][u] = swy.interpolateI(); } }
-		 * 
-		 */
-
-		Thread x_thread = new Thread(
-		    new ConcurrentDeformation(cx, auxTargetCurrentHeight, auxTargetCurrentWidth, transformation_x, intervals));
-
-		Thread y_thread = new Thread(
-		    new ConcurrentDeformation(cy, auxTargetCurrentHeight, auxTargetCurrentWidth, transformation_y, intervals));
-
-		x_thread.start();
-		y_thread.start();
-
-		try {
-			x_thread.join();
-			y_thread.join();
-			x_thread = null;
-			y_thread = null;
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-	}
-
-	/* ------------------------------------------------------------------------ */
-	/**
-	 * Class to concurrently calculate the two deformation mapping tables
-	 * 
-	 */
-	private class ConcurrentDeformation extends Thread {
-		final double[][] c;
-		final int auxTargetCurrentHeight;
-		final int auxTargetCurrentWidth;
-		final double[][] transformation;
-		final int intervals;
-
-		ConcurrentDeformation(double[][] c, int auxTargetCurrentHeight, int auxTargetCurrentWidth,
-		    double[][] transformation, int intervals) {
-			this.c = c;
-			this.auxTargetCurrentWidth = auxTargetCurrentWidth;
-			this.auxTargetCurrentHeight = auxTargetCurrentHeight;
-			this.transformation = transformation;
-			this.intervals = intervals;
-		}
-
-		// ------------------------------------------------------------------
-		/**
-		 * Run method to calculate the corresponding X or Y transformation table.
-		 */
-		public void run() {
-			// Set these coefficients to an interpolator
-			BSplineModel sw = new BSplineModel(c);
-
-			// Compute the transformation mapping
-			for (int v = 0; v < auxTargetCurrentHeight; v++) {
-				final double tv = (double) (v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
-				for (int u = 0; u < auxTargetCurrentWidth; u++) {
-					final double tu = (double) (u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
-					transformation[v][u] = sw.prepareForInterpolationAndInterpolateI(tu, tv, false, ORIGINAL);
-				}
-			}
-		} /* end run */
-	} /* end ConcurrentDeformation class */
-
-	// ------------------------------------------------------------------
 	/**
 	 * Compute the rotation matrix.
 	 *
@@ -2458,8 +1221,8 @@ public class Transformation {
 
 			for (int i = 0; (i < n); i++) {
 				final Point2D p = sourceVector.get(i);
-				xCenteredSource[i] = auxFactorWidth * p.getX() - xSourceAverage;
-				yCenteredSource[i] = auxFactorHeight * p.getY() - ySourceAverage;
+				xCenteredSource[i] = auxFactorWidth * (double) p.getX() - xSourceAverage;
+				yCenteredSource[i] = auxFactorHeight * (double) p.getY() - ySourceAverage;
 			}
 
 			for (int i = 0; (i < 2); i++) {
@@ -2500,100 +1263,127 @@ public class Transformation {
 			break;
 		}
 		return (X);
-	} /* end computeRotationMatrix */
-
-	// ------------------------------------------------------------------
-	/**
-	 * Compute the scale residues.
-	 * <p>
-	 * NOTE: At the input dx and dy have the residues so far, at the output these
-	 * residues are modified to account for the model at the new scale
-	 *
-	 * @param intervals
-	 *          input, number of intervals
-	 * @param cx
-	 *          input, X B-spline coefficients
-	 * @param cy
-	 *          input, Y B-spline coefficients
-	 * @param dx
-	 *          input/output, X residues
-	 * @param dy
-	 *          input/output, Y residues
-	 * @param bIsReverse
-	 *          determines the transformation direction (target-source=FALSE or
-	 *          source-target=TRUE)
-	 * @deprecated
-	 */
-	private void computeScaleResidues(int intervals, // input, number of intervals
-	    final double[][] cx, // Input, spline coefficients
-	    final double[][] cy, final double[] dx, // Input/Output. At the input it
-	                                            // has the
-	    final double[] dy, // residue so far, at the output this
-	    // residue is modified to account for
-	    // the model at the new scale
-	    boolean bIsReverse) {
-
-		double auxFactorWidth = tgtModel.getFactorWidth();
-		double auxFactorHeight = tgtModel.getFactorHeight();
-		List<ROI2DPoint> auxSourcePh = this.sourceLandmarks;
-		List<ROI2DPoint> auxTargetPh = this.targetLandmarks;
-		int auxTargetCurrentWidth = this.targetCurrentWidth;
-		int auxTargetCurrentHeight = this.targetCurrentHeight;
-
-		if (bIsReverse) {
-			auxFactorWidth = srcModel.getFactorWidth();
-			auxFactorHeight = srcModel.getFactorHeight();
-			auxSourcePh = this.targetLandmarks;
-			auxTargetPh = this.sourceLandmarks;
-			auxTargetCurrentWidth = this.sourceCurrentWidth;
-			auxTargetCurrentHeight = this.sourceCurrentHeight;
-		}
-
-		// Set these coefficients to an interpolator
-		BSplineModel swx = new BSplineModel(cx);
-		BSplineModel swy = new BSplineModel(cy);
-
-		// Get the list of landmarks
-		List<Point2D> sourceVector = new ArrayList<>();
-		if (auxSourcePh != null) {
-			for (ROI2DPoint roi : auxSourcePh) {
-				sourceVector.add(roi.getPoint());
-			}
-		}
-
-		List<Point2D> targetVector = new ArrayList<>();
-		if (auxTargetPh != null) {
-			for (ROI2DPoint roi : auxTargetPh) {
-				targetVector.add(roi.getPoint());
-			}
-		}
-
-		final int K = targetVector.size();
-
-		for (int k = 0; k < K; k++) {
-			// Get the landmark coordinate in the target image
-			final Point2D sourcePoint = sourceVector.get(k);
-			final Point2D targetPoint = targetVector.get(k);
-			double u = auxFactorWidth * targetPoint.getX();
-			double v = auxFactorHeight * targetPoint.getY();
-
-			// Express it in "spline" units
-			double tu = (double) (u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
-			double tv = (double) (v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
-
-			// Transform this coordinate to the source image
-			swx.prepareForInterpolation(tu, tv, false);
-			double x = swx.interpolateI();
-			swy.prepareForInterpolation(tu, tv, false);
-			double y = swy.interpolateI();
-
-			// Subtract the result from the residual
-			dx[k] = auxFactorWidth * sourcePoint.getX() - x;
-			dy[k] = auxFactorHeight * sourcePoint.getY() - y;
-		}
 	}
 
-	/*--------------------------------------------------------------------------*/
+	/**
+	 * Regularize matrix to remove sharing, scaling, etc.
+	 * 
+	 * @param a
+	 *          affine transform
+	 * @param centerX
+	 *          image center x- coordinate
+	 * @param centerX
+	 *          image center y- coordinate
+	 */
+	public void regularizeMatrix(AffineTransform a, double centerX, double centerY) {
+
+		// Move to the center of the image
+		a.translate(centerX, centerY);
+
+		/*
+		 * IJ.log(" A: " + a.getScaleX() + " " + a.getShearY() + " " + a.getShearX()
+		 * + " " + a.getScaleY() + " " + a.getTranslateX() + " " + +
+		 * a.getTranslateY() );
+		 */
+
+		// retrieves scaling, shearing, rotation and translation from an affine
+		// transformation matrix A (which has translation values in the right
+		// column)
+		// by Daniel Berger for MIT-BCS Seung, April 19 2009
+
+		// We assume that sheary=0
+		// scalex=sqrt(A(1,1)*A(1,1)+A(2,1)*A(2,1));
+		final double a11 = a.getScaleX();
+		final double a21 = a.getShearY();
+		final double scaleX = Math.sqrt(a11 * a11 + a21 * a21);
+		// rotang=atan2(A(2,1)/scalex,A(1,1)/scalex);
+		final double rotang = Math.atan2(a21 / scaleX, a11 / scaleX);
+
+		// R=[[cos(-rotang) -sin(-rotang)];[sin(-rotang) cos(-rotang)]];
+
+		// rotate back shearx and scaley
+		// v=R*[A(1,2) A(2,2)]';
+		final double a12 = a.getShearX();
+		final double a22 = a.getScaleY();
+		final double shearX = Math.cos(-rotang) * a12 - Math.sin(-rotang) * a22;
+		final double scaleY = Math.sin(-rotang) * a12 + Math.cos(-rotang) * a22;
+
+		// rotate back translation
+		// v=R*[A(1,3) A(2,3)]';
+		final double transX = Math.cos(-rotang) * a.getTranslateX() - Math.sin(-rotang) * a.getTranslateY();
+		final double transY = Math.sin(-rotang) * a.getTranslateX() + Math.cos(-rotang) * a.getTranslateY();
+
+		// TWEAK
+
+		final double new_shearX = shearX * (1.0 - tweakShear);
+		// final double new_shearY = 0; // shearY * (1.0 - tweakShear);
+
+		final double avgScale = (scaleX + scaleY) / 2;
+		final double aspectRatio = scaleX / scaleY;
+		final double regAvgScale = avgScale * (1.0 - tweakScale) + 1.0 * tweakScale;
+		final double regAspectRatio = aspectRatio * (1.0 - tweakIso) + 1.0 * tweakIso;
+
+		// IJ.log("avgScale = " + avgScale + " aspectRatio = " + aspectRatio + "
+		// regAvgScale = " + regAvgScale + " regAspectRatio = " + regAspectRatio);
+
+		final double new_scaleY = (2.0 * regAvgScale) / (regAspectRatio + 1.0);
+		final double new_scaleX = regAspectRatio * new_scaleY;
+
+		final AffineTransform b = makeAffineMatrix(new_scaleX, new_scaleY, new_shearX, 0, rotang, transX, transY);
+
+		// IJ.log("new_scaleX = " + new_scaleX + " new_scaleY = " + new_scaleY + "
+		// new_shearX = " + new_shearX + " new_shearY = " + new_shearY);
+
+		// Move back the center
+		b.translate(-centerX, -centerY);
+
+		a.setTransform(b);
+
+	}
+
+	/**
+	 * Makes an affine transformation matrix from the given scale, shear, rotation
+	 * and translation values if you want a uniquely retrievable matrix, give
+	 * sheary=0
+	 * 
+	 * @param scalex
+	 *          scaling in x
+	 * @param scaley
+	 *          scaling in y
+	 * @param shearx
+	 *          shearing in x
+	 * @param sheary
+	 *          shearing in y
+	 * @param rotang
+	 *          angle of rotation (in radians)
+	 * @param transx
+	 *          translation in x
+	 * @param transy
+	 *          translation in y
+	 * @return affine transformation matrix
+	 */
+	public static AffineTransform makeAffineMatrix(final double scalex, final double scaley, final double shearx,
+	    final double sheary, final double rotang, final double transx, final double transy) {
+		/*
+		 * %makes an affine transformation matrix from the given scale, shear,
+		 * %rotation and translation values %if you want a uniquely retrievable
+		 * matrix, give sheary=0 %by Daniel Berger for MIT-BCS Seung, April 19 2009
+		 * 
+		 * A=[[scalex shearx transx];[sheary scaley transy];[0 0 1]];
+		 * A=[[cos(rotang) -sin(rotang) 0];[sin(rotang) cos(rotang) 0];[0 0 1]] * A;
+		 */
+
+		final double m00 = Math.cos(rotang) * scalex - Math.sin(rotang) * sheary;
+		final double m01 = Math.cos(rotang) * shearx - Math.sin(rotang) * scaley;
+		final double m02 = Math.cos(rotang) * transx - Math.sin(rotang) * transy;
+
+		final double m10 = Math.sin(rotang) * scalex + Math.cos(rotang) * sheary;
+		final double m11 = Math.sin(rotang) * shearx + Math.cos(rotang) * scaley;
+		final double m12 = Math.sin(rotang) * transx + Math.cos(rotang) * transy;
+
+		return new AffineTransform(m00, m10, m01, m11, m02, m12);
+	}
+
 	/**
 	 * This code is an excerpt from doBidirectionalRegistration() to compute the
 	 * exact number of steps.
@@ -2608,12 +1398,12 @@ public class Transformation {
 		// state= 0 --> Increase deformation detail
 		// state= 1 --> Increase image detail
 		// state= 2 --> Do nothing until the finest image scale
-		if (minScaleDef == maxScaleDef)
+		if (minScaleDeformation == maxScaleDeformation)
 			state = 1;
 		else
 			state = 0;
-		int s = minScaleDef;
-		int currentDepth = tgtModel.getCurrentDepth();
+		int s = minScaleDeformation;
+		int currentDepth = targetModel.getCurrentDepth();
 		int workload = 0;
 		while (state != -1) {
 			// Update the deformation coefficients only in states 0 and 1
@@ -2627,7 +1417,7 @@ public class Transformation {
 			switch (state) {
 			case 0:
 				// Finer details in the deformation
-				if (s < maxScaleDef) {
+				if (s < maxScaleDeformation) {
 					s++;
 					if (currentDepth > minScaleImage)
 						state = 1;
@@ -2642,9 +1432,9 @@ public class Transformation {
 			case 2: // Finer details in the image, do not optimize
 				// Compute next state
 				if (state == 1) {
-					if (s == maxScaleDef && currentDepth == minScaleImage)
+					if (s == maxScaleDeformation && currentDepth == minScaleImage)
 						state = 2;
-					else if (s == maxScaleDef)
+					else if (s == maxScaleDeformation)
 						state = 1;
 					else
 						state = 0;
@@ -2661,468 +1451,590 @@ public class Transformation {
 				break;
 			}
 		}
-		// ProgressBar.resetProgressBar();
-		// ProgressBar.addWorkload(workload);
+		// TODO ProgressBar.resetProgressBar();
+		// TODO ProgressBar.addWorkload(workload);
 	}
 
-	/*--------------------------------------------------------------------------*/
 	/**
-	 * Calculate the geometric error between the source-target and target-source
-	 * deformations (the corresponding coefficients are assumed to be at
-	 * swxTargetToSource, swyTargetToSource, swxSourceToTarget and
-	 * swySourceToTarget).
+	 * Compute the coefficients at this scale.
 	 *
 	 * @param intervals
-	 *          Input: Number of intervals for the deformation
-	 * @param grad
-	 *          Output: Gradient of the function
-	 * 
-	 * @return geometric error between the source-target and target-source
-	 *         deformations.
-	 * @deprecated
+	 *          input, number of intervals at this scale
+	 * @param dx
+	 *          input, x residue so far
+	 * @param dy
+	 *          input, y residue so far
+	 * @param cx
+	 *          output, x coefficients for splines
+	 * @param cy
+	 *          output, y coefficients for splines
+	 * @param bIsReverse
+	 *          determines the transformation direction (source-target=TRUE or
+	 *          target-source=FALSE)
+	 * @return under-constrained flag
 	 */
+	private boolean computeCoefficientsScale(final int intervals, // input, number
+	                                                              // of intervals
+	                                                              // at this scale
+	    final double[] dx, // input, x residue so far
+	    final double[] dy, // input, y residue so far
+	    final double[][] cx, // output, x coefficients for splines
+	    final double[][] cy, // output, y coefficients for splines
+	    boolean bIsReverse) {
 
-	private double evaluateConsistency(final int intervals, double[] grad) {
+		List<ROI2DPoint> auxTargetPh = (bIsReverse) ? this.sourceLandmarks : this.targetLandmarks;
 
-		int cYdim = intervals + 3;
-		int cXdim = cYdim;
-		int Nk = cYdim * cXdim;
-		int twiceNk = 2 * Nk;
+		int K = 0;
+		if (auxTargetPh != null)
+			K = auxTargetPh.size();
+		boolean underconstrained = false;
 
-		// Initialize gradient
-		for (int k = 0; k < grad.length; k++)
-			grad[k] = 0.0F;
+		if (0 < K) {
+			// Form the equation system Bc=d
+			final double[][] B = new double[K][(intervals + 3) * (intervals + 3)];
+			buildMatrixB(intervals, K, B, bIsReverse);
 
-		// Compute the deformation
-		// Set these coefficients to an interpolator
-		BSplineModel swx_direct = this.swxTargetToSource;
-		BSplineModel swy_direct = this.swyTargetToSource;
+			// "Invert" the matrix B
+			int Nunk = (intervals + 3) * (intervals + 3);
+			double[][] iB = new double[Nunk][K];
+			underconstrained = MathTools.invertMatrixSVD(K, Nunk, B, iB);
 
-		BSplineModel swx_inverse = this.swxSourceToTarget;
-		BSplineModel swy_inverse = this.swySourceToTarget;
-
-		// *********** Compute the geometric error and gradient (DIRECT) ***********
-		double f_direct = 0;
-		int n_direct = 0;
-		for (int v = 0; v < this.targetCurrentHeight; v++)
-			for (int u = 0; u < this.targetCurrentWidth; u++) {
-				// Check if this point is in the target mask
-				if (this.targetMask.contains(new Point2D.Double(u / this.targetFactorWidth, v / this.targetFactorHeight))) {
-
-					final int x = (int) Math.round(swx_direct.precomputedInterpolateI(u, v));
-					final int y = (int) Math.round(swy_direct.precomputedInterpolateI(u, v));
-
-					if (x >= 0 && x < this.sourceCurrentWidth && y >= 0 && y < this.sourceCurrentHeight) {
-						final double x2 = swx_inverse.precomputedInterpolateI(x, y);
-						final double y2 = swy_inverse.precomputedInterpolateI(x, y);
-						double aux1 = u - x2;
-						double aux2 = v - y2;
-
-						f_direct += aux1 * aux1 + aux2 * aux2;
-
-						// Compute the derivative with respect to all the c coefficients
-						// Derivatives from direct coefficients.
-						for (int l = 0; l < 4; l++)
-							for (int m = 0; m < 4; m++) {
-								if (swx_direct.precYIndex[v][l] == -1 || swx_direct.precXIndex[u][m] == -1)
-									continue;
-
-								double dddx = swx_direct.precomputedGetWeightI(l, m, u, v);
-								double dixx = swx_inverse.precomputedGetWeightDx(l, m, x, y);
-								double diyy = swy_inverse.precomputedGetWeightDy(l, m, x, y);
-
-								double weightIx = (dixx + diyy) * dddx;
-
-								double dddy = swy_direct.precomputedGetWeightI(l, m, u, v);
-								double dixy = swx_inverse.precomputedGetWeightDy(l, m, x, y);
-								double diyx = swy_inverse.precomputedGetWeightDx(l, m, x, y);
-
-								double weightIy = (diyx + dixy) * dddy;
-
-								int k = swx_direct.precYIndex[v][l] * cYdim + swx_direct.precXIndex[u][m];
-
-								// Derivative related to X deformation
-								grad[k] += -aux1 * weightIx;
-
-								// Derivative related to Y deformation
-								grad[k + twiceNk] += -aux2 * weightIy;
-							}
-
-						// Derivatives from inverse coefficients.
-						for (int l = 0; l < 4; l++)
-							for (int m = 0; m < 4; m++) {
-								// d inverse(direct(x)) / d c_inverse
-								if (swx_inverse.precYIndex[y][l] == -1 || swx_inverse.precYIndex[x][m] == -1)
-									continue;
-
-								double weightI = swx_inverse.precomputedGetWeightI(l, m, x, y);
-
-								int k = swx_inverse.precYIndex[y][l] * cYdim + swx_inverse.precXIndex[x][m];
-
-								// Derivative related to X deformation
-								grad[k + Nk] += -aux1 * weightI;
-
-								// Derivative related to Y deformation
-								grad[k + Nk + twiceNk] += -aux2 * weightI;
-							}
-
-						n_direct++; // Another point has been successfully evaluated
+			// Now multiply iB times dx and dy respectively
+			int ij = 0;
+			for (int i = 0; i < intervals + 3; i++)
+				for (int j = 0; j < intervals + 3; j++) {
+					cx[i][j] = cy[i][j] = 0.0F;
+					for (int k = 0; k < K; k++) {
+						cx[i][j] += iB[ij][k] * dx[k];
+						cy[i][j] += iB[ij][k] * dy[k];
 					}
-				} // end if mask.
-			}
-
-		if (n_direct != 0) {
-			f_direct /= (double) n_direct;
-
-			// Average the image related terms
-			double aux = consistencyWeight * 2.0 / n_direct; // This is the 2 coming
-			                                                 // from the
-			// derivative that I would do later
-			for (int k = 0; k < grad.length; k++)
-				grad[k] *= aux;
+					ij++;
+				}
 		}
-
-		// Inverse gradient
-		double[] vgrad = new double[grad.length];
-
-		// Initialize gradient
-		for (int k = 0; k < vgrad.length; k++)
-			vgrad[k] = 0.0F;
-
-		// *********** Compute the geometric error and gradient (INVERSE)
-		// ***********
-		double f_inverse = 0;
-		int n_inverse = 0;
-		for (int v = 0; v < this.sourceCurrentHeight; v++)
-			for (int u = 0; u < this.sourceCurrentWidth; u++) {
-				// Check if this point is in the target mask
-				if (this.sourceMask.contains(new Point2D.Double(u / this.sourceFactorWidth, v / this.sourceFactorHeight))) {
-					final int x = (int) Math.round(swx_inverse.precomputedInterpolateI(u, v));
-					final int y = (int) Math.round(swy_inverse.precomputedInterpolateI(u, v));
-
-					if (x >= 0 && x < this.targetCurrentWidth && y >= 0 && y < this.targetCurrentHeight) {
-						final double x2 = swx_direct.precomputedInterpolateI(x, y);
-						final double y2 = swy_direct.precomputedInterpolateI(x, y);
-						double aux1 = u - x2;
-						double aux2 = v - y2;
-
-						f_inverse += aux1 * aux1 + aux2 * aux2;
-
-						// Compute the derivative with respect to all the c coefficients
-						// Derivatives from direct coefficients.
-						for (int l = 0; l < 4; l++)
-							for (int m = 0; m < 4; m++) {
-								// d direct(inverse(x)) / d c_direct
-								if (swx_direct.precYIndex[y][l] == -1 || swx_direct.precXIndex[x][m] == -1)
-									continue;
-
-								double weightI = swx_direct.precomputedGetWeightI(l, m, x, y);
-
-								int k = swx_direct.precYIndex[y][l] * cYdim + swx_direct.precXIndex[x][m];
-
-								// Derivative related to X deformation
-								vgrad[k] += -aux1 * weightI;
-
-								// Derivative related to Y deformation
-								vgrad[k + twiceNk] += -aux2 * weightI;
-							}
-						// Derivatives from inverse coefficients.
-						for (int l = 0; l < 4; l++)
-							for (int m = 0; m < 4; m++) {
-								if (swx_inverse.precYIndex[v][l] == -1 || swx_inverse.precXIndex[u][m] == -1)
-									continue;
-
-								double diix = swx_inverse.precomputedGetWeightI(l, m, u, v);
-								double ddxx = swx_direct.precomputedGetWeightDx(l, m, x, y);
-								double ddyy = swy_direct.precomputedGetWeightDy(l, m, x, y);
-
-								double weightIx = (ddxx + ddyy) * diix;
-
-								double diiy = swy_inverse.precomputedGetWeightI(l, m, u, v);
-								double ddxy = swx_direct.precomputedGetWeightDy(l, m, x, y);
-								double ddyx = swy_direct.precomputedGetWeightDx(l, m, x, y);
-
-								double weightIy = (ddyx + ddxy) * diiy;
-
-								int k = swx_inverse.precYIndex[v][l] * cYdim + swx_inverse.precXIndex[u][m];
-
-								// Derivative related to X deformation
-								vgrad[k + Nk] += -aux1 * weightIx;
-
-								// Derivative related to Y deformation
-								vgrad[k + Nk + twiceNk] += -aux2 * weightIy;
-							}
-
-						n_inverse++; // Another point has been successfully evaluated
-					}
-				} // end if mask
-			}
-
-		if (n_inverse != 0) {
-			f_inverse /= (double) n_inverse;
-
-			// Average the image related terms
-			double aux = consistencyWeight * 2.0 / n_inverse; // This is the 2 coming
-			                                                  // from the
-			// derivative that I would do later
-			for (int k = 0; k < vgrad.length; k++)
-				vgrad[k] *= aux;
-		}
-
-		// Sum of both gradients (direct and inverse)
-		for (int k = 0; k < grad.length; k++)
-			grad[k] += vgrad[k];
-
-		this.partialDirectConsitencyError = this.consistencyWeight * f_direct;
-		this.partialInverseConsitencyError = this.consistencyWeight * f_inverse;
-
-		double consistencyDirectError = (n_direct == 0) ? 1.0 / FLT_EPSILON : (this.consistencyWeight * f_direct);
-		double consistencyInverseError = (n_inverse == 0) ? 1.0 / FLT_EPSILON : (this.consistencyWeight * f_inverse);
-
-		if (showMarquardtOptim) {
-			System.out.println("    Consistency Error (s-t): " + consistencyDirectError);
-			System.out.println("    Consistency Error (t-s): " + consistencyInverseError);
-		}
-
-		if (n_direct == 0 || n_inverse == 0)
-			return 1 / FLT_EPSILON;
-		return (this.consistencyWeight * (f_direct + f_inverse));
+		return underconstrained;
 	}
 
-	/*--------------------------------------------------------------------------*/
 	/**
-	 * Calculate the geometric error between the source-target and target-source
-	 * deformations.
+	 * Build the matrix for the landmark interpolation.
 	 *
-	 * @deprecated
-	 * 
-	 * @param c_direct
-	 *          Input: Direct deformation coefficients
-	 * @param c_inverse
-	 *          Input: Inverse deformation coefficients
 	 * @param intervals
-	 *          Input: Number of intervals for the deformation
-	 * @param grad
-	 *          Output: Gradient of the function
-	 * @return error function value
+	 *          Intervals in the deformation
+	 * @param K
+	 *          Number of landmarks
+	 * @param B
+	 *          System matrix of the landmark interpolation
+	 * @param bIsReverse
+	 *          determines the transformation direction (source-target=TRUE or
+	 *          target-source=FALSE)
 	 */
+	private void buildMatrixB(int intervals, // Intervals in the deformation
+	    int K, // Number of landmarks
+	    double[][] B, // System matrix of the landmark interpolation
+	    boolean bIsReverse) {
 
-	private double evaluateConsistency(final double[] c_direct, final double[] c_inverse, final int intervals,
-	    double[] grad) {
+		// Auxiliary variables to calculate inverse transformation
+		List<ROI2DPoint> auxTargetPh = this.targetLandmarks;
+		double auxFactorWidth = this.targetFactorWidth;
+		double auxFactorHeight = this.targetFactorHeight;
 
-		int cYdim = intervals + 3;
-		int cXdim = cYdim;
-		int Nk = cYdim * cXdim;
-		int twiceNk = 2 * Nk;
+		if (bIsReverse) {
+			auxTargetPh = this.sourceLandmarks;
+			auxFactorWidth = this.sourceFactorWidth;
+			auxFactorHeight = this.sourceFactorHeight;
+		}
 
-		// Initialize gradient
-		for (int k = 0; k < grad.length; k++)
-			grad[k] = 0.0F;
-
-		// Compute the deformation
-		// Set these coefficients to an interpolator
-		BSplineModel swx_direct = this.swxTargetToSource;
-		BSplineModel swy_direct = this.swyTargetToSource;
-
-		BSplineModel swx_inverse = this.swxSourceToTarget;
-		BSplineModel swy_inverse = this.swySourceToTarget;
-
-		// Set the transformation coefficients to the interpolator
-		swx_direct.setCoefficients(c_direct, cYdim, cXdim, 0);
-		swy_direct.setCoefficients(c_direct, cYdim, cXdim, Nk);
-		swx_inverse.setCoefficients(c_inverse, cYdim, cXdim, 0);
-		swy_inverse.setCoefficients(c_inverse, cYdim, cXdim, Nk);
-
-		// *********** Compute the geometric error and gradient (DIRECT) ***********
-		double f_direct = 0;
-		int n_direct = 0;
-		for (int v = 0; v < this.targetCurrentHeight; v++)
-			for (int u = 0; u < this.targetCurrentWidth; u++) {
-				// Check if this point is in the target mask
-				if (this.targetMask.contains(new Point2D.Double(u / this.targetFactorWidth, v / this.targetFactorHeight))) {
-
-					final int x = (int) Math.round(swx_direct.precomputedInterpolateI(u, v));
-					final int y = (int) Math.round(swy_direct.precomputedInterpolateI(u, v));
-
-					if (x >= 0 && x < this.sourceCurrentWidth && y >= 0 && y < this.sourceCurrentHeight) {
-						final double x2 = swx_inverse.precomputedInterpolateI(x, y);
-						final double y2 = swy_inverse.precomputedInterpolateI(x, y);
-						double aux1 = u - x2;
-						double aux2 = v - y2;
-
-						f_direct += aux1 * aux1 + aux2 * aux2;
-
-						// Compute the derivative with respect to all the c coefficients
-						// Derivatives from direct coefficients.
-						for (int l = 0; l < 4; l++)
-							for (int m = 0; m < 4; m++) {
-								if (swx_direct.precYIndex[v][l] == -1 || swx_direct.precXIndex[u][m] == -1)
-									continue;
-
-								double dddx = swx_direct.precomputedGetWeightI(l, m, u, v);
-								double dixx = swx_inverse.precomputedGetWeightDx(l, m, x, y);
-								double diyy = swy_inverse.precomputedGetWeightDy(l, m, x, y);
-
-								double weightIx = (dixx + diyy) * dddx;
-
-								double dddy = swy_direct.precomputedGetWeightI(l, m, u, v);
-								double dixy = swx_inverse.precomputedGetWeightDy(l, m, x, y);
-								double diyx = swy_inverse.precomputedGetWeightDx(l, m, x, y);
-
-								double weightIy = (diyx + dixy) * dddy;
-
-								int k = swx_direct.precYIndex[v][l] * cYdim + swx_direct.precYIndex[u][m];
-
-								// Derivative related to X deformation
-								grad[k] += -aux1 * weightIx;
-
-								// Derivative related to Y deformation
-								grad[k + twiceNk] += -aux2 * weightIy;
-							}
-
-						// Derivatives from inverse coefficients.
-						for (int l = 0; l < 4; l++)
-							for (int m = 0; m < 4; m++) {
-								// d inverse(direct(x)) / d c_inverse
-								if (swx_inverse.precYIndex[y][l] == -1 || swx_inverse.precXIndex[x][m] == -1)
-									continue;
-
-								double weightI = swx_inverse.precomputedGetWeightI(l, m, x, y);
-
-								int k = swx_inverse.precYIndex[y][l] * cYdim + swx_inverse.precXIndex[x][m];
-
-								// Derivative related to X deformation
-								grad[k + Nk] += -aux1 * weightI;
-
-								// Derivative related to Y deformation
-								grad[k + Nk + twiceNk] += -aux2 * weightI;
-							}
-
-						n_direct++; // Another point has been successfully evaluated
-					}
-				} // end if mask.
+		List<Point2D> targetVector = new ArrayList<>();
+		if (auxTargetPh != null) {
+			for (ROI2DPoint roi : auxTargetPh) {
+				targetVector.add(roi.getPoint());
 			}
-		if (n_direct != 0)
-			f_direct /= (double) n_direct;
-
-		// Average the image related terms
-		if (n_direct != 0) {
-			double aux = consistencyWeight * 2.0 / n_direct; // This is the 2 coming
-			                                                 // from the
-			// derivative that I would do later
-			for (int k = 0; k < grad.length; k++)
-				grad[k] *= aux;
 		}
 
-		// Inverse gradient
-		double[] vgrad = new double[grad.length];
-
-		// Initialize gradient
-		for (int k = 0; k < vgrad.length; k++)
-			vgrad[k] = 0.0F;
-
-		// *********** Compute the geometric error and gradient (INVERSE)
-		// ***********
-		double f_inverse = 0;
-		int n_inverse = 0;
-		for (int v = 0; v < this.sourceCurrentHeight; v++)
-			for (int u = 0; u < this.sourceCurrentWidth; u++) {
-				// Check if this point is in the target mask
-				if (this.sourceMask.contains(new Point2D.Double(u / this.sourceFactorWidth, v / this.sourceFactorHeight))) {
-					final int x = (int) Math.round(swx_inverse.precomputedInterpolateI(u, v));
-					final int y = (int) Math.round(swy_inverse.precomputedInterpolateI(u, v));
-
-					if (x >= 0 && x < this.targetCurrentWidth && y >= 0 && y < this.targetCurrentHeight) {
-						final double x2 = swx_direct.precomputedInterpolateI(x, y);
-						final double y2 = swy_direct.precomputedInterpolateI(x, y);
-						double aux1 = u - x2;
-						double aux2 = v - y2;
-
-						f_inverse += aux1 * aux1 + aux2 * aux2;
-
-						// Compute the derivative with respect to all the c coefficients
-						// Derivatives from direct coefficients.
-						for (int l = 0; l < 4; l++)
-							for (int m = 0; m < 4; m++) {
-								// d direct(inverse(x)) / d c_direct
-								if (swx_direct.precYIndex[y][l] == -1 || swx_direct.precXIndex[x][m] == -1)
-									continue;
-
-								double weightI = swx_direct.precomputedGetWeightI(l, m, x, y);
-
-								int k = swx_direct.precYIndex[y][l] * cYdim + swx_direct.precXIndex[x][m];
-
-								// Derivative related to X deformation
-								vgrad[k] += -aux1 * weightI;
-
-								// Derivative related to Y deformation
-								vgrad[k + twiceNk] += -aux2 * weightI;
-							}
-						// Derivatives from inverse coefficients.
-						for (int l = 0; l < 4; l++)
-							for (int m = 0; m < 4; m++) {
-								if (swx_inverse.precYIndex[v][l] == -1 || swx_inverse.precXIndex[u][m] == -1)
-									continue;
-
-								double diix = swx_inverse.precomputedGetWeightI(l, m, u, v);
-								double ddxx = swx_direct.precomputedGetWeightDx(l, m, x, y);
-								double ddyy = swy_direct.precomputedGetWeightDy(l, m, x, y);
-
-								double weightIx = (ddxx + ddyy) * diix;
-
-								double diiy = swy_inverse.precomputedGetWeightI(l, m, u, v);
-								double ddxy = swx_direct.precomputedGetWeightDy(l, m, x, y);
-								double ddyx = swy_direct.precomputedGetWeightDx(l, m, x, y);
-
-								double weightIy = (ddyx + ddxy) * diiy;
-
-								int k = swx_inverse.precYIndex[v][l] * cYdim + swx_inverse.precXIndex[u][m];
-
-								// Derivative related to X deformation
-								vgrad[k + Nk] += -aux1 * weightIx;
-
-								// Derivative related to Y deformation
-								vgrad[k + Nk + twiceNk] += -aux2 * weightIy;
-							}
-
-						n_inverse++; // Another point has been successfully evaluated
-					}
-				} // end if mask
-			}
-
-		if (n_inverse != 0)
-			f_inverse /= (double) n_inverse;
-
-		// Average the image related terms
-		if (n_inverse != 0) {
-			double aux = consistencyWeight * 2.0 / n_inverse; // This is the 2 coming
-			                                                  // from the
-			// derivative that I would do later
-			for (int k = 0; k < vgrad.length; k++)
-				vgrad[k] *= aux;
+		for (int k = 0; k < K; k++) {
+			final Point2D targetPoint = targetVector.get(k);
+			double x = auxFactorWidth * targetPoint.getX();
+			double y = auxFactorHeight * targetPoint.getY();
+			final double[] bx = xWeight(x, intervals, true, bIsReverse);
+			final double[] by = yWeight(y, intervals, true, bIsReverse);
+			for (int i = 0; i < intervals + 3; i++)
+				for (int j = 0; j < intervals + 3; j++)
+					B[k][(intervals + 3) * i + j] = by[i] * bx[j];
 		}
-
-		// Sum of both gradients (direct and inverse)
-		for (int k = 0; k < grad.length; k++)
-			grad[k] += vgrad[k];
-
-		this.partialDirectConsitencyError = f_direct;
-		this.partialInverseConsitencyError = f_inverse;
-
-		double consistencyDirectError = (n_direct == 0) ? 1.0 / FLT_EPSILON : (this.consistencyWeight * f_direct);
-		double consistencyInverseError = (n_inverse == 0) ? 1.0 / FLT_EPSILON : (this.consistencyWeight * f_inverse);
-
-		if (showMarquardtOptim) {
-			System.out.println("    Consistency Error (s-t): " + consistencyDirectError);
-			System.out.println("    Consistency Error (t-s): " + consistencyInverseError);
-		}
-
-		if (n_direct == 0 || n_inverse == 0)
-			return 1 / FLT_EPSILON;
-		return (this.consistencyWeight * (f_direct + f_inverse));
 	}
 
-	/*--------------------------------------------------------------------------*/
+	/**
+	 * Calculate the cubic B-spline x weight.
+	 *
+	 * @param x
+	 *          x- value
+	 * @param xIntervals
+	 *          x- number of intervals
+	 * @param extended
+	 *          extended flat
+	 * @param bIsReverse
+	 *          flag to determine the transformation direction
+	 *          (target-source=FALSE or source-target=TRUE)
+	 * @return weights
+	 */
+	private double[] xWeight(final double x, final int xIntervals, final boolean extended, boolean bIsReverse) {
+		int auxTargetCurrentWidth = (bIsReverse) ? this.sourceCurrentWidth : this.targetCurrentWidth;
+
+		int length = xIntervals + 1;
+		int j0 = 0, jF = xIntervals;
+		if (extended) {
+			length += 2;
+			j0--;
+			jF++;
+		}
+		final double[] b = new double[length];
+		final double interX = (double) xIntervals / (double) (auxTargetCurrentWidth - 1);
+		for (int j = j0; j <= jF; j++) {
+			b[j - j0] = MathTools.Bspline03(x * interX - (double) j);
+		}
+		return (b);
+	}
+
+	/**
+	 * Calculate the cubic B-spline y weight.
+	 *
+	 * @param y
+	 *          y- value
+	 * @param yIntervals
+	 *          y- number of intervals
+	 * @param extended
+	 *          extended flat
+	 * @param bIsReverse
+	 *          flag to determine the transformation direction
+	 *          (target-source=FALSE or source-target=TRUE)
+	 * @return weights
+	 */
+	private double[] yWeight(final double y, final int yIntervals, final boolean extended, boolean bIsReverse) {
+
+		int auxTargetCurrentHeight = (bIsReverse) ? this.sourceCurrentHeight : this.targetCurrentHeight;
+
+		int length = yIntervals + 1;
+		int i0 = 0, iF = yIntervals;
+		if (extended) {
+			length += 2;
+			i0--;
+			iF++;
+		}
+		final double[] b = new double[length];
+		final double interY = (double) yIntervals / (double) (auxTargetCurrentHeight - 1);
+		for (int i = i0; i <= iF; i++) {
+			b[i - i0] = MathTools.Bspline03(y * interY - (double) i);
+		}
+		return (b);
+	}
+
+	/**
+	 * Compute the coefficients scale with regularization.
+	 *
+	 * @param intervals
+	 *          input, number of intervals at this scale
+	 * @param dx
+	 *          input, x residue so far
+	 * @param dy
+	 *          input, y residue so far
+	 * @param cx
+	 *          output, x coefficients for splines
+	 * @param cy
+	 *          output, y coefficients for splines
+	 * @param bIsReverse
+	 *          determines the transformation direction (source-target=TRUE or
+	 *          target-source=FALSE)
+	 * @return under-constrained flag
+	 */
+	private boolean computeCoefficientsScaleWithRegularization(final int intervals, final double[] dx, final double[] dy,
+	    final double[][] cx, final double[][] cy, boolean bIsReverse) {
+
+		double P11[][] = this.P11_TargetToSource;
+		double P12[][] = this.P12_TargetToSource;
+		double P22[][] = this.P22_TargetToSource;
+
+		List<ROI2DPoint> auxTargetPh = this.targetLandmarks;
+		if (bIsReverse) {
+			auxTargetPh = this.sourceLandmarks;
+			P11 = this.P11_SourceToTarget;
+			P12 = this.P12_SourceToTarget;
+			P22 = this.P22_SourceToTarget;
+		}
+
+		boolean underconstrained = true;
+		int K = 0;
+		if (auxTargetPh != null)
+			K = auxTargetPh.size();
+
+		if (0 < K) {
+			// M is the number of spline coefficients per row
+			int M = intervals + 3;
+			int M2 = M * M;
+
+			// Create A and b for the system Ac=b
+			final double[][] A = new double[2 * M2][2 * M2];
+			final double[] b = new double[2 * M2];
+			for (int i = 0; i < 2 * M2; i++) {
+				b[i] = 0.0;
+				for (int j = 0; j < 2 * M2; j++)
+					A[i][j] = 0.0;
+			}
+
+			// Get the matrix related to the landmarks
+			final double[][] B = new double[K][M2];
+			buildMatrixB(intervals, K, B, bIsReverse);
+
+			// Fill the part of the equation system related to the landmarks
+			// Compute 2 * B^t * B
+			for (int i = 0; i < M2; i++) {
+				for (int j = i; j < M2; j++) {
+					double bitbj = 0; // bi^t * bj, i.e., column i x column j
+					for (int l = 0; l < K; l++)
+						bitbj += B[l][i] * B[l][j];
+					bitbj *= 2;
+					// int ij=i*M2+j;
+					A[M2 + i][M2 + j] = A[M2 + j][M2 + i] = A[i][j] = A[j][i] = bitbj;
+				}
+			}
+
+			// Compute 2 * B^t * [dx dy]
+			for (int i = 0; i < M2; i++) {
+				double bitdx = 0;
+				double bitdy = 0;
+				for (int l = 0; l < K; l++) {
+					bitdx += B[l][i] * dx[l];
+					bitdy += B[l][i] * dy[l];
+				}
+				bitdx *= 2;
+				bitdy *= 2;
+				b[i] = bitdx;
+				b[M2 + i] = bitdy;
+			}
+
+			// Get the matrices associated to the regularization
+			// Copy P11 symmetrized to the equation system
+			for (int i = 0; i < M2; i++)
+				for (int j = 0; j < M2; j++) {
+					double aux = P11[i][j];
+					A[i][j] += aux;
+					A[j][i] += aux;
+				}
+
+			// Copy P22 symmetrized to the equation system
+			for (int i = 0; i < M2; i++)
+				for (int j = 0; j < M2; j++) {
+					double aux = P22[i][j];
+					A[M2 + i][M2 + j] += aux;
+					A[M2 + j][M2 + i] += aux;
+				}
+
+			// Copy P12 and P12^t to their respective places
+			for (int i = 0; i < M2; i++)
+				for (int j = 0; j < M2; j++) {
+					A[i][M2 + j] = P12[i][j]; // P12
+					A[M2 + i][j] = P12[j][i]; // P12^t
+				}
+
+			// Now solve the system
+			// Invert the matrix A
+			double[][] iA = new double[2 * M2][2 * M2];
+			underconstrained = MathTools.invertMatrixSVD(2 * M2, 2 * M2, A, iA);
+
+			// Now multiply iB times b and distribute in cx and cy
+			int ij = 0;
+			for (int i = 0; i < intervals + 3; i++)
+				for (int j = 0; j < intervals + 3; j++) {
+					cx[i][j] = cy[i][j] = 0.0F;
+					for (int l = 0; l < 2 * M2; l++) {
+						cx[i][j] += iA[ij][l] * b[l];
+						cy[i][j] += iA[M2 + ij][l] * b[l];
+					}
+					ij++;
+				}
+		}
+		return underconstrained;
+	}
+
+	/**
+	 * Optimize the B-spline coefficients (bidirectional method).
+	 *
+	 * @param intervals
+	 *          number of intervals in the deformation
+	 * @param thChangef
+	 * @param cxTargetToSource
+	 *          x- B-spline coefficients storing the target to source deformation
+	 * @param cyTargetToSource
+	 *          y- B-spline coefficients storing the target to source deformation
+	 * @param cxSourceToTarget
+	 *          x- B-spline coefficients storing the source to target deformation
+	 * @param cySourceToTarget
+	 *          y- B-spline coefficients storing the source to target deformation
+	 * @return energy function value
+	 */
+	private double optimizeCoeffs(int intervals, double thChangef, double[][] cxTargetToSource,
+	    double[][] cyTargetToSource, double[][] cxSourceToTarget, double[][] cySourceToTarget) {
+		if (plugin != null && ((BUnwarp) plugin).isPluginInterrumped())
+			return 0.0;
+
+		if (sourceModel.isSubOutput()) {
+			System.out.println(" -----\n Intervals = " + intervals + "x" + intervals);
+			System.out.println(" Source Image Size = " + this.sourceCurrentWidth + "x" + this.sourceCurrentHeight);
+		}
+
+		final double TINY = FLT_EPSILON;
+		final double EPS = 3.0e-8F;
+		final double FIRSTLAMBDA = 1;
+		final int MAXITER_OPTIMCOEFF = 300;
+		final int CUMULATIVE_SIZE = 5;
+
+		int int3 = intervals + 3;
+		int halfM = 2 * int3 * int3;
+		int quarterM = halfM / 2;
+		int threeQuarterM = quarterM * 3;
+		int M = halfM * 2;
+
+		double rescuedf, f;
+		double[] x = new double[M];
+		double[] rescuedx = new double[M];
+		double[] diffx = new double[M];
+		double[] rescuedgrad = new double[M];
+		double[] grad = new double[M];
+		double[] diffgrad = new double[M];
+		double[] Hdx = new double[M];
+		double[] rescuedhess = new double[M * M];
+		double[] hess = new double[M * M];
+		// double []safehess = new double [M*M];
+		double[] proposedHess = new double[M * M];
+		boolean[] optimize = new boolean[M];
+		int i, j, p, iter = 1;
+		boolean skip_update, ill_hessian;
+		double improvementx = (double) Math.sqrt(TINY), lambda = FIRSTLAMBDA, max_normx, distx, aux, gmax;
+		double fac, fae, dgdx, dxHdx, sumdiffg, sumdiffx;
+
+		CumulativeQueue lastBest = new CumulativeQueue(CUMULATIVE_SIZE);
+
+		for (i = 0; i < M; i++)
+			optimize[i] = true;
+
+		/* Form the vector with the current guess for the optimization */
+		for (i = 0, p = 0; i < intervals + 3; i++)
+			for (j = 0; j < intervals + 3; j++, p++) {
+				x[p] = cxTargetToSource[i][j];
+				x[quarterM + p] = cxSourceToTarget[i][j];
+
+				x[halfM + p] = cyTargetToSource[i][j];
+				x[threeQuarterM + p] = cySourceToTarget[i][j];
+			}
+
+		/* Prepare the precomputed weights for interpolation */
+		this.swxTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, 0);
+		this.swyTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, halfM);
+		this.swxTargetToSource.precomputedPrepareForInterpolation(targetModel.getCurrentHeight(),
+		    targetModel.getCurrentWidth(), intervals);
+		this.swyTargetToSource.precomputedPrepareForInterpolation(targetModel.getCurrentHeight(),
+		    targetModel.getCurrentWidth(), intervals);
+
+		this.swxSourceToTarget = new BSplineModel(x, intervals + 3, intervals + 3, quarterM);
+		this.swySourceToTarget = new BSplineModel(x, intervals + 3, intervals + 3, threeQuarterM);
+		this.swxSourceToTarget.precomputedPrepareForInterpolation(sourceModel.getCurrentHeight(),
+		    sourceModel.getCurrentWidth(), intervals);
+		this.swySourceToTarget.precomputedPrepareForInterpolation(sourceModel.getCurrentHeight(),
+		    sourceModel.getCurrentWidth(), intervals);
+
+		/* First computation of the energy */
+		f = energyFunction(x, intervals, grad, false, false);
+
+		if (showMarquardtOptim)
+			System.out.println("f(1)=" + f);
+
+		/*
+		 * Initially the hessian is the identity matrix multiplied by the first
+		 * function value
+		 */
+		for (i = 0, p = 0; i < M; i++)
+			for (j = 0; j < M; j++, p++)
+				if (i == j)
+					hess[p] = 1.0F;
+				else
+					hess[p] = 0.0F;
+
+		rescuedf = f;
+		for (i = 0, p = 0; i < M; i++) {
+			rescuedx[i] = x[i];
+			rescuedgrad[i] = grad[i];
+			for (j = 0; j < M; j++, p++)
+				rescuedhess[p] = hess[p];
+		}
+
+		// Maximum iteration number
+		int maxiter = MAXITER_OPTIMCOEFF * (sourceModel.getCurrentDepth() + 1);
+
+		// TODO ProgressBar.stepProgressBar();
+
+		int last_successful_iter = 0;
+
+		boolean stop = plugin != null && ((BUnwarp) plugin).isPluginInterrumped();
+
+		while (iter < maxiter && !stop) {
+			/* Compute new x ------------------------------------------------- */
+			Marquardt_it(x, optimize, grad, hess, lambda);
+
+			/* Stopping criteria --------------------------------------------- */
+			/* Compute difference with the previous iteration */
+			max_normx = improvementx = 0;
+			for (i = 0; i < M; i++) {
+				diffx[i] = x[i] - rescuedx[i];
+				distx = Math.abs(diffx[i]);
+				improvementx += distx * distx;
+				aux = Math.abs(rescuedx[i]) < Math.abs(x[i]) ? x[i] : rescuedx[i];
+				max_normx += aux * aux;
+			}
+
+			if (TINY < max_normx)
+				improvementx = improvementx / max_normx;
+
+			improvementx = (double) Math.sqrt(Math.sqrt(improvementx));
+
+			/*
+			 * If there is no change with respect to the old geometry then finish the
+			 * iterations
+			 */
+			if (improvementx < Math.sqrt(TINY))
+				break;
+
+			/* Estimate the new function value -------------------------------- */
+			f = energyFunction(x, intervals, grad, false, false);
+			iter++;
+			if (showMarquardtOptim)
+				System.out.println("f(" + iter + ")=" + f + " lambda=" + lambda);
+			// TODO ProgressBar.stepProgressBar();
+
+			/* Update lambda -------------------------------------------------- */
+			if (rescuedf > f) {
+				// We save the last energy terms values in order to be displayed.
+				this.finalDirectConsistencyError = this.partialDirectConsitencyError;
+				this.finalDirectSimilarityError = this.partialDirectSimilarityError;
+				this.finalDirectRegularizationError = this.partialDirectRegularizationError;
+				this.finalDirectLandmarkError = this.partialDirectLandmarkError;
+
+				this.finalInverseConsistencyError = this.partialInverseConsitencyError;
+				this.finalInverseSimilarityError = this.partialInverseSimilarityError;
+				this.finalInverseRegularizationError = this.partialInverseRegularizationError;
+				this.finalInverseLandmarkError = this.partialInverseLandmarkError;
+
+				/* Check if the improvement is only residual */
+				lastBest.push_back(rescuedf - f);
+				if (lastBest.currentSize() == CUMULATIVE_SIZE && lastBest.getSum() / f < thChangef)
+					break;
+
+				/*
+				 * If we have improved then estimate the hessian, update the geometry,
+				 * and decrease the lambda
+				 */
+				/* Estimate the hessian ....................................... */
+				if (showMarquardtOptim)
+					System.out.println("  Accepted");
+				if ((last_successful_iter++ % 10) == 0 && outputLevel > -1)
+					updateOutputs(x, intervals);
+
+				/* Estimate the difference between gradients */
+				for (i = 0; i < M; i++)
+					diffgrad[i] = grad[i] - rescuedgrad[i];
+
+				/* Multiply this difference by the current inverse of the hessian */
+				for (i = 0, p = 0; i < M; i++) {
+					Hdx[i] = 0.0F;
+					for (j = 0; j < M; j++, p++)
+						Hdx[i] += hess[p] * diffx[j];
+				}
+
+				/* Calculate dot products for the denominators ................ */
+				dgdx = dxHdx = sumdiffg = sumdiffx = 0.0F;
+				skip_update = true;
+				for (i = 0; i < M; i++) {
+					dgdx += diffgrad[i] * diffx[i];
+					dxHdx += diffx[i] * Hdx[i];
+					sumdiffg += diffgrad[i] * diffgrad[i];
+					sumdiffx += diffx[i] * diffx[i];
+					if (Math.abs(grad[i]) >= Math.abs(rescuedgrad[i]))
+						gmax = Math.abs(grad[i]);
+					else
+						gmax = Math.abs(rescuedgrad[i]);
+					if (gmax != 0 && Math.abs(diffgrad[i] - Hdx[i]) > Math.sqrt(EPS) * gmax)
+						skip_update = false;
+				}
+
+				/* Update hessian ............................................. */
+				/* Skip if fac not sufficiently positive */
+				if (dgdx > Math.sqrt(EPS * sumdiffg * sumdiffx) && !skip_update) {
+					fae = 1.0F / dxHdx;
+					fac = 1.0F / dgdx;
+
+					/* Update the hessian after BFGS formula */
+					for (i = 0, p = 0; i < M; i++)
+						for (j = 0; j < M; j++, p++) {
+							if (i <= j)
+								proposedHess[p] = hess[p] + fac * diffgrad[i] * diffgrad[j] - fae * (Hdx[i] * Hdx[j]);
+							else
+								proposedHess[p] = proposedHess[j * M + i];
+						}
+
+					ill_hessian = false;
+					if (!ill_hessian) {
+						for (i = 0, p = 0; i < M; i++)
+							for (j = 0; j < M; j++, p++)
+								hess[p] = proposedHess[p];
+					} else if (showMarquardtOptim)
+						System.out.println("Hessian cannot be safely updated, ill-conditioned");
+
+				} else if (showMarquardtOptim)
+					System.out.println("Hessian cannot be safely updated");
+
+				/* Update geometry and lambda ................................. */
+				rescuedf = f;
+				for (i = 0, p = 0; i < M; i++) {
+					rescuedx[i] = x[i];
+					rescuedgrad[i] = grad[i];
+					for (j = 0; j < M; j++, p++)
+						rescuedhess[p] = hess[p];
+				}
+				if (1e-4 < lambda)
+					lambda = lambda / 10;
+			} else {
+				/*
+				 * else, if it is worse, then recover the last geometry and increase
+				 * lambda, saturate lambda with FIRSTLAMBDA
+				 */
+				for (i = 0, p = 0; i < M; i++) {
+					x[i] = rescuedx[i];
+					grad[i] = rescuedgrad[i];
+					for (j = 0; j < M; j++, p++)
+						hess[p] = rescuedhess[p];
+				}
+				if (lambda < 1.0 / TINY)
+					lambda *= 10;
+				else
+					break;
+				if (lambda < FIRSTLAMBDA)
+					lambda = FIRSTLAMBDA;
+			}
+
+			stop = plugin != null && ((BUnwarp) plugin).isPluginInterrumped();
+		}
+
+		// Copy the values back to the input arrays
+		for (i = 0, p = 0; i < intervals + 3; i++)
+			for (j = 0; j < intervals + 3; j++, p++) {
+				cxTargetToSource[i][j] = x[p];
+				cxSourceToTarget[i][j] = x[quarterM + p];
+
+				cyTargetToSource[i][j] = x[halfM + p];
+				cySourceToTarget[i][j] = x[threeQuarterM + p];
+			}
+
+		// TODO ProgressBar.skipProgressBar(maxiter - iter);
+		return f;
+	}
+
 	/**
 	 * Energy function to be minimized by the optimizer in the bidirectional case.
 	 *
@@ -3195,3122 +2107,6 @@ public class Transformation {
 
 	}
 
-	/*--------------------------------------------------------------------------*/
-	/**
-	 * Evaluate the similarity between the source and the target images but also
-	 * the transformation regularization and and landmarks energy term if
-	 * necessary.
-	 *
-	 * @param c
-	 *          Input: Deformation coefficients
-	 * @param intervals
-	 *          Input: Number of intervals for the deformation
-	 * @param grad
-	 *          Output: Gradient of the similarity
-	 * @param only_image
-	 *          Input: if true, only the image term is considered and not the
-	 *          regularization
-	 * @param show_error
-	 *          Input: if true, an image is shown with the error
-	 * @param bIsReverse
-	 *          Input: flag to determine the transformation direction
-	 *          (target-source=FALSE or source-target=TRUE)
-	 * @return images similarity value
-	 * 
-	 * @deprecated
-	 */
-	private double evaluateSimilarity(final double[] c, final int intervals, double[] grad, final boolean only_image,
-
-	    final boolean show_error, boolean bIsReverse) {
-
-		// Auxiliary variables for changing from source to target and inversely
-		BSplineModel auxTarget = tgtModel;
-		BSplineModel auxSource = srcModel;
-
-		ROI2DPolygon auxTargetMsk = targetMask;
-		ROI2DPolygon auxSourceMsk = sourceMask;
-
-		List<ROI2DPoint> auxTargetPh = targetLandmarks;
-		List<ROI2DPoint> auxSourcePh = sourceLandmarks;
-
-		BSplineModel swx = swxTargetToSource;
-		BSplineModel swy = swyTargetToSource;
-
-		double auxFactorWidth = this.tgtModel.getFactorWidth();
-		double auxFactorHeight = this.tgtModel.getFactorHeight();
-
-		double P11[][] = this.P11_TargetToSource;
-		double P12[][] = this.P12_TargetToSource;
-		double P22[][] = this.P22_TargetToSource;
-
-		int auxTargetCurrentWidth = this.targetCurrentWidth;
-		int auxTargetCurrentHeight = this.targetCurrentHeight;
-
-		// Change if necessary
-		if (bIsReverse) {
-			auxSource = tgtModel;
-			auxTarget = srcModel;
-
-			auxSourceMsk = targetMask;
-			auxTargetMsk = sourceMask;
-
-			auxSourcePh = targetLandmarks;
-			auxTargetPh = sourceLandmarks;
-
-			swx = swxSourceToTarget;
-			swy = swySourceToTarget;
-
-			auxFactorWidth = this.sourceFactorWidth;
-			auxFactorHeight = this.sourceFactorHeight;
-
-			P11 = this.P11_SourceToTarget;
-			P12 = this.P12_SourceToTarget;
-			P22 = this.P22_SourceToTarget;
-
-			auxTargetCurrentWidth = this.sourceCurrentWidth;
-			auxTargetCurrentHeight = this.sourceCurrentHeight;
-		}
-
-		int cYdim = intervals + 3;
-		int cXdim = cYdim;
-		int Nk = cYdim * cXdim;
-		int twiceNk = 2 * Nk;
-		double[] vgradreg = new double[grad.length];
-		double[] vgradland = new double[grad.length];
-
-		// Set the transformation coefficients to the interpolator
-		swx.setCoefficients(c, cYdim, cXdim, 0);
-		swy.setCoefficients(c, cYdim, cXdim, Nk);
-
-		// Initialize gradient
-		for (int k = 0; k < twiceNk; k++)
-			vgradreg[k] = vgradland[k] = grad[k] = 0.0F;
-
-		// Estimate the similarity and gradient between both images
-		double imageSimilarity = 0.0;
-		int Ydim = auxTarget.getCurrentHeight();
-		int Xdim = auxTarget.getCurrentWidth();
-
-		// Prepare to show
-		double[][] error_image = null;
-		double[][] div_error_image = null;
-		double[][] curl_error_image = null;
-		double[][] laplacian_error_image = null;
-		double[][] jacobian_error_image = null;
-		if (show_error) {
-			error_image = new double[Ydim][Xdim];
-			div_error_image = new double[Ydim][Xdim];
-			curl_error_image = new double[Ydim][Xdim];
-			laplacian_error_image = new double[Ydim][Xdim];
-			jacobian_error_image = new double[Ydim][Xdim];
-			for (int v = 0; v < Ydim; v++)
-				for (int u = 0; u < Xdim; u++)
-					error_image[v][u] = div_error_image[v][u] = curl_error_image[v][u] = laplacian_error_image[v][u] = jacobian_error_image[v][u] = -1.0;
-		}
-
-		// Loop over all points in the source image
-		int n = 0;
-		if (imageWeight != 0 || show_error) {
-			double[] xD2 = new double[3]; // Some space for the second derivatives
-			double[] yD2 = new double[3]; // of the transformation
-			double[] xD = new double[2]; // Some space for the second derivatives
-			double[] yD = new double[2]; // of the transformation
-			double[] I1D = new double[2]; // Space for the first derivatives of I1
-			double hx = (Xdim - 1) / intervals; // Scale in the X axis
-			double hy = (Ydim - 1) / intervals; // Scale in the Y axis
-
-			double[] targetCurrentImage = auxTarget.getCurrentImage();
-
-			int uv = 0;
-			for (int v = 0; v < Ydim; v++) {
-				for (int u = 0; u < Xdim; u++, uv++) {
-					// Compute image term
-					// .....................................................
-
-					// Check if this point is in the target mask
-					if (auxTargetMsk.contains(new Point2D.Double(u / auxFactorWidth, v / auxFactorHeight))) {
-						// Compute value in the source image
-						double I2 = targetCurrentImage[uv];
-
-						// Compute the position of this point in the target
-						double x = swx.precomputedInterpolateI(u, v);
-						double y = swy.precomputedInterpolateI(u, v);
-
-						// Check if this point is in the source mask
-						if (auxSourceMsk.contains(new Point2D.Double(x / auxFactorWidth, y / auxFactorHeight))) {
-							// Compute the value of the target at that point
-							auxSource.prepareForInterpolation(x, y, PYRAMID);
-							double I1 = auxSource.interpolateI();
-							auxSource.interpolateD(I1D);
-							double I1dx = I1D[0], I1dy = I1D[1];
-
-							double error = I2 - I1;
-							double error2 = error * error;
-							if (show_error)
-								error_image[v][u] = error;
-							imageSimilarity += error2;
-
-							// Compute the derivative with respect to all the c coefficients
-							// Cost of the derivatives = 16*(3 mults + 2 sums)
-							// Current cost= 359 mults + 346 sums
-							for (int l = 0; l < 4; l++)
-								for (int m = 0; m < 4; m++) {
-									if (swx.precYIndex[v][l] == -1 || swx.precXIndex[u][m] == -1)
-										continue;
-
-									// Note: It's the same to take the indexes and weightI from
-									// swx than from swy
-									double weightI = swx.precomputedGetWeightI(l, m, u, v);
-
-									int k = swx.precYIndex[v][l] * cYdim + swx.precXIndex[u][m];
-
-									// Compute partial result
-									// There's also a multiplication by 2 that I will
-									// do later
-									double aux = -error * weightI;
-
-									// Derivative related to X deformation
-									grad[k] += aux * I1dx;
-
-									// Derivative related to Y deformation
-									grad[k + Nk] += aux * I1dy;
-								}
-							n++; // Another point has been successfully evaluated
-						}
-					}
-
-					// Show regularization images
-					// ...........................................
-					if (show_error) {
-						double gradcurlx = 0.0, gradcurly = 0.0;
-						double graddivx = 0.0, graddivy = 0.0;
-						double xdx = 0.0, xdy = 0.0, ydx = 0.0, ydy = 0.0, xdxdy = 0.0, xdxdx = 0.0, xdydy = 0.0, ydxdy = 0.0,
-						    ydxdx = 0.0, ydydy = 0.0;
-
-						// Compute the first derivative terms
-						swx.precomputedInterpolateD(xD, u, v);
-						xdx = xD[0] / hx;
-						xdy = xD[1] / hy;
-						swy.precomputedInterpolateD(yD, u, v);
-						ydx = yD[0] / hx;
-						ydy = yD[1] / hy;
-
-						// Compute the second derivative terms
-						swx.precomputedInterpolateD2(xD2, u, v);
-						xdxdy = xD2[0];
-						xdxdx = xD2[1];
-						xdydy = xD2[2];
-						swy.precomputedInterpolateD2(yD2, u, v);
-						ydxdy = yD2[0];
-						ydxdx = yD2[1];
-						ydydy = yD2[2];
-
-						// Error in the divergence
-						graddivx = xdxdx + ydxdy;
-						graddivy = xdxdy + ydydy;
-
-						double graddiv = graddivx * graddivx + graddivy * graddivy;
-						double errorgraddiv = divWeight * graddiv;
-
-						if (divWeight != 0)
-							div_error_image[v][u] = errorgraddiv;
-						else
-							div_error_image[v][u] = graddiv;
-
-						// Compute error in the curl
-						gradcurlx = -xdxdy + ydxdx;
-						gradcurly = -xdydy + ydxdy;
-						double gradcurl = gradcurlx * gradcurlx + gradcurly * gradcurly;
-						double errorgradcurl = curlWeight * gradcurl;
-
-						if (curlWeight != 0)
-							curl_error_image[v][u] = errorgradcurl;
-						else
-							curl_error_image[v][u] = gradcurl;
-
-						// Compute Laplacian error
-						laplacian_error_image[v][u] = xdxdx * xdxdx;
-						laplacian_error_image[v][u] += xdxdy * xdxdy;
-						laplacian_error_image[v][u] += xdydy * xdydy;
-						laplacian_error_image[v][u] += ydxdx * ydxdx;
-						laplacian_error_image[v][u] += ydxdy * ydxdy;
-						laplacian_error_image[v][u] += ydydy * ydydy;
-
-						// Compute jacobian error
-						jacobian_error_image[v][u] = xdx * ydy - xdy * ydx;
-					}
-				}
-			}
-		}
-
-		// Average the image related terms
-		if (n != 0) {
-			imageSimilarity *= imageWeight / n;
-			double aux = imageWeight * 2.0 / n; // This is the 2 coming from the
-			// derivative that I would do later
-			for (int k = 0; k < twiceNk; k++)
-				grad[k] *= aux;
-		} else if (imageWeight == 0)
-			imageSimilarity = 0;
-		else
-			imageSimilarity = 1 / FLT_EPSILON;
-
-		// Compute regularization term
-		// ..............................................
-		double regularization = 0.0;
-		if (!only_image) {
-			for (int i = 0; i < Nk; i++)
-				for (int j = 0; j < Nk; j++) {
-					regularization += c[i] * P11[i][j] * c[j] + // c1^t P11 c1
-					    c[Nk + i] * P22[i][j] * c[Nk + j] + // c2^t P22 c2
-					    c[i] * P12[i][j] * c[Nk + j];// c1^t P12 c2
-					vgradreg[i] += 2 * P11[i][j] * c[j]; // 2 P11 c1
-					vgradreg[Nk + i] += 2 * P22[i][j] * c[Nk + j]; // 2 P22 c2
-					vgradreg[i] += P12[i][j] * c[Nk + j]; // P12 c2
-					vgradreg[Nk + i] += P12[j][i] * c[j]; // P12^t c1
-				}
-			regularization *= 1.0 / (Ydim * Xdim);
-			for (int k = 0; k < twiceNk; k++)
-				vgradreg[k] *= 1.0 / (Ydim * Xdim);
-		}
-
-		// Compute landmark error and derivative ...............................
-		// Get the list of landmarks
-		double landmarkError = 0.0;
-		int K = 0;
-		if (auxTargetPh != null)
-			K = auxTargetPh.size();
-		if (landmarkWeight != 0) {
-			List<Point2D> sourceVector = new ArrayList<>();
-			if (auxSourcePh != null) {
-				for (ROI2DPoint roi : auxSourcePh) {
-					sourceVector.add(roi.getPoint());
-				}
-			}
-
-			List<Point2D> targetVector = new ArrayList<>();
-			if (auxTargetPh != null) {
-				for (ROI2DPoint roi : auxTargetPh) {
-					targetVector.add(roi.getPoint());
-				}
-			}
-
-			for (int kp = 0; kp < K; kp++) {
-				// Get the landmark coordinate in the target image
-				final Point2D sourcePoint = sourceVector.get(kp);
-				final Point2D targetPoint = targetVector.get(kp);
-				double u = auxFactorWidth * targetPoint.getX();
-				double v = auxFactorHeight * targetPoint.getY();
-
-				// Express it in "spline" units
-				double tu = (double) (u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
-				double tv = (double) (v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
-
-				// Transform this coordinate to the source image
-				swx.prepareForInterpolation(tu, tv, false);
-				double x = swx.interpolateI();
-				swy.prepareForInterpolation(tu, tv, false);
-				double y = swy.interpolateI();
-
-				// Substract the result from the residual
-				double dx = auxFactorWidth * sourcePoint.getX() - x;
-				double dy = auxFactorHeight * sourcePoint.getY() - y;
-
-				// Add to landmark error
-				landmarkError += dx * dx + dy * dy;
-
-				// Compute the derivative with respect to all the c coefficients
-				for (int l = 0; l < 4; l++)
-					for (int m = 0; m < 4; m++) {
-						if (swx.yIndex[l] == -1 || swx.xIndex[m] == -1)
-							continue;
-						int k = swx.yIndex[l] * cYdim + swx.xIndex[m];
-
-						// There's also a multiplication by 2 that I will do later
-						// Derivative related to X deformation
-						vgradland[k] -= dx * swx.getWeightI(l, m);
-
-						// Derivative related to Y deformation
-						vgradland[k + Nk] -= dy * swy.getWeightI(l, m);
-					}
-			}
-		}
-
-		if (K != 0) {
-			landmarkError *= landmarkWeight / K;
-			double aux = 2.0 * landmarkWeight / K;
-			// This is the 2 coming from the derivative
-			// computation that I would do at the end
-			for (int k = 0; k < twiceNk; k++)
-				vgradland[k] *= aux;
-		}
-		if (only_image)
-			landmarkError = 0;
-
-		// Finish computations
-		// .............................................................
-		// Add all gradient terms
-		for (int k = 0; k < twiceNk; k++)
-			grad[k] += vgradreg[k] + vgradland[k];
-
-		if (show_error) {
-			MiscTools.showImage("Error", error_image, plugin);
-			MiscTools.showImage("Divergence Error", div_error_image, plugin);
-			MiscTools.showImage("Curl Error", curl_error_image, plugin);
-			MiscTools.showImage("Laplacian Error", laplacian_error_image, plugin);
-			MiscTools.showImage("Jacobian Error", jacobian_error_image, plugin);
-		}
-
-		if (showMarquardtOptim) {
-			String s = bIsReverse ? new String("(t-s)") : new String("(s-t)");
-			if (imageWeight != 0) {
-				System.out.println("    Image          error " + s + ": " + imageSimilarity);
-				if (bIsReverse)
-					this.partialInverseSimilarityError = imageSimilarity;
-				else
-					this.partialDirectSimilarityError = imageSimilarity;
-
-			}
-			if (landmarkWeight != 0) {
-				System.out.println("    Landmark       error " + s + ": " + landmarkError);
-				if (bIsReverse)
-					this.partialInverseLandmarkError = landmarkError;
-				else
-					this.partialDirectLandmarkError = landmarkError;
-			}
-			if (divWeight != 0 || curlWeight != 0) {
-				System.out.println("    Regularization error " + s + ": " + regularization);
-				if (bIsReverse)
-					this.partialInverseRegularizationError = regularization;
-				else
-					this.partialDirectRegularizationError = regularization;
-
-			}
-		}
-		return imageSimilarity + landmarkError + regularization;
-	}
-
-	/*--------------------------------------------------------------------------*/
-	/**
-	 * Evaluate the energy function in one direction (direct or inverse) and
-	 * calculates its gradient.
-	 * <p>
-	 * Energy function:
-	 * </p>
-	 * <p>
-	 * E = w_i * E_similarity + w_l * E_landmarks + (w_r * E_rotational + w_d *
-	 * E_divergence) + w_c * E_consistency
-	 * </p>
-	 *
-	 * @param c
-	 *          Input: Deformation coefficients
-	 * @param intervals
-	 *          Input: Number of intervals for the deformation
-	 * @param grad_direct
-	 *          Output: Gradient of the energy function (direct direction)
-	 * @param grad_inverse
-	 *          Output: Gradient of the energy function (inverse direction)
-	 * @param only_image
-	 *          Input: if true, only the image term is considered and not the
-	 *          regularization
-	 * @param show_error
-	 *          Input: if true, an image is shown with the error
-	 * @param bIsReverse
-	 *          Input: flag to determine the transformation direction
-	 *          (target-source=FALSE or source-target=TRUE)
-	 * @return images similarity value
-	 */
-	private double evaluatePartialEnergy(final double[] c, final int intervals, double[] grad_direct,
-	    double[] grad_inverse, final boolean only_image,
-
-	    final boolean show_error, boolean bIsReverse) {
-
-		// Auxiliary variables for changing from source to target and inversely
-		BSplineModel auxTarget = tgtModel;
-		BSplineModel auxSource = srcModel;
-
-		ROI2DPolygon auxTargetMsk = targetMask;
-		ROI2DPolygon auxSourceMsk = sourceMask;
-
-		List<ROI2DPoint> auxTargetPh = targetLandmarks;
-		List<ROI2DPoint> auxSourcePh = sourceLandmarks;
-
-		BSplineModel swx = swxTargetToSource;
-		BSplineModel swy = swyTargetToSource;
-
-		BSplineModel swx_inverse = swxSourceToTarget;
-		BSplineModel swy_inverse = swySourceToTarget;
-
-		double auxFactorWidth = this.tgtModel.getFactorWidth();
-		double auxFactorHeight = this.tgtModel.getFactorHeight();
-
-		double P11[][] = this.P11_TargetToSource;
-		double P12[][] = this.P12_TargetToSource;
-		double P22[][] = this.P22_TargetToSource;
-
-		int auxTargetCurrentWidth = this.targetCurrentWidth;
-		int auxTargetCurrentHeight = this.targetCurrentHeight;
-
-		// Change if necessary
-		if (bIsReverse) {
-			auxSource = tgtModel;
-			auxTarget = srcModel;
-
-			auxSourceMsk = targetMask;
-			auxTargetMsk = sourceMask;
-
-			auxSourcePh = targetLandmarks;
-			auxTargetPh = sourceLandmarks;
-
-			swx = swxSourceToTarget;
-			swy = swySourceToTarget;
-
-			swx_inverse = swxTargetToSource;
-			swy_inverse = swyTargetToSource;
-
-			auxFactorWidth = this.sourceFactorWidth;
-			auxFactorHeight = this.sourceFactorHeight;
-
-			P11 = this.P11_SourceToTarget;
-			P12 = this.P12_SourceToTarget;
-			P22 = this.P22_SourceToTarget;
-
-			auxTargetCurrentWidth = this.sourceCurrentWidth;
-			auxTargetCurrentHeight = this.sourceCurrentHeight;
-		}
-
-		int cYdim = intervals + 3;
-		int cXdim = cYdim;
-		int Nk = cYdim * cXdim;
-		int twiceNk = 2 * Nk;
-		double[] vgradimg = new double[twiceNk];
-		double[] vgradcons = new double[twiceNk];
-		double[] vgradreg = new double[twiceNk];
-		double[] vgradland = new double[twiceNk];
-
-		// Set the transformation coefficients to the interpolator
-		swx.setCoefficients(c, cYdim, cXdim, 0);
-		swy.setCoefficients(c, cYdim, cXdim, Nk);
-
-		// Initialize gradient
-		for (int k = 0; k < twiceNk; k++)
-			vgradcons[k] = vgradreg[k] = vgradland[k] = vgradimg[k] = grad_direct[k] = grad_inverse[k] = 0.0F;
-
-		// Estimate the energy and gradient between both images
-		double imageSimilarity = 0.0;
-		double consistencyError = 0.0;
-		int Ydim = auxTarget.getCurrentHeight();
-		int Xdim = auxTarget.getCurrentWidth();
-
-		// Prepare to show
-		double[][] error_image = null;
-		double[][] div_error_image = null;
-		double[][] curl_error_image = null;
-		double[][] laplacian_error_image = null;
-		double[][] jacobian_error_image = null;
-		if (show_error) {
-			error_image = new double[Ydim][Xdim];
-			div_error_image = new double[Ydim][Xdim];
-			curl_error_image = new double[Ydim][Xdim];
-			laplacian_error_image = new double[Ydim][Xdim];
-			jacobian_error_image = new double[Ydim][Xdim];
-			for (int v = 0; v < Ydim; v++)
-				for (int u = 0; u < Xdim; u++)
-					error_image[v][u] = div_error_image[v][u] = curl_error_image[v][u] = laplacian_error_image[v][u] = jacobian_error_image[v][u] = -1.0;
-		}
-
-		// Loop over all points in the source image
-		int n = 0;
-		if (imageWeight != 0 || show_error) {
-			double[] xD2 = new double[3]; // Some space for the second derivatives
-			double[] yD2 = new double[3]; // of the transformation
-			double[] xD = new double[2]; // Some space for the second derivatives
-			double[] yD = new double[2]; // of the transformation
-			double[] I1D = new double[2]; // Space for the first derivatives of I1
-			double hx = (Xdim - 1) / intervals; // Scale in the X axis
-			double hy = (Ydim - 1) / intervals; // Scale in the Y axis
-
-			double[] targetCurrentImage = auxTarget.getCurrentImage();
-
-			int uv = 0;
-			for (int v = 0; v < Ydim; v++) {
-				for (int u = 0; u < Xdim; u++, uv++) {
-					// Compute similarity and consistency terms
-					// .....................................................
-
-					// Check if this point is in the target mask
-					if (auxTargetMsk.contains(u / auxFactorWidth, v / auxFactorHeight)) {
-						// Compute value in the source image
-						double I2 = targetCurrentImage[uv];
-
-						// Compute the position of this point in the target
-						double x = swx.precomputedInterpolateI(u, v);
-						double y = swy.precomputedInterpolateI(u, v);
-
-						final int ix = (int) Math.round(x);
-						final int iy = (int) Math.round(y);
-
-						// Check if this point is in the source mask
-						if (auxSourceMsk.contains((double) ix / auxFactorWidth, (double) iy / auxFactorHeight)) {
-							// Similarity term: Compute the image value of the target at that
-							// point
-							auxSource.prepareForInterpolation(x, y, PYRAMID);
-							double I1 = auxSource.interpolateI();
-							auxSource.interpolateD(I1D);
-							double I1dx = I1D[0], I1dy = I1D[1];
-
-							double error = I2 - I1;
-							double error2 = error * error;
-							if (show_error)
-								error_image[v][u] = error;
-							imageSimilarity += error2;
-
-							// Consistency term: Compute coordinate applying the inverse
-							// transformation.
-							final double x2 = swx_inverse.precomputedInterpolateI(ix, iy);
-							final double y2 = swy_inverse.precomputedInterpolateI(ix, iy);
-
-							double aux1 = u - x2;
-							double aux2 = v - y2;
-
-							consistencyError += aux1 * aux1 + aux2 * aux2;
-
-							// Compute the derivative with respect to all the c coefficients
-							for (int l = 0; l < 4; l++)
-								for (int m = 0; m < 4; m++) {
-									if (swx.precYIndex[v][l] == -1 || swx.precXIndex[u][m] == -1)
-										continue;
-
-									// --- Similarity term derivative ---
-
-									// Note: It's the same to take the indexes and weightI from
-									// swx as from swy
-									double weightI = swx.precomputedGetWeightI(l, m, u, v);
-
-									int k = swx.precYIndex[v][l] * cYdim + swx.precXIndex[u][m];
-
-									// Compute partial result
-									// There's also a multiplication by 2 that I will
-									// do later
-									double aux = -error * weightI;
-
-									// Derivative related to X deformation
-									vgradimg[k] += aux * I1dx;
-
-									// Derivative related to Y deformation
-									vgradimg[k + Nk] += aux * I1dy;
-
-									// --- Consistency term derivative ---
-									// Compute the derivative with respect to all the c
-									// coefficients
-									// Derivatives from direct coefficients.
-									double dddx = weightI;
-									double dixx = swx_inverse.precomputedGetWeightDx(l, m, ix, iy);
-									double diyy = swy_inverse.precomputedGetWeightDy(l, m, ix, iy);
-
-									double weightIx = (dixx + diyy) * dddx;
-
-									double dddy = weightI;
-									double dixy = swx_inverse.precomputedGetWeightDy(l, m, ix, iy);
-									double diyx = swy_inverse.precomputedGetWeightDx(l, m, ix, iy);
-
-									double weightIy = (diyx + dixy) * dddy;
-
-									// Derivative related to X deformation
-									vgradcons[k] += -aux1 * weightIx;
-
-									// Derivative related to Y deformation
-									vgradcons[k + Nk] += -aux2 * weightIy;
-								}
-
-							// Consistency term: Derivatives from inverse coefficients.
-							for (int l = 0; l < 4; l++)
-								for (int m = 0; m < 4; m++) {
-									// d inverse(direct(x)) / d c_inverse
-									if (swx_inverse.precYIndex[iy][l] == -1 || swx_inverse.precXIndex[ix][m] == -1)
-										continue;
-
-									double weightI = swx_inverse.precomputedGetWeightI(l, m, ix, iy);
-
-									int k = swx_inverse.precYIndex[iy][l] * cYdim + swx_inverse.precXIndex[ix][m];
-
-									// Derivative related to X deformation
-									grad_inverse[k] += -aux1 * weightI;
-
-									// Derivative related to Y deformation
-									grad_inverse[k + Nk] += -aux2 * weightI;
-								}
-
-							n++; // Another point has been successfully evaluated
-						}
-					}
-
-					// Show regularization images
-					// ...........................................
-					if (show_error) {
-						double gradcurlx = 0.0, gradcurly = 0.0;
-						double graddivx = 0.0, graddivy = 0.0;
-						double xdx = 0.0, xdy = 0.0, ydx = 0.0, ydy = 0.0, xdxdy = 0.0, xdxdx = 0.0, xdydy = 0.0, ydxdy = 0.0,
-						    ydxdx = 0.0, ydydy = 0.0;
-
-						// Compute the first derivative terms
-						swx.precomputedInterpolateD(xD, u, v);
-						xdx = xD[0] / hx;
-						xdy = xD[1] / hy;
-						swy.precomputedInterpolateD(yD, u, v);
-						ydx = yD[0] / hx;
-						ydy = yD[1] / hy;
-
-						// Compute the second derivative terms
-						swx.precomputedInterpolateD2(xD2, u, v);
-						xdxdy = xD2[0];
-						xdxdx = xD2[1];
-						xdydy = xD2[2];
-						swy.precomputedInterpolateD2(yD2, u, v);
-						ydxdy = yD2[0];
-						ydxdx = yD2[1];
-						ydydy = yD2[2];
-
-						// Error in the divergence
-						graddivx = xdxdx + ydxdy;
-						graddivy = xdxdy + ydydy;
-
-						double graddiv = graddivx * graddivx + graddivy * graddivy;
-						double errorgraddiv = divWeight * graddiv;
-
-						if (divWeight != 0)
-							div_error_image[v][u] = errorgraddiv;
-						else
-							div_error_image[v][u] = graddiv;
-
-						// Compute error in the curl
-						gradcurlx = -xdxdy + ydxdx;
-						gradcurly = -xdydy + ydxdy;
-						double gradcurl = gradcurlx * gradcurlx + gradcurly * gradcurly;
-						double errorgradcurl = curlWeight * gradcurl;
-
-						if (curlWeight != 0)
-							curl_error_image[v][u] = errorgradcurl;
-						else
-							curl_error_image[v][u] = gradcurl;
-
-						// Compute Laplacian error
-						laplacian_error_image[v][u] = xdxdx * xdxdx;
-						laplacian_error_image[v][u] += xdxdy * xdxdy;
-						laplacian_error_image[v][u] += xdydy * xdydy;
-						laplacian_error_image[v][u] += ydxdx * ydxdx;
-						laplacian_error_image[v][u] += ydxdy * ydxdy;
-						laplacian_error_image[v][u] += ydydy * ydydy;
-
-						// Compute jacobian error
-						jacobian_error_image[v][u] = xdx * ydy - xdy * ydx;
-					}
-
-				}
-			}
-		}
-
-		if (n != 0) {
-			// Average the consistency related terms
-			consistencyError *= this.consistencyWeight / n;
-
-			// Average the image related terms
-			double aux = this.consistencyWeight * 2.0 / n; // This is the 2 coming
-			                                               // from the
-			// derivative that I would do later
-			for (int k = 0; k < vgradcons.length; k++) {
-				vgradcons[k] *= aux;
-				grad_inverse[k] *= aux;
-			}
-
-			// Average the image related terms
-			imageSimilarity *= this.imageWeight / n;
-			aux = imageWeight * 2.0 / n; // This is the 2 coming from the
-			// derivative that I would do later
-			for (int k = 0; k < twiceNk; k++)
-				vgradimg[k] *= aux;
-		} else {
-			if (this.imageWeight == 0)
-				imageSimilarity = 0;
-			else
-				imageSimilarity = 1 / FLT_EPSILON;
-
-			if (this.consistencyWeight == 0)
-				consistencyError = 0;
-			else
-				consistencyError = 1 / FLT_EPSILON;
-		}
-
-		// Compute regularization term
-		// ..............................................
-		double regularization = 0.0;
-		if (!only_image) {
-			for (int i = 0; i < Nk; i++)
-				for (int j = 0; j < Nk; j++) {
-					regularization += c[i] * P11[i][j] * c[j] + // c1^t P11 c1
-					    c[Nk + i] * P22[i][j] * c[Nk + j] + // c2^t P22 c2
-					    c[i] * P12[i][j] * c[Nk + j];// c1^t P12 c2
-					vgradreg[i] += 2 * P11[i][j] * c[j]; // 2 P11 c1
-					vgradreg[Nk + i] += 2 * P22[i][j] * c[Nk + j]; // 2 P22 c2
-					vgradreg[i] += P12[i][j] * c[Nk + j]; // P12 c2
-					vgradreg[Nk + i] += P12[j][i] * c[j]; // P12^t c1
-				}
-			regularization *= 1.0 / (Ydim * Xdim);
-
-			for (int k = 0; k < twiceNk; k++)
-				vgradreg[k] *= 1.0 / (Ydim * Xdim);
-		}
-
-		// Compute landmark error and derivative ...............................
-		// Get the list of landmarks
-		double landmarkError = 0.0;
-		int K = 0;
-		if (auxTargetPh != null)
-			K = auxTargetPh.size();
-		if (landmarkWeight != 0) {
-			List<Point2D> sourceVector = new ArrayList<>();
-			if (auxSourcePh != null) {
-				for (ROI2DPoint roi : auxSourcePh) {
-					sourceVector.add(roi.getPoint());
-				}
-			}
-
-			List<Point2D> targetVector = new ArrayList<>();
-			if (auxTargetPh != null) {
-				for (ROI2DPoint roi : auxTargetPh) {
-					targetVector.add(roi.getPoint());
-				}
-			}
-
-			for (int kp = 0; kp < K; kp++) {
-				// Get the landmark coordinate in the target image
-				final Point2D sourcePoint = sourceVector.get(kp);
-				final Point2D targetPoint = targetVector.get(kp);
-				double u = auxFactorWidth * targetPoint.getX();
-				double v = auxFactorHeight * targetPoint.getY();
-
-				// Express it in "spline" units
-				double tu = (double) (u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
-				double tv = (double) (v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
-
-				// Transform this coordinate to the source image
-				swx.prepareForInterpolation(tu, tv, false);
-				double x = swx.interpolateI();
-				swy.prepareForInterpolation(tu, tv, false);
-				double y = swy.interpolateI();
-
-				// Substract the result from the residual
-				double dx = auxFactorWidth * sourcePoint.getX() - x;
-				double dy = auxFactorHeight * sourcePoint.getY() - y;
-
-				// Add to landmark error
-				landmarkError += dx * dx + dy * dy;
-
-				// Compute the derivative with respect to all the c coefficients
-				for (int l = 0; l < 4; l++)
-					for (int m = 0; m < 4; m++) {
-						if (swx.yIndex[l] == -1 || swx.xIndex[m] == -1)
-							continue;
-						int k = swx.yIndex[l] * cYdim + swx.xIndex[m];
-
-						// There's also a multiplication by 2 that I will do later
-						// Derivative related to X deformation
-						vgradland[k] -= dx * swx.getWeightI(l, m);
-
-						// Derivative related to Y deformation
-						vgradland[k + Nk] -= dy * swy.getWeightI(l, m);
-					}
-			}
-		}
-
-		if (K != 0) {
-			landmarkError *= landmarkWeight / K;
-			double aux = 2.0 * landmarkWeight / K;
-			// This is the 2 coming from the derivative
-			// computation that I would do at the end
-			for (int k = 0; k < twiceNk; k++)
-				vgradland[k] *= aux;
-		}
-		if (only_image)
-			landmarkError = 0;
-
-		// Finish computations
-		// .............................................................
-		// Add all gradient terms
-		for (int k = 0; k < twiceNk; k++)
-			grad_direct[k] += vgradimg[k] + +vgradcons[k] + vgradreg[k] + vgradland[k];
-
-		if (show_error) {
-			MiscTools.showImage("Error", error_image, plugin);
-			MiscTools.showImage("Divergence Error", div_error_image, plugin);
-			MiscTools.showImage("Curl Error", curl_error_image, plugin);
-			MiscTools.showImage("Laplacian Error", laplacian_error_image, plugin);
-			MiscTools.showImage("Jacobian Error", jacobian_error_image, plugin);
-		}
-
-		if (showMarquardtOptim) {
-			String s = bIsReverse ? new String("(t-s)") : new String("(s-t)");
-			if (imageWeight != 0) {
-				System.out.println("    Image          error " + s + ": " + imageSimilarity);
-				if (bIsReverse)
-					this.partialInverseSimilarityError = imageSimilarity;
-				else
-					this.partialDirectSimilarityError = imageSimilarity;
-
-			}
-			if (consistencyWeight != 0) {
-				System.out.println("    Consistency          error " + s + ": " + consistencyError);
-				if (bIsReverse)
-					this.partialInverseConsitencyError = consistencyError;
-				else
-					this.partialDirectConsitencyError = consistencyError;
-
-			}
-			if (landmarkWeight != 0) {
-				System.out.println("    Landmark       error " + s + ": " + landmarkError);
-				if (bIsReverse)
-					this.partialInverseLandmarkError = landmarkError;
-				else
-					this.partialDirectLandmarkError = landmarkError;
-			}
-			if (divWeight != 0 || curlWeight != 0) {
-				System.out.println("    Regularization error " + s + ": " + regularization);
-				if (bIsReverse)
-					this.partialInverseRegularizationError = regularization;
-				else
-					this.partialDirectRegularizationError = regularization;
-
-			}
-		}
-
-		return imageSimilarity + consistencyError + landmarkError + regularization;
-
-	} /* end evaluatePartialEnergy */
-
-	/*--------------------------------------------------------------------------*/
-	/**
-	 * In this function the system (H+lambda*Diag(H))*update=gradient is solved
-	 * for update. H is the hessian of the function f, gradient is the gradient of
-	 * the function f, Diag(H) is a matrix with the diagonal of H.
-	 */
-	private void Marquardt_it(double[] x, boolean[] optimize, double[] gradient, double[] Hessian, double lambda) {
-		// final double TINY = FLT_EPSILON;
-		final int M = x.length;
-
-		// Find the threshold for the most important components
-		double[] sortedgradient = new double[M];
-		for (int i = 0; i < M; i++)
-			sortedgradient[i] = Math.abs(gradient[i]);
-		Arrays.sort(sortedgradient);
-
-		double largestGradient = sortedgradient[M - 1];
-
-		// We set the threshold gradient at 9% of the largest value.
-		double gradient_th = 0.09 * largestGradient;
-
-		// We count the number of values over the threshold.
-		int Mused = 0;
-		for (int i = 0; i < M; i++)
-			if (sortedgradient[i] >= gradient_th)
-				Mused++;
-
-		double[][] u = new double[Mused][Mused];
-		// double [][] v = null; //new double [Mused][Mused];
-		// double [] w = null; //new double [Mused];
-		double[] g = new double[Mused];
-		double[] update = new double[Mused];
-		boolean[] optimizep = new boolean[M];
-
-		System.arraycopy(optimize, 0, optimizep, 0, M);
-
-		lambda += 1.0F;
-
-		int m = 0, i;
-
-		// Take the Mused components with big gradients
-		for (i = 0; i < M; i++)
-			if (optimizep[i] && Math.abs(gradient[i]) >= gradient_th) {
-				m++;
-				if (m == Mused)
-					break;
-			} else
-				optimizep[i] = false;
-		// Set the rest to 0
-		for (i = i + 1; i < M; i++)
-			optimizep[i] = false;
-
-		// Gradient descent
-		// for (int i=0; i<M; i++) if (optimizep[i]) x[i]-=0.01*gradient[i];
-		// if (true) return;
-
-		/*
-		 * u will be a copy of the Hessian where we take only those components
-		 * corresponding to variables being optimized
-		 */
-		int kr = 0, iw = 0;
-		for (int ir = 0; ir < M; kr = kr + M, ir++) {
-			if (optimizep[ir]) {
-				int jw = 0;
-				for (int jr = 0; jr < M; jr++)
-					if (optimizep[jr])
-						u[iw][jw++] = Hessian[kr + jr];
-				g[iw] = gradient[ir];
-				u[iw][iw] *= lambda;
-				iw++;
-			}
-		}
-
-		// Solve he equation system
-		/* SVD u=u*w*v^t */
-		update = MathTools.linearLeastSquares(u, g);
-		if (update == null) {
-			System.out.println("Error when calculating linear least square solution...");
-			return;
-		}
-
-		/* x = x - update */
-		kr = 0;
-		for (int kw = 0; kw < M; kw++)
-			if (optimizep[kw])
-				x[kw] -= update[kr++];
-
-	} /* end Marquardt_it */
-
-	/*--------------------------------------------------------------------------*/
-	/**
-	 * Optimize the B-spline coefficients (bidirectional method).
-	 *
-	 * @param intervals
-	 *          number of intervals in the deformation
-	 * @param thChangef
-	 * @param cxTargetToSource
-	 *          x- B-spline coefficients storing the target to source deformation
-	 * @param cyTargetToSource
-	 *          y- B-spline coefficients storing the target to source deformation
-	 * @param cxSourceToTarget
-	 *          x- B-spline coefficients storing the source to target deformation
-	 * @param cySourceToTarget
-	 *          y- B-spline coefficients storing the source to target deformation
-	 * @return energy function value
-	 */
-	private double optimizeCoeffs(int intervals, double thChangef, double[][] cxTargetToSource,
-	    double[][] cyTargetToSource, double[][] cxSourceToTarget, double[][] cySourceToTarget) {
-		if (srcModel.isSubOutput()) {
-			System.out.println(" -----\n Intervals = " + intervals + "x" + intervals);
-			System.out.println(" Source Image Size = " + this.sourceCurrentWidth + "x" + this.sourceCurrentHeight);
-		}
-
-		final double TINY = FLT_EPSILON;
-		final double EPS = 3.0e-8F;
-		final double FIRSTLAMBDA = 1;
-		final int MAXITER_OPTIMCOEFF = 300;
-		final int CUMULATIVE_SIZE = 5;
-
-		int int3 = intervals + 3;
-		int halfM = 2 * int3 * int3;
-		int quarterM = halfM / 2;
-		int threeQuarterM = quarterM * 3;
-		int M = halfM * 2;
-
-		double rescuedf, f;
-		double[] x = new double[M];
-		double[] rescuedx = new double[M];
-		double[] diffx = new double[M];
-		double[] rescuedgrad = new double[M];
-		double[] grad = new double[M];
-		double[] diffgrad = new double[M];
-		double[] Hdx = new double[M];
-		double[] rescuedhess = new double[M * M];
-		double[] hess = new double[M * M];
-		// double []safehess = new double [M*M];
-		double[] proposedHess = new double[M * M];
-		boolean[] optimize = new boolean[M];
-		int i, j, p, iter = 1;
-		boolean skip_update, ill_hessian;
-		double improvementx = (double) Math.sqrt(TINY), lambda = FIRSTLAMBDA, max_normx, distx, aux, gmax;
-		double fac, fae, dgdx, dxHdx, sumdiffg, sumdiffx;
-
-		CumulativeQueue lastBest = new CumulativeQueue(CUMULATIVE_SIZE);
-
-		for (i = 0; i < M; i++)
-			optimize[i] = true;
-
-		/* Form the vector with the current guess for the optimization */
-		for (i = 0, p = 0; i < intervals + 3; i++)
-			for (j = 0; j < intervals + 3; j++, p++) {
-				x[p] = cxTargetToSource[i][j];
-				x[quarterM + p] = cxSourceToTarget[i][j];
-
-				x[halfM + p] = cyTargetToSource[i][j];
-				x[threeQuarterM + p] = cySourceToTarget[i][j];
-			}
-
-		/* Prepare the precomputed weights for interpolation */
-		this.swxTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, 0);
-		this.swyTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, halfM);
-		this.swxTargetToSource.precomputedPrepareForInterpolation(tgtModel.getCurrentHeight(), tgtModel.getCurrentWidth(),
-		    intervals);
-		this.swyTargetToSource.precomputedPrepareForInterpolation(tgtModel.getCurrentHeight(), tgtModel.getCurrentWidth(),
-		    intervals);
-
-		this.swxSourceToTarget = new BSplineModel(x, intervals + 3, intervals + 3, quarterM);
-		this.swySourceToTarget = new BSplineModel(x, intervals + 3, intervals + 3, threeQuarterM);
-		this.swxSourceToTarget.precomputedPrepareForInterpolation(srcModel.getCurrentHeight(), srcModel.getCurrentWidth(),
-		    intervals);
-		this.swySourceToTarget.precomputedPrepareForInterpolation(srcModel.getCurrentHeight(), srcModel.getCurrentWidth(),
-		    intervals);
-
-		/* First computation of the energy */
-		f = energyFunction(x, intervals, grad, false, false);
-
-		if (showMarquardtOptim)
-			System.out.println("f(1)=" + f);
-
-		/*
-		 * Initially the hessian is the identity matrix multiplied by the first
-		 * function value
-		 */
-		for (i = 0, p = 0; i < M; i++)
-			for (j = 0; j < M; j++, p++)
-				if (i == j)
-					hess[p] = 1.0F;
-				else
-					hess[p] = 0.0F;
-
-		rescuedf = f;
-		for (i = 0, p = 0; i < M; i++) {
-			rescuedx[i] = x[i];
-			rescuedgrad[i] = grad[i];
-			for (j = 0; j < M; j++, p++)
-				rescuedhess[p] = hess[p];
-		}
-
-		// Maximum iteration number
-		int maxiter = MAXITER_OPTIMCOEFF * (srcModel.getCurrentDepth() + 1);
-
-		// ProgressBar.stepProgressBar();
-
-		int last_successful_iter = 0;
-
-		boolean stop = false;// plugin != null && plugin.isStopRegistrationSet();
-
-		while (iter < maxiter && !stop) {
-			/* Compute new x ------------------------------------------------- */
-			Marquardt_it(x, optimize, grad, hess, lambda);
-
-			/* Stopping criteria --------------------------------------------- */
-			/* Compute difference with the previous iteration */
-			max_normx = improvementx = 0;
-			for (i = 0; i < M; i++) {
-				diffx[i] = x[i] - rescuedx[i];
-				distx = Math.abs(diffx[i]);
-				improvementx += distx * distx;
-				aux = Math.abs(rescuedx[i]) < Math.abs(x[i]) ? x[i] : rescuedx[i];
-				max_normx += aux * aux;
-			}
-
-			if (TINY < max_normx)
-				improvementx = improvementx / max_normx;
-
-			improvementx = (double) Math.sqrt(Math.sqrt(improvementx));
-
-			/*
-			 * If there is no change with respect to the old geometry then finish the
-			 * iterations
-			 */
-			if (improvementx < Math.sqrt(TINY))
-				break;
-
-			/* Estimate the new function value -------------------------------- */
-			f = energyFunction(x, intervals, grad, false, false);
-			iter++;
-			if (showMarquardtOptim)
-				System.out.println("f(" + iter + ")=" + f + " lambda=" + lambda);
-			// ProgressBar.stepProgressBar();
-
-			/* Update lambda -------------------------------------------------- */
-			if (rescuedf > f) {
-				// We save the last energy terms values in order to be displayed.
-				this.finalDirectConsistencyError = this.partialDirectConsitencyError;
-				this.finalDirectSimilarityError = this.partialDirectSimilarityError;
-				this.finalDirectRegularizationError = this.partialDirectRegularizationError;
-				this.finalDirectLandmarkError = this.partialDirectLandmarkError;
-
-				this.finalInverseConsistencyError = this.partialInverseConsitencyError;
-				this.finalInverseSimilarityError = this.partialInverseSimilarityError;
-				this.finalInverseRegularizationError = this.partialInverseRegularizationError;
-				this.finalInverseLandmarkError = this.partialInverseLandmarkError;
-
-				/* Check if the improvement is only residual */
-				lastBest.push_back(rescuedf - f);
-				if (lastBest.currentSize() == CUMULATIVE_SIZE && lastBest.getSum() / f < thChangef)
-					break;
-
-				/*
-				 * If we have improved then estimate the hessian, update the geometry,
-				 * and decrease the lambda
-				 */
-				/* Estimate the hessian ....................................... */
-				if (showMarquardtOptim)
-					System.out.println("  Accepted");
-				if ((last_successful_iter++ % 10) == 0 && outputLevel > -1)
-					update_outputs(x, intervals);
-
-				/* Estimate the difference between gradients */
-				for (i = 0; i < M; i++)
-					diffgrad[i] = grad[i] - rescuedgrad[i];
-
-				/* Multiply this difference by the current inverse of the hessian */
-				for (i = 0, p = 0; i < M; i++) {
-					Hdx[i] = 0.0F;
-					for (j = 0; j < M; j++, p++)
-						Hdx[i] += hess[p] * diffx[j];
-				}
-
-				/* Calculate dot products for the denominators ................ */
-				dgdx = dxHdx = sumdiffg = sumdiffx = 0.0F;
-				skip_update = true;
-				for (i = 0; i < M; i++) {
-					dgdx += diffgrad[i] * diffx[i];
-					dxHdx += diffx[i] * Hdx[i];
-					sumdiffg += diffgrad[i] * diffgrad[i];
-					sumdiffx += diffx[i] * diffx[i];
-					if (Math.abs(grad[i]) >= Math.abs(rescuedgrad[i]))
-						gmax = Math.abs(grad[i]);
-					else
-						gmax = Math.abs(rescuedgrad[i]);
-					if (gmax != 0 && Math.abs(diffgrad[i] - Hdx[i]) > Math.sqrt(EPS) * gmax)
-						skip_update = false;
-				}
-
-				/* Update hessian ............................................. */
-				/* Skip if fac not sufficiently positive */
-				if (dgdx > Math.sqrt(EPS * sumdiffg * sumdiffx) && !skip_update) {
-					fae = 1.0F / dxHdx;
-					fac = 1.0F / dgdx;
-
-					/* Update the hessian after BFGS formula */
-					for (i = 0, p = 0; i < M; i++)
-						for (j = 0; j < M; j++, p++) {
-							if (i <= j)
-								proposedHess[p] = hess[p] + fac * diffgrad[i] * diffgrad[j] - fae * (Hdx[i] * Hdx[j]);
-							else
-								proposedHess[p] = proposedHess[j * M + i];
-						}
-
-					ill_hessian = false;
-					if (!ill_hessian) {
-						for (i = 0, p = 0; i < M; i++)
-							for (j = 0; j < M; j++, p++)
-								hess[p] = proposedHess[p];
-					} else if (showMarquardtOptim)
-						System.out.println("Hessian cannot be safely updated, ill-conditioned");
-
-				} else if (showMarquardtOptim)
-					System.out.println("Hessian cannot be safely updated");
-
-				/* Update geometry and lambda ................................. */
-				rescuedf = f;
-				for (i = 0, p = 0; i < M; i++) {
-					rescuedx[i] = x[i];
-					rescuedgrad[i] = grad[i];
-					for (j = 0; j < M; j++, p++)
-						rescuedhess[p] = hess[p];
-				}
-				if (1e-4 < lambda)
-					lambda = lambda / 10;
-			} else {
-				/*
-				 * else, if it is worse, then recover the last geometry and increase
-				 * lambda, saturate lambda with FIRSTLAMBDA
-				 */
-				for (i = 0, p = 0; i < M; i++) {
-					x[i] = rescuedx[i];
-					grad[i] = rescuedgrad[i];
-					for (j = 0; j < M; j++, p++)
-						hess[p] = rescuedhess[p];
-				}
-				if (lambda < 1.0 / TINY)
-					lambda *= 10;
-				else
-					break;
-				if (lambda < FIRSTLAMBDA)
-					lambda = FIRSTLAMBDA;
-			}
-
-			stop = false;// plugin != null && plugin.isStopRegistrationSet();
-		}
-
-		// Copy the values back to the input arrays
-		for (i = 0, p = 0; i < intervals + 3; i++)
-			for (j = 0; j < intervals + 3; j++, p++) {
-				cxTargetToSource[i][j] = x[p];
-				cxSourceToTarget[i][j] = x[quarterM + p];
-
-				cyTargetToSource[i][j] = x[halfM + p];
-				cySourceToTarget[i][j] = x[threeQuarterM + p];
-			}
-
-		// ProgressBar.skipProgressBar(maxiter - iter);
-		return f;
-	}
-
-	/*--------------------------------------------------------------------------*/
-	/**
-	 * Optimize the B-spline coefficients (unidirectional method).
-	 *
-	 * @param intervals
-	 *          number of intervals in the deformation
-	 * @param thChangef
-	 * @param cxTargetToSource
-	 *          x- B-spline coefficients storing the target to source deformation
-	 * @param cyTargetToSource
-	 *          y- B-spline coefficients storing the target to source deformation
-	 * @return energy function value
-	 */
-	private double optimizeCoeffs(int intervals, double thChangef, double[][] cxTargetToSource,
-	    double[][] cyTargetToSource) {
-		if (srcModel.isSubOutput()) {
-			System.out.println(" -----\n Intervals = " + intervals + "x" + intervals);
-			System.out.println(" Source Image Size = " + this.sourceCurrentWidth + "x" + this.sourceCurrentHeight);
-		}
-
-		/*
-		 * if (plugin != null && plugin.isStopRegistrationSet()) return 0.0;
-		 */
-		final double TINY = FLT_EPSILON;
-		final double EPS = 3.0e-8F;
-		final double FIRSTLAMBDA = 1;
-		final int MAXITER_OPTIMCOEFF = 300;
-		final int CUMULATIVE_SIZE = 5;
-
-		int int3 = intervals + 3;
-		int halfM = int3 * int3;
-		int M = halfM * 2;
-
-		double rescuedf, f;
-		double[] x = new double[M];
-		double[] rescuedx = new double[M];
-		double[] diffx = new double[M];
-		double[] rescuedgrad = new double[M];
-		double[] grad = new double[M];
-		double[] diffgrad = new double[M];
-		double[] Hdx = new double[M];
-		double[] rescuedhess = new double[M * M];
-		double[] hess = new double[M * M];
-		double[] proposedHess = new double[M * M];
-		boolean[] optimize = new boolean[M];
-		int i, j, p, iter = 1;
-		boolean skip_update, ill_hessian;
-		double improvementx = (double) Math.sqrt(TINY), lambda = FIRSTLAMBDA, max_normx, distx, aux, gmax;
-		double fac, fae, dgdx, dxHdx, sumdiffg, sumdiffx;
-
-		CumulativeQueue lastBest = new CumulativeQueue(CUMULATIVE_SIZE);
-
-		for (i = 0; i < M; i++)
-			optimize[i] = true;
-
-		/* Form the vector with the current guess for the optimization */
-		for (i = 0, p = 0; i < intervals + 3; i++)
-			for (j = 0; j < intervals + 3; j++, p++) {
-				x[p] = cxTargetToSource[i][j];
-				x[halfM + p] = cyTargetToSource[i][j];
-			}
-
-		/* Prepare the precomputed weights for interpolation */
-		this.swxTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, 0);
-		this.swyTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, halfM);
-		this.swxTargetToSource.precomputedPrepareForInterpolation(tgtModel.getCurrentHeight(), tgtModel.getCurrentWidth(),
-		    intervals);
-		this.swyTargetToSource.precomputedPrepareForInterpolation(tgtModel.getCurrentHeight(), tgtModel.getCurrentWidth(),
-		    intervals);
-
-		// First computation of the energy (similarity + landmarks + regularization)
-		// f = evaluateSimilarity(x, intervals, grad, false, false, false);
-		f = evaluateSimilarityMultiThread(x, intervals, grad, false, false);
-
-		if (showMarquardtOptim)
-			System.out.println("f(1)=" + f);
-
-		/*
-		 * Initially the hessian is the identity matrix multiplied by the first
-		 * function value
-		 */
-		for (i = 0, p = 0; i < M; i++)
-			for (j = 0; j < M; j++, p++)
-				if (i == j)
-					hess[p] = 1.0F;
-				else
-					hess[p] = 0.0F;
-
-		rescuedf = f;
-		for (i = 0, p = 0; i < M; i++) {
-			rescuedx[i] = x[i];
-			rescuedgrad[i] = grad[i];
-			for (j = 0; j < M; j++, p++)
-				rescuedhess[p] = hess[p];
-		}
-
-		// Maximum iteration number
-		int maxiter = MAXITER_OPTIMCOEFF * (srcModel.getCurrentDepth() + 1);
-
-		// ProgressBar.stepProgressBar();
-
-		int last_successful_iter = 0;
-
-		boolean stop = false;// plugin != null && plugin.isStopRegistrationSet();
-
-		while (iter < maxiter && !stop) {
-			/* Compute new x ------------------------------------------------- */
-			Marquardt_it(x, optimize, grad, hess, lambda);
-
-			/* Stopping criteria --------------------------------------------- */
-			/* Compute difference with the previous iteration */
-			max_normx = improvementx = 0;
-			for (i = 0; i < M; i++) {
-				diffx[i] = x[i] - rescuedx[i];
-				distx = Math.abs(diffx[i]);
-				improvementx += distx * distx;
-				aux = Math.abs(rescuedx[i]) < Math.abs(x[i]) ? x[i] : rescuedx[i];
-				max_normx += aux * aux;
-			}
-
-			if (TINY < max_normx)
-				improvementx = improvementx / max_normx;
-
-			improvementx = (double) Math.sqrt(Math.sqrt(improvementx));
-
-			/*
-			 * If there is no change with respect to the old geometry then finish the
-			 * iterations
-			 */
-			if (improvementx < Math.sqrt(TINY))
-				break;
-
-			/* Estimate the new function value -------------------------------- */
-			// f = evaluateSimilarity(x, intervals, grad, false, false, false);
-			f = evaluateSimilarityMultiThread(x, intervals, grad, false, false);
-
-			iter++;
-			if (showMarquardtOptim)
-				System.out.println("f(" + iter + ")=" + f + " lambda=" + lambda);
-			// ProgressBar.stepProgressBar();
-
-			/* Update lambda -------------------------------------------------- */
-			if (rescuedf > f) {
-				// We save the last energy terms values in order to be displayed.
-				this.finalDirectConsistencyError = this.partialDirectConsitencyError;
-				this.finalDirectSimilarityError = this.partialDirectSimilarityError;
-				this.finalDirectRegularizationError = this.partialDirectRegularizationError;
-				this.finalDirectLandmarkError = this.partialDirectLandmarkError;
-
-				/* Check if the improvement is only residual */
-				lastBest.push_back(rescuedf - f);
-				if (lastBest.currentSize() == CUMULATIVE_SIZE && lastBest.getSum() / f < thChangef)
-					break;
-
-				/*
-				 * If we have improved then estimate the hessian, update the geometry,
-				 * and decrease the lambda
-				 */
-				/* Estimate the hessian ....................................... */
-				if (showMarquardtOptim)
-					System.out.println("  Accepted");
-				if ((last_successful_iter++ % 10) == 0 && outputLevel > -1)
-					update_current_output(x, intervals, false);
-
-				/* Estimate the difference between gradients */
-				for (i = 0; i < M; i++)
-					diffgrad[i] = grad[i] - rescuedgrad[i];
-
-				/* Multiply this difference by the current inverse of the hessian */
-				for (i = 0, p = 0; i < M; i++) {
-					Hdx[i] = 0.0F;
-					for (j = 0; j < M; j++, p++)
-						Hdx[i] += hess[p] * diffx[j];
-				}
-
-				/* Calculate dot products for the denominators ................ */
-				dgdx = dxHdx = sumdiffg = sumdiffx = 0.0F;
-				skip_update = true;
-				for (i = 0; i < M; i++) {
-					dgdx += diffgrad[i] * diffx[i];
-					dxHdx += diffx[i] * Hdx[i];
-					sumdiffg += diffgrad[i] * diffgrad[i];
-					sumdiffx += diffx[i] * diffx[i];
-					if (Math.abs(grad[i]) >= Math.abs(rescuedgrad[i]))
-						gmax = Math.abs(grad[i]);
-					else
-						gmax = Math.abs(rescuedgrad[i]);
-					if (gmax != 0 && Math.abs(diffgrad[i] - Hdx[i]) > Math.sqrt(EPS) * gmax)
-						skip_update = false;
-				}
-
-				/* Update hessian ............................................. */
-				/* Skip if fac not sufficiently positive */
-				if (dgdx > Math.sqrt(EPS * sumdiffg * sumdiffx) && !skip_update) {
-					fae = 1.0F / dxHdx;
-					fac = 1.0F / dgdx;
-
-					/* Update the hessian after BFGS formula */
-					for (i = 0, p = 0; i < M; i++)
-						for (j = 0; j < M; j++, p++) {
-							if (i <= j)
-								proposedHess[p] = hess[p] + fac * diffgrad[i] * diffgrad[j] - fae * (Hdx[i] * Hdx[j]);
-							else
-								proposedHess[p] = proposedHess[j * M + i];
-						}
-
-					ill_hessian = false;
-					if (!ill_hessian) {
-						for (i = 0, p = 0; i < M; i++)
-							for (j = 0; j < M; j++, p++)
-								hess[p] = proposedHess[p];
-					} else if (showMarquardtOptim)
-						System.out.println("Hessian cannot be safely updated, ill-conditioned");
-
-				} else if (showMarquardtOptim)
-					System.out.println("Hessian cannot be safely updated");
-
-				/* Update geometry and lambda ................................. */
-				rescuedf = f;
-				for (i = 0, p = 0; i < M; i++) {
-					rescuedx[i] = x[i];
-					rescuedgrad[i] = grad[i];
-					for (j = 0; j < M; j++, p++)
-						rescuedhess[p] = hess[p];
-				}
-				if (1e-4 < lambda)
-					lambda = lambda / 10;
-			} else {
-				/*
-				 * else, if it is worse, then recover the last geometry and increase
-				 * lambda, saturate lambda with FIRSTLAMBDA
-				 */
-				for (i = 0, p = 0; i < M; i++) {
-					x[i] = rescuedx[i];
-					grad[i] = rescuedgrad[i];
-					for (j = 0; j < M; j++, p++)
-						hess[p] = rescuedhess[p];
-				}
-				if (lambda < 1.0 / TINY)
-					lambda *= 10;
-				else
-					break;
-				if (lambda < FIRSTLAMBDA)
-					lambda = FIRSTLAMBDA;
-			}
-
-			stop = false;// plugin != null && plugin.isStopRegistrationSet();
-		}
-
-		// Copy the values back to the input arrays
-		for (i = 0, p = 0; i < intervals + 3; i++)
-			for (j = 0; j < intervals + 3; j++, p++) {
-				cxTargetToSource[i][j] = x[p];
-
-				cyTargetToSource[i][j] = x[halfM + p];
-			}
-
-		// ProgressBar.skipProgressBar(maxiter - iter);
-		return f;
-	}
-
-	/*-----------------------------------------------------------------------------*/
-	/**
-	 * Propagate deformation coefficients to the next level.
-	 *
-	 * @param intervals
-	 *          number of intervals in the deformation
-	 * @param c
-	 *          B-spline coefficients
-	 * @param expansionFactor
-	 *          due to the change of size in the represented image
-	 * @return propagated coefficients
-	 */
-	private double[][] propagateCoeffsToNextLevel(int intervals, final double[][] c, double expansionFactor) {
-		// Expand the coefficients for the next scale
-		intervals *= 2;
-		double[][] cs_expand = new double[intervals + 7][intervals + 7];
-
-		// Upsample
-		for (int i = 0; i < intervals + 7; i++)
-			for (int j = 0; j < intervals + 7; j++) {
-				// If it is not in an even sample then set it to 0
-				if (i % 2 == 0 || j % 2 == 0)
-					cs_expand[i][j] = 0.0F;
-				else {
-					// Now look for this sample in the coarser level
-					int ipc = (i - 1) / 2;
-					int jpc = (j - 1) / 2;
-					cs_expand[i][j] = c[ipc][jpc];
-				}
-			}
-
-		// Define the FIR filter
-		double[][] u2n = new double[4][];
-		u2n[0] = null;
-		u2n[1] = new double[3];
-		u2n[1][0] = 0.5F;
-		u2n[1][1] = 1.0F;
-		u2n[1][2] = 0.5F;
-		u2n[2] = null;
-		u2n[3] = new double[5];
-		u2n[3][0] = 0.125F;
-		u2n[3][1] = 0.5F;
-		u2n[3][2] = 0.75F;
-		u2n[3][3] = 0.5F;
-		u2n[3][4] = 0.125F;
-		int[] half_length_u2n = { 0, 1, 0, 2 };
-		int kh = half_length_u2n[transformationSplineDegree];
-
-		// Apply the u2n filter to rows
-		double[][] cs_expand_aux = new double[intervals + 7][intervals + 7];
-
-		for (int i = 1; i < intervals + 7; i += 2)
-			for (int j = 0; j < intervals + 7; j++) {
-				cs_expand_aux[i][j] = 0.0F;
-				for (int k = -kh; k <= kh; k++)
-					if (j + k >= 0 && j + k <= intervals + 6)
-						cs_expand_aux[i][j] += u2n[transformationSplineDegree][k + kh] * cs_expand[i][j + k];
-			}
-
-		// Apply the u2n filter to columns
-		for (int i = 0; i < intervals + 7; i++)
-			for (int j = 0; j < intervals + 7; j++) {
-				cs_expand[i][j] = 0.0F;
-				for (int k = -kh; k <= kh; k++)
-					if (i + k >= 0 && i + k <= intervals + 6)
-						cs_expand[i][j] += u2n[transformationSplineDegree][k + kh] * cs_expand_aux[i + k][j];
-			}
-
-		// Copy the central coefficients to c
-		double[][] newc = new double[intervals + 3][intervals + 3];
-		for (int i = 0; i < intervals + 3; i++)
-			for (int j = 0; j < intervals + 3; j++)
-				newc[i][j] = cs_expand[i + 2][j + 2] * expansionFactor;
-
-		// Return the new set of coefficients
-		return newc;
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Save source transformation. GUI mode.
-	 */
-	public void saveDirectTransformation() {
-		saveTransformation(intervals, cxTargetToSource, cyTargetToSource, false);
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Save target to source transformation into a file.
-	 */
-	public void saveDirectTransformation(String fileName) {
-		MiscTools.saveElasticTransformation(intervals, cxTargetToSource, cyTargetToSource, fileName);
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Save target transformation. GUI mode.
-	 */
-	public void saveInverseTransformation() {
-		saveTransformation(intervals, cxSourceToTarget, cySourceToTarget, true);
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Save source to target transformation into a file.
-	 */
-	public void saveInverseTransformation(String fileName) {
-		MiscTools.saveElasticTransformation(intervals, cxSourceToTarget, cySourceToTarget, fileName);
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Load target to source transformation from a file.
-	 */
-	public void loadDirectTransformation(String fileName) {
-		MiscTools.loadTransformation(fileName, cxTargetToSource, cyTargetToSource);
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Load source to target transformation from a file.
-	 */
-	public void loadInverseTransformation(String fileName) {
-		MiscTools.loadTransformation(fileName, cxSourceToTarget, cySourceToTarget);
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Save the transformation.
-	 *
-	 * @param intervals
-	 *          number of intervals in the deformation
-	 * @param cx
-	 *          x- deformation coefficients
-	 * @param cy
-	 *          y- deformation coefficients
-	 * @param bIsReverse
-	 *          flat to determine the transformation direction
-	 */
-	private void saveTransformation(int intervals, double[][] cx, double[][] cy, boolean bIsReverse) {
-		String filename = dirTFileName;
-
-		if (bIsReverse)
-			filename = invTFileName;
-
-		if (filename.equals("")) {
-
-			// Get the filename to save
-			File dir = new File(".");
-			String path = "";
-			try {
-				path = dir.getCanonicalPath() + "/";
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-			filename = (bIsReverse) ? targetSeq.getName() : sourceSeq.getName();
-			String sDirection = (bIsReverse) ? "_inverse" : "_direct";
-			String new_filename = "";
-			int dot = filename.lastIndexOf('.');
-			if (dot == -1)
-				new_filename = filename + sDirection + "_transf";
-			else
-				new_filename = filename.substring(0, dot) + sDirection + "_transf";
-			filename = path + filename;
-
-			if (outputLevel > -1 && this.plugin != null) {
-				final SaveDialog sd = new SaveDialog();
-				filename = sd.chooseFile("Save" + sDirection + "_transformation", null, new_filename, ".txt");
-			} else
-				filename = new_filename;
-		}
-
-		// Save the file
-		MiscTools.saveElasticTransformation(intervals, cx, cy, filename);
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Compute and draw the final deformation grid.
-	 *
-	 * @param intervals
-	 *          number of intervals in the deformation
-	 * @param cx
-	 *          x- deformation coefficients
-	 * @param cy
-	 *          y- deformation coefficients
-	 * @param is
-	 *          image stack where we want to show the deformation grid
-	 * @param bIsReverse
-	 *          flag to determine the transformation direction
-	 *          (target-source=FALSE or source-target=TRUE)
-	 */
-	private void computeDeformationGrid(int intervals, double[][] cx, double[][] cy, Sequence is, boolean bIsReverse) {
-
-		int auxTargetCurrentHeight = this.targetCurrentHeight;
-		int auxTargetCurrentWidth = this.targetCurrentWidth;
-
-		if (bIsReverse) {
-			auxTargetCurrentHeight = sourceCurrentHeight;
-			auxTargetCurrentWidth = sourceCurrentWidth;
-		}
-		// Initialize output image
-		int stepv = Math.min(Math.max(10, auxTargetCurrentHeight / 15), 30);
-		int stepu = Math.min(Math.max(10, auxTargetCurrentWidth / 15), 30);
-		final double transformedImage[][] = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
-		for (int v = 0; v < auxTargetCurrentHeight; v++)
-			for (int u = 0; u < auxTargetCurrentWidth; u++)
-				transformedImage[v][u] = 255;
-
-		// Ask for memory for the transformation
-		double[][] transformation_x = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
-		double[][] transformation_y = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
-
-		// Compute the deformation
-		computeDeformation(intervals, cx, cy, transformation_x, transformation_y, bIsReverse);
-
-		// Show deformed grid ........................................
-		// Show deformation vectors
-		for (int v = 0; v < auxTargetCurrentHeight; v += stepv)
-			for (int u = 0; u < auxTargetCurrentWidth; u += stepu) {
-				final double x = transformation_x[v][u];
-				final double y = transformation_y[v][u];
-				// Draw horizontal line
-				int uh = u + stepu;
-				if (uh < auxTargetCurrentWidth) {
-					final double xh = transformation_x[v][uh];
-					final double yh = transformation_y[v][uh];
-					MiscTools.drawLine(transformedImage, (int) Math.round(x), (int) Math.round(y), (int) Math.round(xh),
-					    (int) Math.round(yh), 0);
-				}
-
-				// Draw vertical line
-				int vv = v + stepv;
-				if (vv < auxTargetCurrentHeight) {
-					final double xv = transformation_x[vv][u];
-					final double yv = transformation_y[vv][u];
-					MiscTools.drawLine(transformedImage, (int) Math.round(x), (int) Math.round(y), (int) Math.round(xv),
-					    (int) Math.round(yv), 0);
-				}
-			}
-
-		// Set it to the image stack
-		IcyBufferedImage img = new IcyBufferedImage(auxTargetCurrentWidth, auxTargetCurrentHeight, is.getSizeC(),
-		    DataType.DOUBLE);
-		double[][] imgData = img.getDataXYCAsDouble();
-		img.beginUpdate();
-		for (int v = 0; v < auxTargetCurrentHeight; v++) {
-			for (int u = 0; u < auxTargetCurrentWidth; u++) {
-				for (int c = 0; c < is.getSizeC(); c++) {
-					imgData[c][u + v * auxTargetCurrentWidth] = transformedImage[v][u];
-				}
-			}
-		}
-		img.dataChanged();
-		img.endUpdate();
-
-		is.beginUpdate();
-		is.setImage(0, is.getSizeZ(), img);
-		is.endUpdate();
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Compute and draw the final deformation vectors.
-	 *
-	 * @param intervals
-	 *          number of intervals in the deformation
-	 * @param cx
-	 *          x-deformation coefficients
-	 * @param cy
-	 *          y-deformation coefficients
-	 * @param is
-	 *          image stack where we want to show the deformation vectors
-	 * @param bIsReverse
-	 *          flag to determine the transformation direction
-	 *          (target-source=FALSE or source-target=TRUE)
-	 */
-	private void computeDeformationVectors(int intervals, double[][] cx, double[][] cy, Sequence is, boolean bIsReverse) {
-		// Auxiliar variables for changing from source to target and inversely
-		ROI2DPolygon auxTargetMsk = this.targetMask;
-		ROI2DPolygon auxSourceMsk = this.sourceMask;
-		int auxTargetCurrentHeight = this.targetCurrentHeight;
-		int auxTargetCurrentWidth = this.targetCurrentWidth;
-
-		// Change if necessary
-		if (bIsReverse) {
-			auxTargetMsk = this.sourceMask;
-			auxSourceMsk = this.targetMask;
-			auxTargetCurrentHeight = this.sourceCurrentHeight;
-			auxTargetCurrentWidth = this.sourceCurrentWidth;
-		}
-
-		// Initialize output image
-		int stepv = Math.min(Math.max(10, auxTargetCurrentHeight / 15), 30);
-		int stepu = Math.min(Math.max(10, auxTargetCurrentWidth / 15), 30);
-
-		final double transformedImage[][] = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
-
-		for (int v = 0; v < auxTargetCurrentHeight; v++)
-			for (int u = 0; u < auxTargetCurrentWidth; u++)
-				transformedImage[v][u] = 255;
-
-		// Ask for memory for the transformation
-		double[][] transformation_x = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
-		double[][] transformation_y = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
-
-		// Compute the deformation
-		computeDeformation(intervals, cx, cy, transformation_x, transformation_y, bIsReverse);
-
-		// Show shift field ........................................
-		// Show deformation vectors
-		for (int v = 0; v < auxTargetCurrentHeight; v += stepv)
-			for (int u = 0; u < auxTargetCurrentWidth; u += stepu)
-				if (auxTargetMsk.contains(u, v)) {
-					final double x = transformation_x[v][u];
-					final double y = transformation_y[v][u];
-					if (auxSourceMsk.contains(x, y))
-						MiscTools.drawArrow(transformedImage, u, v, (int) Math.round(x), (int) Math.round(y), 0, 2);
-				}
-
-		IcyBufferedImage img = new IcyBufferedImage(auxTargetCurrentWidth, auxTargetCurrentHeight, is.getSizeC(),
-		    DataType.DOUBLE);
-		double[][] imgData = img.getDataXYCAsDouble();
-		img.beginUpdate();
-		for (int v = 0; v < auxTargetCurrentHeight; v++) {
-			for (int u = 0; u < auxTargetCurrentWidth; u++) {
-				for (int c = 0; c < is.getSizeC(); c++) {
-					imgData[c][u + v * auxTargetCurrentWidth] = transformedImage[v][u];
-				}
-			}
-		}
-		img.dataChanged();
-		img.endUpdate();
-
-		is.beginUpdate();
-		is.setImage(0, is.getSizeZ(), img);
-		is.endUpdate();
-	}
-
-	/*-------------------------------------------------------------------*/
-	/**
-	 * Show the direct transformation results(multi-thread version).
-	 */
-	public void showDirectResults() {
-		showTransformationMultiThread(intervals, cxTargetToSource, cyTargetToSource, false);
-	}
-
-	/*-------------------------------------------------------------------*/
-	/**
-	 * Show the inverse transformation results (multi-thread version).
-	 */
-	public void showInverseResults() {
-		showTransformationMultiThread(intervals, cxSourceToTarget, cySourceToTarget, true);
-	}
-
-	/*-------------------------------------------------------------------*/
-	/**
-	 * Show the transformation (multi-thread version).
-	 *
-	 * @param intervals
-	 *          number of intervals in the deformation
-	 * @param cx
-	 *          x- deformation coefficients
-	 * @param cy
-	 *          y- deformation coefficients
-	 * @param bIsReverse
-	 *          flag to determine the transformation direction
-	 *          (target-source=FALSE or source-target=TRUE)
-	 */
-	private void showTransformationMultiThread(final int intervals, final double[][] cx, // Input,
-	                                                                                     // spline
-	                                                                                     // coefficients
-	    final double[][] cy, boolean bIsReverse) {
-
-		Sequence output_ip = (!bIsReverse) ? this.outputSeq1 : this.outputSeq2;
-
-		// Calculate tranformation results
-		System.out.println("Calculating result window...");
-		Sequence result_imp = applyTransformationMultiThread(intervals, cx, cy, bIsReverse);
-
-		output_ip.beginUpdate();
-		for (int z = 0; z < result_imp.getSizeZ(); z++) {
-			output_ip.setImage(0, z, result_imp.getFirstImage());
-		}
-		output_ip.endUpdate();
-
-	} /* end showTransformationMultiThread */
-
-	/*-------------------------------------------------------------------*/
-	/**
-	 * Get direct results window
-	 * 
-	 * @return direct registration results
-	 */
-	public Sequence getDirectResults() {
-		return applyTransformationMultiThread(intervals, cxTargetToSource, cyTargetToSource, false);
-	}
-
-	/*-------------------------------------------------------------------*/
-	/**
-	 * Get inverse results window
-	 * 
-	 * @return inverse registration results
-	 */
-	public Sequence getInverseResults() {
-		if (this.cySourceToTarget != null && this.cxSourceToTarget != null)
-			return applyTransformationMultiThread(intervals, cxSourceToTarget, cySourceToTarget, true);
-		return null;
-	}
-
-	/*-------------------------------------------------------------------*/
-	/**
-	 * Apply the final transformation (multi-thread version).
-	 *
-	 * @param intervals
-	 *          number of intervals in the deformation
-	 * @param cx
-	 *          x- deformation coefficients
-	 * @param cy
-	 *          y- deformation coefficients
-	 * @param bIsReverse
-	 *          flag to determine the transformation direction
-	 *          (target-source=FALSE or source-target=TRUE)
-	 * 
-	 * @return output images (depending on the output level)
-	 */
-	private Sequence applyTransformationMultiThread(final int intervals, final double[][] cx, final double[][] cy,
-	    boolean bIsReverse) {
-		BSplineModel auxTarget = tgtModel;
-		BSplineModel auxSource = srcModel;
-		ROI2DPolygon auxTargetMsk = targetMask;
-		ROI2DPolygon auxSourceMsk = sourceMask;
-		int auxTargetWidth = this.originalTargetSeq.getWidth();
-		int auxTargetHeight = this.originalTargetSeq.getHeight();
-		Sequence originalIP = this.originalSourceSeq;
-
-		// Change if necessary
-		if (bIsReverse) {
-			auxTarget = srcModel;
-			auxSource = tgtModel;
-			auxTargetMsk = sourceMask;
-			auxSourceMsk = targetMask;
-			auxTargetWidth = this.originalSourceSeq.getWidth();
-			auxTargetHeight = this.originalSourceSeq.getHeight();
-			originalIP = this.originalTargetSeq;
-		}
-
-		Sequence output_ip = null;
-		final Sequence is = new Sequence();
-		final String s = bIsReverse ? new String("Target") : new String("Source");
-
-		// Create transformation B-spline models
-		BSplineModel swx = new BSplineModel(cx);
-		BSplineModel swy = new BSplineModel(cy);
-
-		// We compute the deformation (transformation_x and transformation_y) on the
-		// fly
-
-		/* GRAY SCALE IMAGES */
-//		if (!(originalIP instanceof ColorProcessor)) {
-//			final FloatProcessor fp = new FloatProcessor(auxTargetWidth, auxTargetHeight);
-//			final FloatProcessor fp_mask = new FloatProcessor(auxTargetWidth, auxTargetHeight);
-//			final FloatProcessor fp_target = new FloatProcessor(auxTargetWidth, auxTargetHeight,
-//			    auxTarget.getOriginalImage());
-//
-//			// take original processor if necessary
-//			if (auxSource.getOriginalImageWidth() > auxSource.getWidth()) {
-//				auxSource = new BSplineModel(originalIP, false, 1);
-//				auxSource.setPyramidDepth(0);
-//				auxSource.startPyramids();
-//
-//				// Join thread
-//				try {
-//					auxSource.getThread().join();
-//				} catch (InterruptedException e) {
-//					IJ.error("Unexpected interruption exception " + e);
-//				}
-//			}
-//
-//			// Check the number of processors in the computer
-//			int nproc = Runtime.getRuntime().availableProcessors();
-//
-//			// We will use threads to display parts of the output image
-//			int block_height = auxTargetHeight / nproc;
-//			if (auxTargetHeight % 2 != 0)
-//				block_height++;
-//
-//			int nThreads = nproc; /*
-//			                       * (nproc > 1) ? (nproc / 2) : 1; if
-//			                       * (this.accurate_mode == MainDialog.MONO_MODE)
-//			                       * nThreads *= 2;
-//			                       */
-//
-//			Thread[] threads = new Thread[nThreads];
-//			Rectangle[] rects = new Rectangle[nThreads];
-//			FloatProcessor[] fp_tile = new FloatProcessor[nThreads];
-//			FloatProcessor[] fp_mask_tile = new FloatProcessor[nThreads];
-//
-//			for (int i = 0; i < nThreads; i++) {
-//				// last block size is the rest of the window
-//				int y_start = i * block_height;
-//
-//				if (nThreads - 1 == i)
-//					block_height = auxTargetHeight - i * block_height;
-//
-//				rects[i] = new Rectangle(0, y_start, auxTargetWidth, block_height);
-//
-//				// System.out.println("block = 0 " + (i*block_height) + " " +
-//				// auxTargetWidth + " " +
-//				// block_height );
-//
-//				fp_tile[i] = new FloatProcessor(rects[i].width, rects[i].height);
-//				fp_mask_tile[i] = new FloatProcessor(rects[i].width, rects[i].height);
-//
-//				threads[i] = new Thread(new GrayscaleResultTileMaker(swx, swy, auxSource, auxTargetWidth, auxTargetHeight,
-//				    auxTargetMsk, auxSourceMsk, rects[i], fp_tile[i], fp_mask_tile[i]));
-//				threads[i].start();
-//			}
-//
-//			for (int i = 0; i < nThreads; i++) {
-//				try {
-//					threads[i].join();
-//					threads[i] = null;
-//				} catch (InterruptedException e) {
-//					e.printStackTrace();
-//				}
-//			}
-//
-//			for (int i = 0; i < nThreads; i++) {
-//				fp.insert(fp_tile[i], rects[i].x, rects[i].y);
-//				fp_tile[i] = null;
-//				fp_mask.insert(fp_mask_tile[i], rects[i].x, rects[i].y);
-//				fp_mask_tile[i] = null;
-//				rects[i] = null;
-//			}
-//
-//			fp.resetMinAndMax();
-//
-//			// Add slices to result stack
-//			is.addSlice("Registered " + s + " Image", fp);
-//			// if (outputLevel > -1)
-//			is.addSlice("Target Image", fp_target);
-//			// if (outputLevel > -1)
-//			is.addSlice("Warped Source Mask", fp_mask);
-//		} else /* COLOR IMAGES */
-		{
-			BSplineModel[] sources = new BSplineModel[originalIP.getSizeC()];
-			for (int i = 0; i < sources.length; i++) {
-				sources[i] = new BSplineModel(SequenceUtil.extractChannel(originalIP, i), false, 1);
-				sources[i].setPyramidDepth(0);
-				sources[i].startPyramids();
-			}
-			
-			for (int i = 0; i < sources.length; i++) {
-				try {
-					sources[i].join();
-				} catch (InterruptedException e) {
-					System.err.println("Unexpected interruption exception " + e);
-				}
-			}
-			//--> aqui
-			// Calculate warped image
-			IcyBufferedImage cp = new IcyBufferedImage(auxTargetWidth, auxTargetHeight, originalIP.getSizeC(), originalIP.getDataType_());
-			
-			FloatProcessor fpR = new FloatProcessor(auxTargetWidth, auxTargetHeight);
-			FloatProcessor fpG = new FloatProcessor(auxTargetWidth, auxTargetHeight);
-			FloatProcessor fpB = new FloatProcessor(auxTargetWidth, auxTargetHeight);
-			ColorProcessor cp_mask = new ColorProcessor(auxTargetWidth, auxTargetHeight);
-
-			// Check the number of processors in the computer
-			int nproc = Runtime.getRuntime().availableProcessors();
-
-			// We will use threads to display parts of the output image
-			int block_height = auxTargetHeight / nproc;
-			if (auxTargetHeight % 2 != 0)
-				block_height++;
-
-			int nThreads = nproc; /*
-			                       * (nproc > 1) ? (nproc / 2) : 1; if
-			                       * (this.accurate_mode == MainDialog.MONO_MODE)
-			                       * nThreads *= 2;
-			                       */
-
-			Thread[] threads = new Thread[nThreads];
-			Rectangle[] rects = new Rectangle[nThreads];
-			FloatProcessor[] fpR_tile = new FloatProcessor[nThreads];
-			FloatProcessor[] fpG_tile = new FloatProcessor[nThreads];
-			FloatProcessor[] fpB_tile = new FloatProcessor[nThreads];
-			ColorProcessor[] cp_mask_tile = new ColorProcessor[nThreads];
-
-			for (int i = 0; i < nThreads; i++) {
-				// last block size is the rest of the window
-				int y_start = i * block_height;
-
-				if (nThreads - 1 == i)
-					block_height = auxTargetHeight - i * block_height;
-
-				rects[i] = new Rectangle(0, y_start, auxTargetWidth, block_height);
-
-				// System.out.println("block = 0 " + (i*block_height) + " " +
-				// auxTargetWidth + " " +
-				// block_height );
-
-				fpR_tile[i] = new FloatProcessor(rects[i].width, rects[i].height);
-				fpG_tile[i] = new FloatProcessor(rects[i].width, rects[i].height);
-				fpB_tile[i] = new FloatProcessor(rects[i].width, rects[i].height);
-				cp_mask_tile[i] = new ColorProcessor(rects[i].width, rects[i].height);
-
-				threads[i] = new Thread(
-				    new ColorResultTileMaker(swx, swy, sourceR, sourceG, sourceB, auxTargetWidth, auxTargetHeight, auxTargetMsk,
-				        auxSourceMsk, rects[i], fpR_tile[i], fpG_tile[i], fpB_tile[i], cp_mask_tile[i]));
-				threads[i].start();
-			}
-
-			for (int i = 0; i < nThreads; i++) {
-				try {
-					threads[i].join();
-					threads[i] = null;
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-			}
-
-			for (int i = 0; i < nThreads; i++) {
-				fpR.insert(fpR_tile[i], rects[i].x, rects[i].y);
-				fpG.insert(fpG_tile[i], rects[i].x, rects[i].y);
-				fpB.insert(fpB_tile[i], rects[i].x, rects[i].y);
-
-				fpR_tile[i] = null;
-				fpG_tile[i] = null;
-				fpB_tile[i] = null;
-
-				cp_mask.insert(cp_mask_tile[i], rects[i].x, rects[i].y);
-				cp_mask_tile[i] = null;
-				rects[i] = null;
-			}
-
-			cp.setPixels(0, fpR);
-			cp.setPixels(1, fpG);
-			cp.setPixels(2, fpB);
-			cp.resetMinAndMax();
-
-			// Add slices to result stack
-			is.addSlice("Registered " + s + " Image", cp);
-			// if (outputLevel > -1)
-			is.addSlice("Target Image", bIsReverse ? this.originalSourceSeq : this.originalTargetSeq);
-			// if (outputLevel > -1)
-			is.addSlice("Warped Source Mask", cp_mask);
-
-		} // end caculate warped color image
-
-		if (outputLevel == 2) {
-			computeDeformationVectors(intervals, cx, cy, is, bIsReverse);
-			computeDeformationGrid(intervals, cx, cy, is, bIsReverse);
-		}
-
-		output_ip = new ImagePlus("Registered " + s + " Image", is);
-
-		output_ip.setSlice(1);
-		output_ip.getProcessor().resetMinAndMax();
-
-		return output_ip;
-	} /* end applyTransformationMultiThread */
-
-	/* ------------------------------------------------------------------------ */
-	/**
-	 * Class to run concurrent tile windows for final results (grayscale)
-	 * 
-	 */
-	private class GrayscaleResultTileMaker implements Runnable {
-		final BSplineModel swx;
-		final BSplineModel swy;
-		final BSplineModel auxSource;
-		final int auxTargetCurrentWidth;
-		final int auxTargetCurrentHeight;
-		final Mask auxTargetMsk;
-		final Mask auxSourceMsk;
-		final Rectangle rect;
-		final private FloatProcessor fp;
-		final private FloatProcessor fp_mask;
-
-		// ------------------------------------------------------------------
-		/**
-		 * Grayscale result tile maker constructor
-		 * 
-		 * @param swx
-		 *          B-spline interpolator for transformation in x-
-		 * @param swy
-		 *          B-spline interpolator for transformation in y-
-		 * @param auxSource
-		 *          source image
-		 * @param auxTargetCurrentWidth
-		 *          current target width
-		 * @param auxTargetCurrentHeight
-		 *          current target height
-		 * @param auxTargetMsk
-		 *          target mask
-		 * @param auxSourceMsk
-		 *          source mask
-		 * @param rect
-		 *          retangle with the coordinates of the output image to be updated
-		 * @param fp
-		 *          image processor to be updated
-		 * @param fp_mask
-		 *          mask processor to be updated
-		 */
-		GrayscaleResultTileMaker(BSplineModel swx, BSplineModel swy, BSplineModel auxSource, int auxTargetCurrentWidth,
-		    int auxTargetCurrentHeight, Mask auxTargetMsk, Mask auxSourceMsk, Rectangle rect, FloatProcessor fp,
-		    FloatProcessor fp_mask) {
-			this.swx = swx;
-			this.swy = swy;
-			this.auxSource = auxSource;
-			this.auxTargetCurrentWidth = auxTargetCurrentWidth;
-			this.auxTargetCurrentHeight = auxTargetCurrentHeight;
-			this.auxTargetMsk = auxTargetMsk;
-			this.auxSourceMsk = auxSourceMsk;
-			this.rect = rect;
-			this.fp = fp;
-			this.fp_mask = fp_mask;
-		}
-
-		// ------------------------------------------------------------------
-		/**
-		 * Run method to update the intermediate window. Only the part defined by
-		 * the rectangle will be updated (in this thread).
-		 */
-		public void run() {
-			// Compute the warped image
-			int auxTargetHeight = rect.y + rect.height;
-			int auxTargetWidth = rect.x + rect.width;
-
-			float[] fp_array = (float[]) fp.getPixels();
-			float[] fp_mask_array = (float[]) fp_mask.getPixels();
-
-			for (int v_rect = 0, v = rect.y; v < auxTargetHeight; v++, v_rect++) {
-				final int v_offset = v_rect * rect.width;
-				final double tv = (double) (v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
-
-				for (int u_rect = 0, u = rect.x; u < auxTargetWidth; u++, u_rect++) {
-
-					final double tu = (double) (u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
-					final double transformation_x_v_u = swx.prepareForInterpolationAndInterpolateI(tu, tv, false, ORIGINAL);
-					final double transformation_y_v_u = swy.prepareForInterpolationAndInterpolateI(tu, tv, false, ORIGINAL);
-
-					if (!auxTargetMsk.getValue(u, v)) {
-						// fp.putPixelValue(u,v,0);
-						fp_array[u_rect + v_offset] = 0;
-						// fp_mask.putPixelValue(u,v,0);
-						fp_mask_array[u_rect + v_offset] = 0;
-					} else {
-						final double x = transformation_x_v_u;
-						final double y = transformation_y_v_u;
-						if (auxSourceMsk.getValue(x, y)) {
-							fp_array[u_rect + v_offset] = (float) auxSource.prepareForInterpolationAndInterpolateI(x, y, false,
-							    ORIGINAL);
-							fp_mask_array[u_rect + v_offset] = 255;
-						} else {
-							// fp.putPixelValue(u,v,0);
-							fp_array[u_rect + v_offset] = 0;
-							// fp_mask.putPixelValue(u,v,0);
-							fp_mask_array[u_rect + v_offset] = 0;
-						}
-					}
-				}
-			}
-		} /* end run method */
-
-	} /* end GrayscaleResultTileMaker class */
-
-	/* ------------------------------------------------------------------------ */
-	/**
-	 * Class to run concurrent tile windows for final results (color)
-	 * 
-	 */
-	private class ColorResultTileMaker implements Runnable {
-		final BSplineModel swx;
-		final BSplineModel swy;
-		final BSplineModel sourceR;
-		final BSplineModel sourceG;
-		final BSplineModel sourceB;
-		final int auxTargetCurrentWidth;
-		final int auxTargetCurrentHeight;
-		final Mask auxTargetMsk;
-		final Mask auxSourceMsk;
-		final Rectangle rect;
-		final private FloatProcessor fpR;
-		final private FloatProcessor fpG;
-		final private FloatProcessor fpB;
-		final private ColorProcessor cp_mask;
-
-		// ------------------------------------------------------------------
-		/**
-		 * Color result tile maker constructor
-		 * 
-		 * @param swx
-		 *          B-spline interpolator for transformation in x-
-		 * @param swy
-		 *          B-spline interpolator for transformation in y-
-		 * @param sourceR
-		 *          red source image
-		 * @param sourceG
-		 *          green source image
-		 * @param sourceB
-		 *          blue source image
-		 * @param auxTargetCurrentWidth
-		 *          current target height
-		 * @param auxTargetCurrentHeight
-		 *          current target height
-		 * @param auxTargetMsk
-		 *          target mask
-		 * @param auxSourceMsk
-		 *          source mask
-		 * @param rect
-		 *          retangle with the coordinates of the output image to be updated
-		 * @param fpR
-		 *          red channel processor to be updated
-		 * @param fpG
-		 *          green channel processor to be updated
-		 * @param fpB
-		 *          blue channel processor to be updated
-		 * @param cp_mask
-		 *          mask color processor to be updated
-		 */
-		ColorResultTileMaker(BSplineModel swx, BSplineModel swy, BSplineModel sourceR, BSplineModel sourceG,
-		    BSplineModel sourceB, int auxTargetCurrentWidth, int auxTargetCurrentHeight, Mask auxTargetMsk,
-		    Mask auxSourceMsk, Rectangle rect, FloatProcessor fpR, FloatProcessor fpG, FloatProcessor fpB,
-		    ColorProcessor cp_mask) {
-			this.swx = swx;
-			this.swy = swy;
-			this.sourceR = sourceR;
-			this.sourceG = sourceG;
-			this.sourceB = sourceB;
-			this.auxTargetCurrentWidth = auxTargetCurrentWidth;
-			this.auxTargetCurrentHeight = auxTargetCurrentHeight;
-			this.auxTargetMsk = auxTargetMsk;
-			this.auxSourceMsk = auxSourceMsk;
-			this.rect = rect;
-			this.fpR = fpR;
-			this.fpG = fpG;
-			this.fpB = fpB;
-			this.cp_mask = cp_mask;
-		}
-
-		// ------------------------------------------------------------------
-		/**
-		 * Run method to update the intermediate window. Only the part defined by
-		 * the rectangle will be updated (in this thread).
-		 */
-		public void run() {
-			// Compute the warped image
-			int auxTargetHeight = rect.y + rect.height;
-			int auxTargetWidth = rect.x + rect.width;
-
-			float[] fpR_array = (float[]) fpR.getPixels();
-			float[] fpG_array = (float[]) fpG.getPixels();
-			float[] fpB_array = (float[]) fpB.getPixels();
-
-			for (int v_rect = 0, v = rect.y; v < auxTargetHeight; v++, v_rect++) {
-				final int v_offset = v_rect * rect.width;
-				final double tv = (double) (v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
-
-				for (int u_rect = 0, u = rect.x; u < auxTargetWidth; u++, u_rect++) {
-
-					final double tu = (double) (u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
-					final double transformation_x_v_u = swx.prepareForInterpolationAndInterpolateI(tu, tv, false, ORIGINAL);
-					final double transformation_y_v_u = swy.prepareForInterpolationAndInterpolateI(tu, tv, false, ORIGINAL);
-
-					if (!auxTargetMsk.getValue(u, v)) {
-						// fpR.putPixelValue(u, v, 0);
-						fpR_array[u_rect + v_offset] = 0;
-						// fpG.putPixelValue(u, v, 0);
-						fpG_array[u_rect + v_offset] = 0;
-						// fpB.putPixelValue(u, v, 0);
-						fpB_array[u_rect + v_offset] = 0;
-
-						cp_mask.putPixelValue(u_rect, v_rect, 0);
-
-					} else {
-
-						final double x = transformation_x_v_u;
-						final double y = transformation_y_v_u;
-						if (auxSourceMsk.getValue(x, y)) {
-							// sourceR.prepareForInterpolation(x, y, ORIGINAL);
-							// fpR.putPixelValue(u, v, sourceR.interpolateI());
-							fpR_array[u_rect
-							    + v_offset] = (float) (sourceR.prepareForInterpolationAndInterpolateI(x, y, false, ORIGINAL));
-
-							// sourceG.prepareForInterpolation(x, y, ORIGINAL);
-							// fpG.putPixelValue(u, v, sourceG.interpolateI());
-							fpG_array[u_rect
-							    + v_offset] = (float) (sourceG.prepareForInterpolationAndInterpolateI(x, y, false, ORIGINAL));
-
-							// sourceB.prepareForInterpolation(x, y, ORIGINAL);
-							// fpB.putPixelValue(u, v, sourceB.interpolateI());
-							fpB_array[u_rect
-							    + v_offset] = (float) (sourceB.prepareForInterpolationAndInterpolateI(x, y, false, ORIGINAL));
-
-							cp_mask.putPixelValue(u_rect, v_rect, 255);
-						} else {
-							// fpR.putPixelValue(u, v, 0);
-							fpR_array[u_rect + v_offset] = 0;
-							// fpG.putPixelValue(u, v, 0);
-							fpG_array[u_rect + v_offset] = 0;
-							// fpB.putPixelValue(u, v, 0);
-							fpB_array[u_rect + v_offset] = 0;
-
-							cp_mask.putPixelValue(u_rect, v_rect, 0);
-						}
-					}
-				}
-			}
-			/*
-			 * (new ImagePlus("Red", fpR)).show(); (new ImagePlus("Green",
-			 * fpG)).show(); (new ImagePlus("Blue", fpB)).show();
-			 */
-
-		} /* end run method */
-
-	} /* end ColorResultTileMaker class */
-
-	/*-------------------------------------------------------------------*/
-	/**
-	 * Show the transformation (calculating entire transformation tables).
-	 *
-	 * @deprecated
-	 * 
-	 * @param intervals
-	 *          number of intervals in the deformation
-	 * @param cx
-	 *          x- deformation coefficients
-	 * @param cy
-	 *          y- deformation coefficients
-	 * @param bIsReverse
-	 *          flag to determine the transformation direction
-	 *          (target-source=FALSE or source-target=TRUE)
-	 */
-	private void showTransformation(final int intervals, final double[][] cx, // Input,
-	                                                                          // spline
-	                                                                          // coefficients
-	    final double[][] cy, boolean bIsReverse) {
-		boolean show_deformation = false;
-
-		BSplineModel auxTarget = tgtModel;
-		BSplineModel auxSource = srcModel;
-		Mask auxTargetMsk = targetMask;
-		Mask auxSourceMsk = sourceMask;
-		int auxTargetWidth = this.targetWidth;
-		int auxTargetHeight = this.targetHeight;
-		ImagePlus output_ip = this.outputSeq1;
-		ImageProcessor originalIP = this.originalSourceSeq;
-
-		// Change if necessary
-		if (bIsReverse) {
-			auxTarget = srcModel;
-			auxSource = tgtModel;
-			auxTargetMsk = sourceMask;
-			auxSourceMsk = targetMask;
-			auxTargetWidth = this.sourceWidth;
-			auxTargetHeight = this.sourceHeight;
-			output_ip = this.outputSeq2;
-			originalIP = this.originalTargetSeq;
-		}
-
-		if (auxSource.isSubOutput()) {
-			output_ip.close();
-			output_ip = new ImagePlus();
-		}
-
-		// Ask for memory for the transformation
-		double[][] transformation_x = new double[auxTargetHeight][auxTargetWidth];
-		double[][] transformation_y = new double[auxTargetHeight][auxTargetWidth];
-
-		// Compute the deformation
-		computeDeformation(intervals, cx, cy, transformation_x, transformation_y, bIsReverse);
-
-		if (show_deformation) {
-			MiscTools.showImage("Transf. X", transformation_x);
-			MiscTools.showImage("Transf. Y", transformation_y);
-		}
-
-		/* GRAY SCALE IMAGES */
-		if (!(originalIP instanceof ColorProcessor)) {
-			// Compute the warped image
-			final FloatProcessor fp = new FloatProcessor(auxTargetWidth, auxTargetHeight);
-			float[] fp_array = (float[]) fp.getPixels();
-			final FloatProcessor fp_mask = new FloatProcessor(auxTargetWidth, auxTargetHeight);
-			float[] fp_mask_array = (float[]) fp_mask.getPixels();
-			final FloatProcessor fp_target = new FloatProcessor(auxTargetWidth, auxTargetHeight);
-			float[] fp_target_array = (float[]) fp_target.getPixels();
-
-			int uv = 0;
-
-			for (int v = 0; v < auxTargetHeight; v++) {
-				int v_offset = v * auxTargetWidth;
-				for (int u = 0; u < auxTargetWidth; u++, uv++) {
-					// fp_target.putPixelValue(u, v, auxTarget.getImage()[uv]);
-					fp_target_array[u + v_offset] = (float) auxTarget.getImage()[uv];
-
-					if (!auxTargetMsk.getValue(u, v)) {
-						// fp.putPixelValue(u,v,0);
-						fp_array[u + v_offset] = 0;
-						// fp_mask.putPixelValue(u,v,0);
-						fp_mask_array[u + v_offset] = 0;
-					} else {
-						final double x = transformation_x[v][u];
-						final double y = transformation_y[v][u];
-						if (auxSourceMsk.getValue(x, y)) {
-							auxSource.prepareForInterpolation(x, y, ORIGINAL);
-							double sval = auxSource.interpolateI();
-							// fp.putPixelValue(u,v,sval);
-							fp_array[u + v_offset] = (float) sval;
-							// fp_mask.putPixelValue(u,v,255);
-							fp_mask_array[u + v_offset] = 255;
-						} else {
-							// fp.putPixelValue(u,v,0);
-							fp_array[u + v_offset] = 0;
-							// fp_mask.putPixelValue(u,v,0);
-							fp_mask_array[u + v_offset] = 0;
-						}
-					}
-				}
-			}
-			fp.resetMinAndMax();
-			final ImageStack is = new ImageStack(auxTargetWidth, auxTargetHeight);
-
-			String s = bIsReverse ? new String("Target") : new String("Source");
-			is.addSlice("Registered " + s + " Image", fp);
-			if (outputLevel > -1)
-				is.addSlice("Target Image", fp_target);
-			if (outputLevel > -1)
-				is.addSlice("Warped Source Mask", fp_mask);
-
-			if (outputLevel == 2) {
-				computeDeformationVectors(intervals, cx, cy, is, bIsReverse);
-				computeDeformationGrid(intervals, cx, cy, is, bIsReverse);
-			}
-			output_ip.setStack("Registered " + s + " Image", is);
-			output_ip.setSlice(1);
-			output_ip.getProcessor().resetMinAndMax();
-			if (outputLevel > -1)
-				output_ip.updateAndRepaintWindow();
-		} else /* COLOR IMAGES */
-		{
-			// Compute the warped image
-			// red
-			BSplineModel sourceR = new BSplineModel(((ColorProcessor) originalIP).toFloat(0, null), false, 1);
-			sourceR.setPyramidDepth(0);
-			sourceR.startPyramids();
-			// green
-			BSplineModel sourceG = new BSplineModel(((ColorProcessor) originalIP).toFloat(1, null), false, 1);
-			sourceG.setPyramidDepth(0);
-			sourceG.startPyramids();
-			// blue
-			BSplineModel sourceB = new BSplineModel(((ColorProcessor) originalIP).toFloat(2, null), false, 1);
-			sourceB.setPyramidDepth(0);
-			sourceB.startPyramids();
-
-			// Join threads
-			try {
-				sourceR.getThread().join();
-				sourceG.getThread().join();
-				sourceB.getThread().join();
-			} catch (InterruptedException e) {
-				IJ.error("Unexpected interruption exception " + e);
-			}
-
-			// Calculate warped RGB image
-			ColorProcessor cp = new ColorProcessor(auxTargetWidth, auxTargetHeight);
-			FloatProcessor fpR = new FloatProcessor(auxTargetWidth, auxTargetHeight);
-			float[] fpR_array = (float[]) fpR.getPixels();
-			FloatProcessor fpG = new FloatProcessor(auxTargetWidth, auxTargetHeight);
-			float[] fpG_array = (float[]) fpG.getPixels();
-			FloatProcessor fpB = new FloatProcessor(auxTargetWidth, auxTargetHeight);
-			float[] fpB_array = (float[]) fpB.getPixels();
-			ColorProcessor cp_mask = new ColorProcessor(auxTargetWidth, auxTargetHeight);
-
-			for (int v = 0; v < targetHeight; v++) {
-				int v_offset = v * auxTargetWidth;
-
-				for (int u = 0; u < targetWidth; u++) {
-					if (!auxTargetMsk.getValue(u, v)) {
-						// fpR.putPixelValue(u, v, 0);
-						fpR_array[u + v_offset] = 0;
-						// fpG.putPixelValue(u, v, 0);
-						fpG_array[u + v_offset] = 0;
-						// fpB.putPixelValue(u, v, 0);
-						fpB_array[u + v_offset] = 0;
-
-						cp_mask.putPixelValue(u, v, 0);
-					} else {
-						final double x = transformation_x[v][u];
-						final double y = transformation_y[v][u];
-
-						if (auxSourceMsk.getValue(x, y)) {
-							sourceR.prepareForInterpolation(x, y, ORIGINAL);
-							// fpR.putPixelValue(u, v, sourceR.interpolateI());
-							fpR_array[u + v_offset] = (float) sourceR.interpolateI();
-
-							sourceG.prepareForInterpolation(x, y, ORIGINAL);
-							// fpG.putPixelValue(u, v, sourceG.interpolateI());
-							fpG_array[u + v_offset] = (float) sourceG.interpolateI();
-
-							sourceB.prepareForInterpolation(x, y, ORIGINAL);
-							// fpB.putPixelValue(u, v, sourceB.interpolateI());
-							fpB_array[u + v_offset] = (float) sourceB.interpolateI();
-
-							cp_mask.putPixelValue(u, v, 255);
-						} else {
-							// fpR.putPixelValue(u, v, 0);
-							fpR_array[u + v_offset] = 0;
-							// fpG.putPixelValue(u, v, 0);
-							fpG_array[u + v_offset] = 0;
-							// fpB.putPixelValue(u, v, 0);
-							fpB_array[u + v_offset] = 0;
-
-							cp_mask.putPixelValue(u, v, 0);
-						}
-					}
-				}
-			}
-			cp.setPixels(0, fpR);
-			cp.setPixels(1, fpG);
-			cp.setPixels(2, fpB);
-			cp.resetMinAndMax();
-
-			final ImageStack is = new ImageStack(auxTargetWidth, auxTargetHeight);
-
-			String s = bIsReverse ? new String("Target") : new String("Source");
-			is.addSlice("Registered " + s + " Image", cp);
-			if (outputLevel > -1)
-				is.addSlice("Target Image", bIsReverse ? this.originalSourceSeq : this.originalTargetSeq);
-			if (outputLevel > -1)
-				is.addSlice("Warped Source Mask", cp_mask);
-
-			if (outputLevel == 2) {
-				computeDeformationVectors(intervals, cx, cy, is, bIsReverse);
-				computeDeformationGrid(intervals, cx, cy, is, bIsReverse);
-			}
-			output_ip.setStack("Registered " + s + " Image", is);
-			output_ip.setSlice(1);
-			output_ip.getProcessor().resetMinAndMax();
-			if (outputLevel > -1)
-				output_ip.updateAndRepaintWindow();
-		} // end caculate warped color image
-
-		if (auxSource.isSubOutput())
-			output_ip.show();
-
-	} // end showTransformation
-
-	// ------------------------------------------------------------------
-	/**
-	 * Method to update both current outputs (source-target and target-source).
-	 *
-	 * @param c
-	 *          B-spline coefficients
-	 * @param intervals
-	 *          number of intervals in the deformation
-	 */
-	private void update_outputs(final double[] c, int intervals) {
-		final int M = c.length / 2;
-		final int halfM = M / 2;
-		double[] x1 = new double[M];
-
-		for (int i = 0, p = 0; i < halfM; i++, p++) {
-			x1[p] = c[i];
-			x1[p + halfM] = c[i + M];
-		}
-
-		double[] x2 = new double[M];
-		for (int i = halfM, p = 0; i < M; i++, p++) {
-			x2[p] = c[i];
-			x2[p + halfM] = c[i + M];
-		}
-		// Updates.
-		update_current_output(x1, intervals, false);
-		update_current_output(x2, intervals, true);
-	}
-
-	// ------------------------------------------------------------------
-	/**
-	 * Method to update a current output (multi-thread).
-	 *
-	 * @param c
-	 *          B-spline coefficients
-	 * @param intervals
-	 *          number of intervals in the deformation
-	 * @param bIsReverse
-	 *          flag to decide the deformation direction (source-target,
-	 *          target-source)
-	 */
-	private void update_current_output(final double[] c, int intervals, boolean bIsReverse) {
-		// Set the coefficients to an interpolator
-		int cYdim = intervals + 3;
-		int cXdim = cYdim;
-		int Nk = cYdim * cXdim;
-
-		BSplineModel auxTarget = tgtModel;
-		BSplineModel auxSource = srcModel;
-		Mask auxTargetMsk = targetMask;
-		Mask auxSourceMsk = sourceMask;
-		BSplineModel swx = swxTargetToSource;
-		BSplineModel swy = swyTargetToSource;
-		int auxTargetWidth = this.targetWidth;
-		int auxTargetHeight = this.targetHeight;
-		int auxTargetCurrentWidth = this.targetCurrentWidth;
-		int auxTargetCurrentHeight = this.targetCurrentHeight;
-		int auxSourceWidth = this.sourceWidth;
-		int auxSourceHeight = this.sourceHeight;
-		ImagePlus auxSourceImp = this.sourceSeq;
-		ImagePlus output_ip = this.outputSeq1;
-		double auxFactorWidth = this.targetFactorWidth;
-		double auxFactorHeight = this.targetFactorHeight;
-		double subFactorWidth = tgtModel.isSubOutput() ? (tgtModel.getWidth() / tgtModel.getSubWidth()) : 1;
-		double subFactorHeight = tgtModel.isSubOutput() ? (tgtModel.getHeight() / tgtModel.getSubHeight()) : 1;
-
-		// Change if necessary
-		if (bIsReverse) {
-			auxTarget = srcModel;
-			auxSource = tgtModel;
-			auxTargetMsk = sourceMask;
-			auxSourceMsk = targetMask;
-			swx = swxSourceToTarget;
-			swy = swySourceToTarget;
-			auxTargetWidth = this.sourceWidth;
-			auxTargetHeight = this.sourceHeight;
-			auxTargetCurrentWidth = sourceCurrentWidth;
-			auxTargetCurrentHeight = sourceCurrentHeight;
-			auxSourceWidth = this.targetWidth;
-			auxSourceHeight = this.targetHeight;
-			auxSourceImp = this.targetSeq;
-			output_ip = this.outputSeq2;
-			auxFactorWidth = this.sourceFactorWidth;
-			auxFactorHeight = this.sourceFactorHeight;
-			subFactorWidth = srcModel.isSubOutput() ? (srcModel.getWidth() / srcModel.getSubWidth()) : 1;
-			subFactorHeight = srcModel.isSubOutput() ? (srcModel.getHeight() / srcModel.getSubHeight()) : 1;
-		}
-
-		swx.setCoefficients(c, cYdim, cXdim, 0);
-		swy.setCoefficients(c, cYdim, cXdim, Nk);
-
-		// Compute the deformed image
-		FloatProcessor fp = (FloatProcessor) output_ip.getProcessor();
-
-		int uv = 0;
-
-		// Check the number of processors in the computer
-		int nproc = Runtime.getRuntime().availableProcessors();
-
-		// We will use threads to display parts of the output image
-		int block_height = auxTargetHeight / ((int) subFactorHeight * nproc);
-		if (auxTargetHeight % 2 != 0)
-			block_height++;
-
-		int nThreads = nproc; /*
-		                       * (nproc > 1) ? (nproc / 2) : 1; if
-		                       * (this.accurate_mode == MainDialog.MONO_MODE)
-		                       * nThreads *= 2;
-		                       */
-
-		Thread[] threads = new Thread[nThreads];
-		Rectangle[] rects = new Rectangle[nThreads];
-		FloatProcessor[] fp_tile = new FloatProcessor[nThreads];
-		for (int i = 0; i < nThreads; i++) {
-			// Last block goes to the end of the window
-			int x_start = i * block_height;
-			if (nThreads - 1 == i)
-				block_height = auxTargetHeight / (int) subFactorWidth - i * block_height;
-			/*
-			 * System.out.println("block height " + block_height); System.out.println(
-			 * "Update : 0 " + " "+ x_start +" " + (auxTargetWidth /
-			 * (int)subFactorWidth) + " " + block_height); System.out.println(
-			 * "auxFactorWidth = " + auxFactorWidth + " auxFactorHeight = " +
-			 * auxFactorHeight);
-			 */
-			rects[i] = new Rectangle(0, x_start, auxTargetWidth / (int) subFactorWidth, block_height);
-
-			fp_tile[i] = new FloatProcessor(rects[i].width, rects[i].height);
-
-			threads[i] = new Thread(new OutputTileMaker(swx, swy, auxSource, auxTarget, auxSourceMsk, auxTargetMsk,
-			    auxFactorWidth * subFactorWidth, auxFactorHeight * subFactorHeight, auxTargetCurrentHeight,
-			    auxTargetCurrentWidth, rects[i], fp_tile[i]));
-			threads[i].start();
-		}
-		for (int i = 0; i < nThreads; i++) {
-			try {
-				threads[i].join();
-				threads[i] = null;
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
-
-		for (int i = 0; i < nThreads; i++) {
-			fp.insert(fp_tile[i], rects[i].x, rects[i].y);
-			fp_tile[i] = null;
-			rects[i] = null;
-		}
-
-		double min_val = output_ip.getProcessor().getMin();
-		double max_val = output_ip.getProcessor().getMax();
-		fp.setMinAndMax(min_val, max_val);
-
-		output_ip.updateAndDraw();
-
-		// Draw the grid on the target image ...............................
-
-		// We take the values from the original image
-		auxTargetHeight = bIsReverse ? this.originalSourceSeq.getHeight() : this.originalTargetSeq.getHeight();
-		auxTargetWidth = bIsReverse ? this.originalSourceSeq.getWidth() : this.originalTargetSeq.getWidth();
-		auxSourceHeight = bIsReverse ? this.originalTargetSeq.getHeight() : this.originalSourceSeq.getHeight();
-		auxSourceWidth = bIsReverse ? this.originalTargetSeq.getWidth() : this.originalSourceSeq.getWidth();
-
-		auxFactorWidth = (double) auxTargetCurrentWidth / auxTargetWidth;
-		auxFactorHeight = (double) auxTargetCurrentHeight / auxTargetHeight;
-
-		// Some initialization
-		int stepv = Math.min(Math.max(10, auxTargetHeight / 15), 60);
-		int stepu = Math.min(Math.max(10, auxTargetWidth / 15), 60);
-		final double transformedImage[][] = new double[auxSourceHeight][auxSourceWidth];
-		double grid_colour = -1e-10;
-		uv = 0;
-		for (int v = 0; v < auxSourceHeight; v++)
-			for (int u = 0; u < auxSourceWidth; u++, uv++) {
-				transformedImage[v][u] = auxSource.getOriginalImage()[uv];
-				if (transformedImage[v][u] > grid_colour)
-					grid_colour = transformedImage[v][u];
-			}
-
-		// Draw grid
-		for (int v = 0; v < auxTargetHeight + stepv; v += stepv)
-			for (int u = 0; u < auxTargetWidth + stepu; u += stepu) {
-				// down_u/v are the coordinates in the current image
-				double down_u = u * auxFactorWidth;
-				double down_v = v * auxFactorHeight;
-
-				// tv,tu are the corresponding coordinates in the interpolator
-				final double tv = (double) (down_v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
-				final double tu = (double) (down_u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
-
-				// x,y are the coordinates after the transformation
-				swx.prepareForInterpolation(tu, tv, ORIGINAL);
-				double x = swx.interpolateI();
-				swy.prepareForInterpolation(tu, tv, ORIGINAL);
-				double y = swy.interpolateI();
-
-				// up_x, up_y are the transformed coordinates in the original image
-				double up_x = x / auxFactorWidth;
-				double up_y = y / auxFactorHeight;
-
-				// Draw horizontal line
-				int uh = u + stepu;
-				if (uh < auxTargetWidth + stepu) {
-					final double down_uh = uh * auxFactorWidth;
-					final double tuh = (double) (down_uh * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
-					swx.prepareForInterpolation(tuh, tv, ORIGINAL);
-					final double xh = swx.interpolateI();
-					swy.prepareForInterpolation(tuh, tv, ORIGINAL);
-					final double yh = swy.interpolateI();
-					final double up_xh = xh / auxFactorWidth;
-					final double up_yh = yh / auxFactorHeight;
-					MiscTools.drawLine(transformedImage, (int) Math.round(up_x), (int) Math.round(up_y), (int) Math.round(up_xh),
-					    (int) Math.round(up_yh), grid_colour);
-				}
-
-				// Draw vertical line
-				int vv = v + stepv;
-				if (vv < auxTargetHeight + stepv) {
-					double down_vv = vv * auxFactorHeight;
-					final double tvv = (double) (down_vv * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
-					swx.prepareForInterpolation(tu, tvv, ORIGINAL);
-					double xv = swx.interpolateI();
-					swy.prepareForInterpolation(tu, tvv, ORIGINAL);
-					double yv = swy.interpolateI();
-					double up_xv = xv / auxFactorWidth;
-					double up_yv = yv / auxFactorHeight;
-					MiscTools.drawLine(transformedImage, (int) Math.round(up_x), (int) Math.round(up_y), (int) Math.round(up_xv),
-					    (int) Math.round(up_yv), grid_colour);
-				}
-			}
-
-		// Update the target image plus
-		FloatProcessor fpg = new FloatProcessor(auxSourceWidth, auxSourceHeight);
-		for (int v = 0; v < auxSourceHeight; v++)
-			for (int u = 0; u < auxSourceWidth; u++)
-				fpg.putPixelValue(u, v, transformedImage[v][u]);
-
-		min_val = auxSourceImp.getProcessor().getMin();
-		max_val = auxSourceImp.getProcessor().getMax();
-		fpg.setMinAndMax(min_val, max_val);
-
-		// If the input has a mask as second slice, we need to convert
-		// the image with the grid before displaying
-		if (auxSourceImp.getImageStackSize() < 2)
-			auxSourceImp.setProcessor(auxSourceImp.getTitle(), fpg);
-		else {
-			final ImageProcessor ipToDisplay;
-			if (auxSourceImp.getProcessor() instanceof ByteProcessor)
-				ipToDisplay = fpg.convertToByte(false);
-			else if (auxSourceImp.getProcessor() instanceof ShortProcessor)
-				ipToDisplay = fpg.convertToShort(false);
-			else
-				ipToDisplay = fpg;
-			auxSourceImp.setProcessor(auxSourceImp.getTitle(), ipToDisplay);
-		}
-		auxSourceImp.updateImage();
-	}
-
-	/* ------------------------------------------------------------------------ */
-	/**
-	 * Class to run concurrent tile windows updaters (for intermediate results)
-	 * 
-	 */
-	private class OutputTileMaker implements Runnable {
-		final BSplineModel swx;
-		final BSplineModel swy;
-		final BSplineModel auxSource;
-		final BSplineModel auxTarget;
-		final Mask auxTargetMsk;
-		final Mask auxSourceMsk;
-		final double auxFactorWidth;
-		final double auxFactorHeight;
-		final int auxTargetCurrentHeight;
-		final int auxTargetCurrentWidth;
-		final Rectangle rect;
-		final private FloatProcessor fp;
-
-		// ------------------------------------------------------------------
-		/**
-		 * Output tile maker constructor
-		 * 
-		 * @param swx
-		 *          B-spline interpolator for transformation in x-
-		 * @param swy
-		 *          B-spline interpolator for transformation in y-
-		 * @param auxSource
-		 *          source image
-		 * @param auxTarget
-		 *          target image
-		 * @param auxSourceMsk
-		 *          source mask
-		 * @param auxTargetMsk
-		 *          target mask
-		 * @param auxFactorWidth
-		 *          width factor
-		 * @param auxFactorHeight
-		 *          height factor
-		 * @param auxTargetCurrentHeight
-		 *          current target height
-		 * @param auxTargetCurrentWidth
-		 *          current target width
-		 * @param rect
-		 *          retangle with the coordinates of the output image to be updated
-		 * @param fp
-		 *          processor to be updated
-		 */
-		OutputTileMaker(final BSplineModel swx, final BSplineModel swy, final BSplineModel auxSource,
-		    final BSplineModel auxTarget, final Mask auxSourceMsk, final Mask auxTargetMsk, final double auxFactorWidth,
-		    final double auxFactorHeight, final int auxTargetCurrentHeight, final int auxTargetCurrentWidth,
-		    final Rectangle rect, final FloatProcessor fp) {
-			this.swx = swx;
-			this.swy = swy;
-			this.auxSource = auxSource;
-			this.auxTarget = auxTarget;
-			this.auxTargetMsk = auxTargetMsk;
-			this.auxSourceMsk = auxSourceMsk;
-			this.auxFactorWidth = auxFactorWidth;
-			this.auxFactorHeight = auxFactorHeight;
-			this.auxTargetCurrentWidth = auxTargetCurrentWidth;
-			this.auxTargetCurrentHeight = auxTargetCurrentHeight;
-			this.rect = rect;
-			this.fp = fp;
-		}
-
-		// ------------------------------------------------------------------
-		/**
-		 * Run method to update the intermediate window. Only the part defined by
-		 * the rectangle will be updated (in this thread).
-		 */
-		public void run() {
-			int uv = rect.y * rect.width + rect.x;
-			int auxTargetHeight = rect.y + rect.height;
-			int auxTargetWidth = rect.x + rect.width;
-
-			// Subsampling (output) factors
-			// Note: we get them from original image, since they will be used in the
-			// masks and the
-			// masks store the information relative to the original sizes (without
-			// scaling).
-			final int subFactorT = this.auxTarget.getOriginalImageWidth() / this.auxTarget.getSubWidth();
-			final int subFactorS = this.auxSource.getOriginalImageWidth() / this.auxSource.getSubWidth();
-
-			final boolean fromSubT = (auxTarget.isSubOutput());
-			final boolean fromSubS = (auxSource.isSubOutput());
-
-			final double[] tImage = fromSubT ? auxTarget.getSubImage() : auxTarget.getImage();
-			final float[] f_array = (float[]) fp.getPixels();
-
-			for (int v_rect = 0, v = rect.y; v < auxTargetHeight; v++, v_rect++) {
-				final int v_offset = v_rect * rect.width;
-
-				for (int u_rect = 0, u = rect.x; u < auxTargetWidth; u++, uv++, u_rect++) {
-					if (auxTargetMsk.getValue(u * subFactorT, v * subFactorT)) {
-						double down_u = u * auxFactorWidth;
-						double down_v = v * auxFactorHeight;
-						final double tv = (double) (down_v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
-						final double tu = (double) (down_u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
-						double x = swx.prepareForInterpolationAndInterpolateI(tu, tv, fromSubT, ORIGINAL);
-						double y = swy.prepareForInterpolationAndInterpolateI(tu, tv, fromSubT, ORIGINAL);
-						double up_x = x / auxFactorWidth;
-						double up_y = y / auxFactorHeight;
-						if (auxSourceMsk.getValue(up_x * subFactorS, up_y * subFactorS)) {
-							double sourceValue = auxSource.prepareForInterpolationAndInterpolateI(up_x, up_y, fromSubS, ORIGINAL);
-							// fp.putPixelValue(u_rect, v_rect, tImage[uv] - sourceValue);
-							f_array[u_rect + v_offset] = (float) (tImage[uv] - sourceValue);
-						} else
-						  // fp.putPixelValue(u_rect, v_rect, 0);
-						  f_array[u_rect + v_offset] = 0;
-					} else
-					  // fp.putPixelValue(u_rect, v_rect, 0);
-					  f_array[u_rect + v_offset] = 0;
-				}
-			}
-
-		} // end run
-	} // end OutputTileMaker class
-
-	// ------------------------------------------------------------------
-	/**
-	 * Calculate the cubic B-spline x weight.
-	 *
-	 * @param x
-	 *          x- value
-	 * @param xIntervals
-	 *          x- number of intervals
-	 * @param extended
-	 *          extended flat
-	 * @param bIsReverse
-	 *          flag to determine the transformation direction
-	 *          (target-source=FALSE or source-target=TRUE)
-	 * @return weights
-	 */
-	private double[] xWeight(final double x, final int xIntervals, final boolean extended, boolean bIsReverse) {
-		int auxTargetCurrentWidth = (bIsReverse) ? this.sourceCurrentWidth : this.targetCurrentWidth;
-
-		int length = xIntervals + 1;
-		int j0 = 0, jF = xIntervals;
-		if (extended) {
-			length += 2;
-			j0--;
-			jF++;
-		}
-		final double[] b = new double[length];
-		final double interX = (double) xIntervals / (double) (auxTargetCurrentWidth - 1);
-		for (int j = j0; j <= jF; j++) {
-			b[j - j0] = MathTools.Bspline03(x * interX - (double) j);
-		}
-		return (b);
-	} /* end xWeight */
-
-	// ------------------------------------------------------------------
-	/**
-	 * Calculate the cubic B-spline y weight.
-	 *
-	 * @param y
-	 *          y- value
-	 * @param yIntervals
-	 *          y- number of intervals
-	 * @param extended
-	 *          extended flat
-	 * @param bIsReverse
-	 *          flag to determine the transformation direction
-	 *          (target-source=FALSE or source-target=TRUE)
-	 * @return weights
-	 */
-	private double[] yWeight(final double y, final int yIntervals, final boolean extended, boolean bIsReverse) {
-
-		int auxTargetCurrentHeight = (bIsReverse) ? this.sourceCurrentHeight : this.targetCurrentHeight;
-
-		int length = yIntervals + 1;
-		int i0 = 0, iF = yIntervals;
-		if (extended) {
-			length += 2;
-			i0--;
-			iF++;
-		}
-		final double[] b = new double[length];
-		final double interY = (double) yIntervals / (double) (auxTargetCurrentHeight - 1);
-		for (int i = i0; i <= iF; i++) {
-			b[i - i0] = MathTools.Bspline03(y * interY - (double) i);
-		}
-		return (b);
-	} /* end yWeight */
-
-	/*--------------------------------------------------------------------------*/
 	/**
 	 * Evaluate the similarity between the source and the target images but also
 	 * the transformation regularization and and landmarks energy term if
@@ -6335,20 +2131,20 @@ public class Transformation {
 	    final boolean only_image, boolean bIsReverse) {
 
 		// Auxiliary variables for changing from source to target and inversely
-		final BSplineModel auxTarget = (!bIsReverse) ? tgtModel : srcModel;
-		final BSplineModel auxSource = (!bIsReverse) ? srcModel : tgtModel;
+		final BSplineModel auxTarget = (!bIsReverse) ? targetModel : sourceModel;
+		final BSplineModel auxSource = (!bIsReverse) ? sourceModel : targetModel;
 
-		final Mask auxTargetMsk = (!bIsReverse) ? targetMask : sourceMask;
-		final Mask auxSourceMsk = (!bIsReverse) ? sourceMask : targetMask;
+		final ROI2DPolygon auxTargetMsk = (!bIsReverse) ? targetMask : sourceMask;
+		final ROI2DPolygon auxSourceMsk = (!bIsReverse) ? sourceMask : targetMask;
 
-		final PointHandler auxTargetPh = (!bIsReverse) ? targetLandmarks : sourceLandmarks;
-		final PointHandler auxSourcePh = (!bIsReverse) ? sourceLandmarks : targetLandmarks;
+		final List<ROI2DPoint> auxTargetPh = (!bIsReverse) ? targetLandmarks : sourceLandmarks;
+		final List<ROI2DPoint> auxSourcePh = (!bIsReverse) ? sourceLandmarks : targetLandmarks;
 
 		final BSplineModel swx = (!bIsReverse) ? swxTargetToSource : swxSourceToTarget;
 		final BSplineModel swy = (!bIsReverse) ? swyTargetToSource : swySourceToTarget;
 
-		final double auxFactorWidth = (!bIsReverse) ? this.tgtModel.getFactorWidth() : this.sourceFactorWidth;
-		final double auxFactorHeight = (!bIsReverse) ? this.tgtModel.getFactorHeight() : this.sourceFactorHeight;
+		final double auxFactorWidth = (!bIsReverse) ? this.targetModel.getFactorWidth() : this.sourceFactorWidth;
+		final double auxFactorHeight = (!bIsReverse) ? this.targetModel.getFactorHeight() : this.sourceFactorHeight;
 
 		final double P11[][] = (!bIsReverse) ? this.P11_TargetToSource : this.P11_SourceToTarget;
 		final double P12[][] = (!bIsReverse) ? this.P12_TargetToSource : this.P12_SourceToTarget;
@@ -6471,26 +2267,29 @@ public class Transformation {
 		double landmarkError = 0.0;
 		int K = 0;
 		if (auxTargetPh != null)
-			K = auxTargetPh.getPoints().size();
+			K = auxTargetPh.size();
 
 		if (landmarkWeight != 0) {
-			Vector<Point> sourceVector = null;
-			if (auxSourcePh != null)
-				sourceVector = auxSourcePh.getPoints();
-			else
-				sourceVector = new Vector<Point>();
-			Vector<Point> targetVector = null;
-			if (auxTargetPh != null)
-				targetVector = auxTargetPh.getPoints();
-			else
-				targetVector = new Vector<Point>();
+			List<Point2D> sourceVector = new ArrayList<>();
+			if (auxSourcePh != null) {
+				for (ROI2DPoint roi : auxSourcePh) {
+					sourceVector.add(roi.getPoint());
+				}
+			}
+
+			List<Point2D> targetVector = new ArrayList<>();
+			if (auxTargetPh != null) {
+				for (ROI2DPoint roi : auxTargetPh) {
+					targetVector.add(roi.getPoint());
+				}
+			}
 
 			for (int kp = 0; kp < K; kp++) {
 				// Get the landmark coordinate in the target image
-				final Point sourcePoint = (Point) sourceVector.elementAt(kp);
-				final Point targetPoint = (Point) targetVector.elementAt(kp);
-				double u = auxFactorWidth * (double) targetPoint.x;
-				double v = auxFactorHeight * (double) targetPoint.y;
+				final Point2D sourcePoint = sourceVector.get(kp);
+				final Point2D targetPoint = targetVector.get(kp);
+				double u = auxFactorWidth * targetPoint.getX();
+				double v = auxFactorHeight * targetPoint.getY();
 
 				// Express it in "spline" units
 				double tu = (double) (u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
@@ -6503,8 +2302,8 @@ public class Transformation {
 				double y = swy.interpolateI();
 
 				// Substract the result from the residual
-				double dx = auxFactorWidth * (double) sourcePoint.x - x;
-				double dy = auxFactorHeight * (double) sourcePoint.y - y;
+				double dx = auxFactorWidth * sourcePoint.getX() - x;
+				double dy = auxFactorHeight * sourcePoint.getY() - y;
 
 				// Add to landmark error
 				landmarkError += dx * dx + dy * dy;
@@ -6572,7 +2371,6 @@ public class Transformation {
 		return imageSimilarity + landmarkError + regularization;
 	}
 
-	/* ------------------------------------------------------------------------ */
 	/**
 	 * Class to run concurrent similarity evaluation
 	 * 
@@ -6584,9 +2382,9 @@ public class Transformation {
 		/** current source image */
 		final BSplineModel auxSource;
 		/** target mask */
-		final Mask auxTargetMsk;
+		final ROI2DPolygon auxTargetMsk;
 		/** source mask */
-		final Mask auxSourceMsk;
+		final ROI2DPolygon auxSourceMsk;
 		/** B-spline deformation in x */
 		final BSplineModel swx;
 		/** B-spline deformation in y */
@@ -6636,8 +2434,8 @@ public class Transformation {
 		 * @param rect
 		 *          rectangle containing the area of the image to be evaluated
 		 */
-		EvaluateSimilarityTile(final BSplineModel auxTarget, final BSplineModel auxSource, final Mask auxTargetMsk,
-		    final Mask auxSourceMsk, final BSplineModel swx, final BSplineModel swy, final double auxFactorWidth,
+		EvaluateSimilarityTile(final BSplineModel auxTarget, final BSplineModel auxSource, final ROI2DPolygon auxTargetMsk,
+		    final ROI2DPolygon auxSourceMsk, final BSplineModel swx, final BSplineModel swy, final double auxFactorWidth,
 		    final double auxFactorHeight, final int intervals, final double[] grad, final double[] result,
 		    final Rectangle rect) {
 			this.auxTarget = auxTarget;
@@ -6694,16 +2492,16 @@ public class Transformation {
 					// .....................................................
 
 					// Check if this point is in the target mask
-					if (auxTargetMsk.getValue(u / auxFactorWidth, v / auxFactorHeight)) {
+					if (auxTargetMsk.contains(u / auxFactorWidth, v / auxFactorHeight)) {
 						// Compute value in the source image
 						final double I2 = targetCurrentImage[uv];
 
 						// Compute the position of this point in the target
-						double x = swx.precomputed_interpolateI(u, v);
-						double y = swy.precomputed_interpolateI(u, v);
+						double x = swx.precomputedInterpolateI(u, v);
+						double y = swy.precomputedInterpolateI(u, v);
 
 						// Check if this point is in the source mask
-						if (auxSourceMsk.getValue(x / auxFactorWidth, y / auxFactorHeight)) {
+						if (auxSourceMsk.contains(x / auxFactorWidth, y / auxFactorHeight)) {
 							// Compute the value of the target at that point
 							final double I1 = auxSource.prepareForInterpolationAndInterpolateIAndD(x, y, I1D, false, PYRAMID);
 
@@ -6723,7 +2521,7 @@ public class Transformation {
 
 									// Note: It's the same to take the indexes and weightI from
 									// swx than from swy
-									double weightI = swx.precomputed_getWeightI(l, m, u, v);
+									double weightI = swx.precomputedGetWeightI(l, m, u, v);
 
 									int k = swx.prec_yIndex[v][l] * cYdim + swx.prec_xIndex[u][m];
 
@@ -6761,9 +2559,456 @@ public class Transformation {
 
 		} // end run method
 
-	} // end class EvaluateSimilarityTile
+	}
 
-	/*--------------------------------------------------------------------------*/
+	/**
+	 * In this function the system (H+lambda*Diag(H))*update=gradient is solved
+	 * for update. H is the hessian of the function f, gradient is the gradient of
+	 * the function f, Diag(H) is a matrix with the diagonal of H.
+	 */
+	private void Marquardt_it(double[] x, boolean[] optimize, double[] gradient, double[] Hessian, double lambda) {
+		// final double TINY = FLT_EPSILON;
+		final int M = x.length;
+
+		// Find the threshold for the most important components
+		double[] sortedgradient = new double[M];
+		for (int i = 0; i < M; i++)
+			sortedgradient[i] = Math.abs(gradient[i]);
+		Arrays.sort(sortedgradient);
+
+		double largestGradient = sortedgradient[M - 1];
+
+		// We set the threshold gradient at 9% of the largest value.
+		double gradient_th = 0.09 * largestGradient;
+
+		// We count the number of values over the threshold.
+		int Mused = 0;
+		for (int i = 0; i < M; i++)
+			if (sortedgradient[i] >= gradient_th)
+				Mused++;
+
+		double[][] u = new double[Mused][Mused];
+		// double [][] v = null; //new double [Mused][Mused];
+		// double [] w = null; //new double [Mused];
+		double[] g = new double[Mused];
+		double[] update = new double[Mused];
+		boolean[] optimizep = new boolean[M];
+
+		System.arraycopy(optimize, 0, optimizep, 0, M);
+
+		lambda += 1.0F;
+
+		int m = 0, i;
+
+		// Take the Mused components with big gradients
+		for (i = 0; i < M; i++)
+			if (optimizep[i] && Math.abs(gradient[i]) >= gradient_th) {
+				m++;
+				if (m == Mused)
+					break;
+			} else
+				optimizep[i] = false;
+		// Set the rest to 0
+		for (i = i + 1; i < M; i++)
+			optimizep[i] = false;
+
+		// Gradient descent
+		// for (int i=0; i<M; i++) if (optimizep[i]) x[i]-=0.01*gradient[i];
+		// if (true) return;
+
+		/*
+		 * u will be a copy of the Hessian where we take only those components
+		 * corresponding to variables being optimized
+		 */
+		int kr = 0, iw = 0;
+		for (int ir = 0; ir < M; kr = kr + M, ir++) {
+			if (optimizep[ir]) {
+				int jw = 0;
+				for (int jr = 0; jr < M; jr++)
+					if (optimizep[jr])
+						u[iw][jw++] = Hessian[kr + jr];
+				g[iw] = gradient[ir];
+				u[iw][iw] *= lambda;
+				iw++;
+			}
+		}
+
+		// Solve he equation system
+		/* SVD u=u*w*v^t */
+		update = MathTools.linearLeastSquares(u, g);
+		if (update == null) {
+			System.out.println("Error when calculating linear least square solution...");
+			return;
+		}
+
+		/* x = x - update */
+		kr = 0;
+		for (int kw = 0; kw < M; kw++)
+			if (optimizep[kw])
+				x[kw] -= update[kr++];
+
+	}
+
+	/**
+	 * Method to update both current outputs (source-target and target-source).
+	 *
+	 * @param c
+	 *          B-spline coefficients
+	 * @param intervals
+	 *          number of intervals in the deformation
+	 */
+	private void updateOutputs(final double[] c, int intervals) {
+		final int M = c.length / 2;
+		final int halfM = M / 2;
+		double[] x1 = new double[M];
+
+		for (int i = 0, p = 0; i < halfM; i++, p++) {
+			x1[p] = c[i];
+			x1[p + halfM] = c[i + M];
+		}
+
+		double[] x2 = new double[M];
+		for (int i = halfM, p = 0; i < M; i++, p++) {
+			x2[p] = c[i];
+			x2[p + halfM] = c[i + M];
+		}
+		// Updates.
+		updateCurrentOutput(x1, intervals, false);
+		updateCurrentOutput(x2, intervals, true);
+	}
+
+	/**
+	 * Method to update a current output (multi-thread).
+	 *
+	 * @param c
+	 *          B-spline coefficients
+	 * @param intervals
+	 *          number of intervals in the deformation
+	 * @param bIsReverse
+	 *          flag to decide the deformation direction (source-target,
+	 *          target-source)
+	 */
+	private void updateCurrentOutput(final double[] c, int intervals, boolean bIsReverse) {
+		// Set the coefficients to an interpolator
+		int cYdim = intervals + 3;
+		int cXdim = cYdim;
+		int Nk = cYdim * cXdim;
+
+		BSplineModel auxTarget = targetModel;
+		BSplineModel auxSource = sourceModel;
+		ROI2DPolygon auxTargetMsk = targetMask;
+		ROI2DPolygon auxSourceMsk = sourceMask;
+		BSplineModel swx = swxTargetToSource;
+		BSplineModel swy = swyTargetToSource;
+		int auxTargetWidth = this.targetWidth;
+		int auxTargetHeight = this.targetHeight;
+		int auxTargetCurrentWidth = this.targetCurrentWidth;
+		int auxTargetCurrentHeight = this.targetCurrentHeight;
+		int auxSourceWidth = this.sourceWidth;
+		int auxSourceHeight = this.sourceHeight;
+		Sequence auxSourceSeq = this.sourceSeq;
+		Sequence outputSeq = this.outputSeq1;
+		double auxFactorWidth = this.targetFactorWidth;
+		double auxFactorHeight = this.targetFactorHeight;
+		double subFactorWidth = targetModel.isSubOutput() ? (targetModel.getWidth() / targetModel.getSubWidth()) : 1;
+		double subFactorHeight = targetModel.isSubOutput() ? (targetModel.getHeight() / targetModel.getSubHeight()) : 1;
+
+		// Change if necessary
+		if (bIsReverse) {
+			auxTarget = sourceModel;
+			auxSource = targetModel;
+			auxTargetMsk = sourceMask;
+			auxSourceMsk = targetMask;
+			swx = swxSourceToTarget;
+			swy = swySourceToTarget;
+			auxTargetWidth = this.sourceWidth;
+			auxTargetHeight = this.sourceHeight;
+			auxTargetCurrentWidth = sourceCurrentWidth;
+			auxTargetCurrentHeight = sourceCurrentHeight;
+			auxSourceWidth = this.targetWidth;
+			auxSourceHeight = this.targetHeight;
+			auxSourceSeq = this.targetSeq;
+			outputSeq = this.outputSeq2;
+			auxFactorWidth = this.sourceFactorWidth;
+			auxFactorHeight = this.sourceFactorHeight;
+			subFactorWidth = sourceModel.isSubOutput() ? (sourceModel.getWidth() / sourceModel.getSubWidth()) : 1;
+			subFactorHeight = sourceModel.isSubOutput() ? (sourceModel.getHeight() / sourceModel.getSubHeight()) : 1;
+		}
+
+		swx.setCoefficients(c, cYdim, cXdim, 0);
+		swy.setCoefficients(c, cYdim, cXdim, Nk);
+
+		// Compute the deformed image
+		outputSeq.beginUpdate();
+		IcyBufferedImage ibi = outputSeq.getImage(0, 0);
+
+		int uv = 0;
+
+		// Check the number of processors in the computer
+		int nproc = Runtime.getRuntime().availableProcessors();
+
+		// We will use threads to display parts of the output image
+		int block_height = auxTargetHeight / ((int) subFactorHeight * nproc);
+		if (auxTargetHeight % 2 != 0)
+			block_height++;
+
+		int nThreads = nproc; /*
+		                       * (nproc > 1) ? (nproc / 2) : 1; if
+		                       * (this.accurate_mode == MainDialog.MONO_MODE)
+		                       * nThreads *= 2;
+		                       */
+
+		Thread[] threads = new Thread[nThreads];
+		Rectangle[] rects = new Rectangle[nThreads];
+		IcyBufferedImage[] ibi_tile = new IcyBufferedImage[nThreads];
+		for (int i = 0; i < nThreads; i++) {
+			// Last block goes to the end of the window
+			int x_start = i * block_height;
+			if (nThreads - 1 == i)
+				block_height = auxTargetHeight / (int) subFactorWidth - i * block_height;
+			/*
+			 * IJ.log("block height " + block_height); IJ.log("Update : 0 " + " "+
+			 * x_start +" " + (auxTargetWidth / (int)subFactorWidth) + " " +
+			 * block_height); IJ.log("auxFactorWidth = " + auxFactorWidth +
+			 * " auxFactorHeight = " + auxFactorHeight);
+			 */
+			rects[i] = new Rectangle(0, x_start, auxTargetWidth / (int) subFactorWidth, block_height);
+
+			ibi_tile[i] = new IcyBufferedImage(rects[i].width, rects[i].height, 1, DataType.FLOAT);
+
+			threads[i] = new Thread(new OutputTileMaker(swx, swy, auxSource, auxTarget, auxSourceMsk, auxTargetMsk,
+			    auxFactorWidth * subFactorWidth, auxFactorHeight * subFactorHeight, auxTargetCurrentHeight,
+			    auxTargetCurrentWidth, rects[i], ibi_tile[i]));
+			threads[i].start();
+		}
+		for (int i = 0; i < nThreads; i++) {
+			try {
+				threads[i].join();
+				threads[i] = null;
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+
+		for (int i = 0; i < nThreads; i++) {
+			ibi.copyData(ibi_tile[i], null, new Point(rects[i].x, rects[i].y));
+			ibi_tile[i] = null;
+			rects[i] = null;
+		}
+
+		outputSeq.setImage(0, 0, ibi);
+		outputSeq.endUpdate();
+
+		// Draw the grid on the target image ...............................
+
+		// We take the values from the original image
+		auxTargetHeight = bIsReverse ? this.originalSourceIBI.getHeight() : this.originalTargetIBI.getHeight();
+		auxTargetWidth = bIsReverse ? this.originalSourceIBI.getWidth() : this.originalTargetIBI.getWidth();
+		auxSourceHeight = bIsReverse ? this.originalTargetIBI.getHeight() : this.originalSourceIBI.getHeight();
+		auxSourceWidth = bIsReverse ? this.originalTargetIBI.getWidth() : this.originalSourceIBI.getWidth();
+
+		auxFactorWidth = (double) auxTargetCurrentWidth / auxTargetWidth;
+		auxFactorHeight = (double) auxTargetCurrentHeight / auxTargetHeight;
+
+		// Some initialization
+		int stepv = Math.min(Math.max(10, auxTargetHeight / 15), 60);
+		int stepu = Math.min(Math.max(10, auxTargetWidth / 15), 60);
+		final double transformedImage[][] = new double[auxSourceHeight][auxSourceWidth];
+		double grid_colour = -1e-10;
+		uv = 0;
+		for (int v = 0; v < auxSourceHeight; v++)
+			for (int u = 0; u < auxSourceWidth; u++, uv++) {
+				transformedImage[v][u] = auxSource.getOriginalImage()[uv];
+				if (transformedImage[v][u] > grid_colour)
+					grid_colour = transformedImage[v][u];
+			}
+
+		// Draw grid
+		for (int v = 0; v < auxTargetHeight + stepv; v += stepv)
+			for (int u = 0; u < auxTargetWidth + stepu; u += stepu) {
+				// down_u/v are the coordinates in the current image
+				double down_u = u * auxFactorWidth;
+				double down_v = v * auxFactorHeight;
+
+				// tv,tu are the corresponding coordinates in the interpolator
+				final double tv = (double) (down_v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
+				final double tu = (double) (down_u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
+
+				// x,y are the coordinates after the transformation
+				swx.prepareForInterpolation(tu, tv, ORIGINAL);
+				double x = swx.interpolateI();
+				swy.prepareForInterpolation(tu, tv, ORIGINAL);
+				double y = swy.interpolateI();
+
+				// up_x, up_y are the transformed coordinates in the original image
+				double up_x = x / auxFactorWidth;
+				double up_y = y / auxFactorHeight;
+
+				// Draw horizontal line
+				int uh = u + stepu;
+				if (uh < auxTargetWidth + stepu) {
+					final double down_uh = uh * auxFactorWidth;
+					final double tuh = (double) (down_uh * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
+					swx.prepareForInterpolation(tuh, tv, ORIGINAL);
+					final double xh = swx.interpolateI();
+					swy.prepareForInterpolation(tuh, tv, ORIGINAL);
+					final double yh = swy.interpolateI();
+					final double up_xh = xh / auxFactorWidth;
+					final double up_yh = yh / auxFactorHeight;
+					MiscTools.drawLine(transformedImage, (int) Math.round(up_x), (int) Math.round(up_y), (int) Math.round(up_xh),
+					    (int) Math.round(up_yh), grid_colour);
+				}
+
+				// Draw vertical line
+				int vv = v + stepv;
+				if (vv < auxTargetHeight + stepv) {
+					double down_vv = vv * auxFactorHeight;
+					final double tvv = (double) (down_vv * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
+					swx.prepareForInterpolation(tu, tvv, ORIGINAL);
+					double xv = swx.interpolateI();
+					swy.prepareForInterpolation(tu, tvv, ORIGINAL);
+					double yv = swy.interpolateI();
+					double up_xv = xv / auxFactorWidth;
+					double up_yv = yv / auxFactorHeight;
+					MiscTools.drawLine(transformedImage, (int) Math.round(up_x), (int) Math.round(up_y), (int) Math.round(up_xv),
+					    (int) Math.round(up_yv), grid_colour);
+				}
+			}
+
+		// Update the target image plus
+		IcyBufferedImage ibig = new IcyBufferedImage(auxSourceWidth, auxSourceHeight, 1, DataType.DOUBLE);
+		double[] ibigData = ibig.getDataXYAsDouble(0);
+		for (int v = 0; v < auxSourceHeight; v++)
+			for (int u = 0; u < auxSourceWidth; u++)
+				ibigData[u + v * auxSourceWidth] = transformedImage[v][u];
+		// ibig.putPixelValue(u, v, transformedImage[v][u]);
+
+		ibig.dataChanged();
+
+		auxSourceSeq.beginUpdate();
+		auxSourceSeq.setImage(0, 0, ibig);
+		auxSourceSeq.endUpdate();
+	}
+
+	/* ------------------------------------------------------------------------ */
+	/**
+	 * Class to run concurrent tile windows updaters (for intermediate results)
+	 * 
+	 */
+	private class OutputTileMaker implements Runnable {
+		final BSplineModel swx;
+		final BSplineModel swy;
+		final BSplineModel auxSource;
+		final BSplineModel auxTarget;
+		final ROI2DPolygon auxTargetMsk;
+		final ROI2DPolygon auxSourceMsk;
+		final double auxFactorWidth;
+		final double auxFactorHeight;
+		final int auxTargetCurrentHeight;
+		final int auxTargetCurrentWidth;
+		final Rectangle rect;
+		final private IcyBufferedImage fp;
+
+		// ------------------------------------------------------------------
+		/**
+		 * Output tile maker constructor
+		 * 
+		 * @param swx
+		 *          B-spline interpolator for transformation in x-
+		 * @param swy
+		 *          B-spline interpolator for transformation in y-
+		 * @param auxSource
+		 *          source image
+		 * @param auxTarget
+		 *          target image
+		 * @param auxSourceMsk
+		 *          source mask
+		 * @param auxTargetMsk
+		 *          target mask
+		 * @param auxFactorWidth
+		 *          width factor
+		 * @param auxFactorHeight
+		 *          height factor
+		 * @param auxTargetCurrentHeight
+		 *          current target height
+		 * @param auxTargetCurrentWidth
+		 *          current target width
+		 * @param rect
+		 *          retangle with the coordinates of the output image to be updated
+		 * @param fp
+		 *          processor to be updated
+		 */
+		OutputTileMaker(final BSplineModel swx, final BSplineModel swy, final BSplineModel auxSource,
+		    final BSplineModel auxTarget, final ROI2DPolygon auxSourceMsk, final ROI2DPolygon auxTargetMsk,
+		    final double auxFactorWidth, final double auxFactorHeight, final int auxTargetCurrentHeight,
+		    final int auxTargetCurrentWidth, final Rectangle rect, final IcyBufferedImage fp) {
+			this.swx = swx;
+			this.swy = swy;
+			this.auxSource = auxSource;
+			this.auxTarget = auxTarget;
+			this.auxTargetMsk = auxTargetMsk;
+			this.auxSourceMsk = auxSourceMsk;
+			this.auxFactorWidth = auxFactorWidth;
+			this.auxFactorHeight = auxFactorHeight;
+			this.auxTargetCurrentWidth = auxTargetCurrentWidth;
+			this.auxTargetCurrentHeight = auxTargetCurrentHeight;
+			this.rect = rect;
+			this.fp = fp;
+		}
+
+		// ------------------------------------------------------------------
+		/**
+		 * Run method to update the intermediate window. Only the part defined by
+		 * the rectangle will be updated (in this thread).
+		 */
+		public void run() {
+			int uv = rect.y * rect.width + rect.x;
+			int auxTargetHeight = rect.y + rect.height;
+			int auxTargetWidth = rect.x + rect.width;
+
+			// Subsampling (output) factors
+			// Note: we get them from original image, since they will be used in the
+			// masks and the
+			// masks store the information relative to the original sizes (without
+			// scaling).
+			final int subFactorT = this.auxTarget.getOriginalImageWidth() / this.auxTarget.getSubWidth();
+			final int subFactorS = this.auxSource.getOriginalImageWidth() / this.auxSource.getSubWidth();
+
+			final boolean fromSubT = (auxTarget.isSubOutput());
+			final boolean fromSubS = (auxSource.isSubOutput());
+
+			final double[] tImage = fromSubT ? auxTarget.getSubImage() : auxTarget.getImage();
+			final float[] f_array = fp.getDataXYAsFloat(0);
+
+			for (int v_rect = 0, v = rect.y; v < auxTargetHeight; v++, v_rect++) {
+				final int v_offset = v_rect * rect.width;
+
+				for (int u_rect = 0, u = rect.x; u < auxTargetWidth; u++, uv++, u_rect++) {
+					if (auxTargetMsk.contains(u * subFactorT, v * subFactorT)) {
+						double down_u = u * auxFactorWidth;
+						double down_v = v * auxFactorHeight;
+						final double tv = (double) (down_v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
+						final double tu = (double) (down_u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
+						double x = swx.prepareForInterpolationAndInterpolateI(tu, tv, fromSubT, ORIGINAL);
+						double y = swy.prepareForInterpolationAndInterpolateI(tu, tv, fromSubT, ORIGINAL);
+						double up_x = x / auxFactorWidth;
+						double up_y = y / auxFactorHeight;
+						if (auxSourceMsk.contains(up_x * subFactorS, up_y * subFactorS)) {
+							double sourceValue = auxSource.prepareForInterpolationAndInterpolateI(up_x, up_y, fromSubS, ORIGINAL);
+							// fp.putPixelValue(u_rect, v_rect, tImage[uv] - sourceValue);
+							f_array[u_rect + v_offset] = (float) (tImage[uv] - sourceValue);
+						} else
+						  // fp.putPixelValue(u_rect, v_rect, 0);
+						  f_array[u_rect + v_offset] = 0;
+					} else
+					  // fp.putPixelValue(u_rect, v_rect, 0);
+					  f_array[u_rect + v_offset] = 0;
+				}
+			}
+
+		} // end run
+	}
+
 	/**
 	 * Calculate the geometric error between the source-target and target-source
 	 * deformations. The corresponding coefficients are assumed to be at
@@ -6881,7 +3126,6 @@ public class Transformation {
 		return (this.consistencyWeight * (f_direct + f_inverse));
 	}
 
-	/* ------------------------------------------------------------------------ */
 	/**
 	 * Class to run concurrent consistency evaluation
 	 * 
@@ -6969,14 +3213,14 @@ public class Transformation {
 			for (int v = rect_target.y; v < YdimT; v++)
 				for (int u = rect_target.x; u < XdimT; u++) {
 					// Check if this point is in the target mask
-					if (this.transf.targetMask.getValue(u / this.transf.targetFactorWidth, v / this.transf.targetFactorHeight)) {
+					if (this.transf.targetMask.contains(u / this.transf.targetFactorWidth, v / this.transf.targetFactorHeight)) {
 
-						final int x = (int) Math.round(swx_direct.precomputed_interpolateI(u, v));
-						final int y = (int) Math.round(swy_direct.precomputed_interpolateI(u, v));
+						final int x = (int) Math.round(swx_direct.precomputedInterpolateI(u, v));
+						final int y = (int) Math.round(swy_direct.precomputedInterpolateI(u, v));
 
 						if (x >= 0 && x < this.transf.sourceCurrentWidth && y >= 0 && y < this.transf.sourceCurrentHeight) {
-							final double x2 = swx_inverse.precomputed_interpolateI(x, y);
-							final double y2 = swy_inverse.precomputed_interpolateI(x, y);
+							final double x2 = swx_inverse.precomputedInterpolateI(x, y);
+							final double y2 = swy_inverse.precomputedInterpolateI(x, y);
 							double aux1 = u - x2;
 							double aux2 = v - y2;
 
@@ -6989,15 +3233,15 @@ public class Transformation {
 									if (swx_direct.prec_yIndex[v][l] == -1 || swx_direct.prec_xIndex[u][m] == -1)
 										continue;
 
-									double dddx = swx_direct.precomputed_getWeightI(l, m, u, v);
-									double dixx = swx_inverse.precomputed_getWeightDx(l, m, x, y);
-									double diyy = swy_inverse.precomputed_getWeightDy(l, m, x, y);
+									double dddx = swx_direct.precomputedGetWeightI(l, m, u, v);
+									double dixx = swx_inverse.precomputedGetWeightDx(l, m, x, y);
+									double diyy = swy_inverse.precomputedGetWeightDy(l, m, x, y);
 
 									double weightIx = (dixx + diyy) * dddx;
 
-									double dddy = swy_direct.precomputed_getWeightI(l, m, u, v);
-									double dixy = swx_inverse.precomputed_getWeightDy(l, m, x, y);
-									double diyx = swy_inverse.precomputed_getWeightDx(l, m, x, y);
+									double dddy = swy_direct.precomputedGetWeightI(l, m, u, v);
+									double dixy = swx_inverse.precomputedGetWeightDy(l, m, x, y);
+									double diyx = swy_inverse.precomputedGetWeightDx(l, m, x, y);
 
 									double weightIy = (diyx + dixy) * dddy;
 
@@ -7017,7 +3261,7 @@ public class Transformation {
 									if (swx_inverse.prec_yIndex[y][l] == -1 || swx_inverse.prec_xIndex[x][m] == -1)
 										continue;
 
-									double weightI = swx_inverse.precomputed_getWeightI(l, m, x, y);
+									double weightI = swx_inverse.precomputedGetWeightI(l, m, x, y);
 
 									int k = swx_inverse.prec_yIndex[y][l] * cYdim + swx_inverse.prec_xIndex[x][m];
 
@@ -7057,13 +3301,13 @@ public class Transformation {
 			for (int v = rect_source.y; v < YdimS; v++)
 				for (int u = rect_source.x; u < XdimS; u++) {
 					// Check if this point is in the target mask
-					if (this.transf.sourceMask.getValue(u / this.transf.sourceFactorWidth, v / this.transf.sourceFactorHeight)) {
-						final int x = (int) Math.round(swx_inverse.precomputed_interpolateI(u, v));
-						final int y = (int) Math.round(swy_inverse.precomputed_interpolateI(u, v));
+					if (this.transf.sourceMask.contains(u / this.transf.sourceFactorWidth, v / this.transf.sourceFactorHeight)) {
+						final int x = (int) Math.round(swx_inverse.precomputedInterpolateI(u, v));
+						final int y = (int) Math.round(swy_inverse.precomputedInterpolateI(u, v));
 
 						if (x >= 0 && x < this.transf.targetCurrentWidth && y >= 0 && y < this.transf.targetCurrentHeight) {
-							final double x2 = swx_direct.precomputed_interpolateI(x, y);
-							final double y2 = swy_direct.precomputed_interpolateI(x, y);
+							final double x2 = swx_direct.precomputedInterpolateI(x, y);
+							final double y2 = swy_direct.precomputedInterpolateI(x, y);
 							double aux1 = u - x2;
 							double aux2 = v - y2;
 
@@ -7077,7 +3321,7 @@ public class Transformation {
 									if (swx_direct.prec_yIndex[y][l] == -1 || swx_direct.prec_xIndex[x][m] == -1)
 										continue;
 
-									double weightI = swx_direct.precomputed_getWeightI(l, m, x, y);
+									double weightI = swx_direct.precomputedGetWeightI(l, m, x, y);
 
 									int k = swx_direct.prec_yIndex[y][l] * cYdim + swx_direct.prec_xIndex[x][m];
 
@@ -7093,15 +3337,15 @@ public class Transformation {
 									if (swx_inverse.prec_yIndex[v][l] == -1 || swx_inverse.prec_xIndex[u][m] == -1)
 										continue;
 
-									double diix = swx_inverse.precomputed_getWeightI(l, m, u, v);
-									double ddxx = swx_direct.precomputed_getWeightDx(l, m, x, y);
-									double ddyy = swy_direct.precomputed_getWeightDy(l, m, x, y);
+									double diix = swx_inverse.precomputedGetWeightI(l, m, u, v);
+									double ddxx = swx_direct.precomputedGetWeightDx(l, m, x, y);
+									double ddyy = swy_direct.precomputedGetWeightDy(l, m, x, y);
 
 									double weightIx = (ddxx + ddyy) * diix;
 
-									double diiy = swy_inverse.precomputed_getWeightI(l, m, u, v);
-									double ddxy = swx_direct.precomputed_getWeightDy(l, m, x, y);
-									double ddyx = swy_direct.precomputed_getWeightDx(l, m, x, y);
+									double diiy = swy_inverse.precomputedGetWeightI(l, m, u, v);
+									double ddxy = swx_direct.precomputedGetWeightDy(l, m, x, y);
+									double ddyx = swy_direct.precomputedGetWeightDx(l, m, x, y);
 
 									double weightIy = (ddyx + ddxy) * diiy;
 
@@ -7137,40 +3381,1330 @@ public class Transformation {
 
 	}
 
-	// ------------------------------------------------------------------------------------------
 	/**
-	 * Correct shear on initial affine transform
-	 * 
-	 * @param shearCorrection
-	 *          percentage of shear correction (0.0 - 1.0)
+	 * Optimize the B-spline coefficients (unidirectional method).
+	 *
+	 * @param intervals
+	 *          number of intervals in the deformation
+	 * @param thChangef
+	 * @param cxTargetToSource
+	 *          x- B-spline coefficients storing the target to source deformation
+	 * @param cyTargetToSource
+	 *          y- B-spline coefficients storing the target to source deformation
+	 * @return energy function value
 	 */
-	public void setShearCorrection(double shearCorrection) {
-		if (shearCorrection >= 0 && shearCorrection <= 1.0)
-			this.tweakShear = shearCorrection;
+	private double optimizeCoeffs(int intervals, double thChangef, double[][] cxTargetToSource,
+	    double[][] cyTargetToSource) {
+		if (sourceModel.isSubOutput()) {
+			System.out.println(" -----\n Intervals = " + intervals + "x" + intervals);
+			System.out.println(" Source Image Size = " + this.sourceCurrentWidth + "x" + this.sourceCurrentHeight);
+		}
+
+		if (plugin != null && ((BUnwarp) plugin).isPluginInterrumped())
+			return 0.0;
+
+		final double TINY = FLT_EPSILON;
+		final double EPS = 3.0e-8F;
+		final double FIRSTLAMBDA = 1;
+		final int MAXITER_OPTIMCOEFF = 300;
+		final int CUMULATIVE_SIZE = 5;
+
+		int int3 = intervals + 3;
+		int halfM = int3 * int3;
+		int M = halfM * 2;
+
+		double rescuedf, f;
+		double[] x = new double[M];
+		double[] rescuedx = new double[M];
+		double[] diffx = new double[M];
+		double[] rescuedgrad = new double[M];
+		double[] grad = new double[M];
+		double[] diffgrad = new double[M];
+		double[] Hdx = new double[M];
+		double[] rescuedhess = new double[M * M];
+		double[] hess = new double[M * M];
+		double[] proposedHess = new double[M * M];
+		boolean[] optimize = new boolean[M];
+		int i, j, p, iter = 1;
+		boolean skip_update, ill_hessian;
+		double improvementx = (double) Math.sqrt(TINY), lambda = FIRSTLAMBDA, max_normx, distx, aux, gmax;
+		double fac, fae, dgdx, dxHdx, sumdiffg, sumdiffx;
+
+		CumulativeQueue lastBest = new CumulativeQueue(CUMULATIVE_SIZE);
+
+		for (i = 0; i < M; i++)
+			optimize[i] = true;
+
+		/* Form the vector with the current guess for the optimization */
+		for (i = 0, p = 0; i < intervals + 3; i++)
+			for (j = 0; j < intervals + 3; j++, p++) {
+				x[p] = cxTargetToSource[i][j];
+				x[halfM + p] = cyTargetToSource[i][j];
+			}
+
+		/* Prepare the precomputed weights for interpolation */
+		this.swxTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, 0);
+		this.swyTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, halfM);
+		this.swxTargetToSource.precomputedPrepareForInterpolation(targetModel.getCurrentHeight(),
+		    targetModel.getCurrentWidth(), intervals);
+		this.swyTargetToSource.precomputedPrepareForInterpolation(targetModel.getCurrentHeight(),
+		    targetModel.getCurrentWidth(), intervals);
+
+		// First computation of the energy (similarity + landmarks + regularization)
+		// f = evaluateSimilarity(x, intervals, grad, false, false, false);
+		f = evaluateSimilarityMultiThread(x, intervals, grad, false, false);
+
+		if (showMarquardtOptim)
+			System.out.println("f(1)=" + f);
+
+		/*
+		 * Initially the hessian is the identity matrix multiplied by the first
+		 * function value
+		 */
+		for (i = 0, p = 0; i < M; i++)
+			for (j = 0; j < M; j++, p++)
+				if (i == j)
+					hess[p] = 1.0F;
+				else
+					hess[p] = 0.0F;
+
+		rescuedf = f;
+		for (i = 0, p = 0; i < M; i++) {
+			rescuedx[i] = x[i];
+			rescuedgrad[i] = grad[i];
+			for (j = 0; j < M; j++, p++)
+				rescuedhess[p] = hess[p];
+		}
+
+		// Maximum iteration number
+		int maxiter = MAXITER_OPTIMCOEFF * (sourceModel.getCurrentDepth() + 1);
+
+		// TODO ProgressBar.stepProgressBar();
+
+		int last_successful_iter = 0;
+
+		boolean stop = plugin != null && ((BUnwarp) plugin).isPluginInterrumped();
+
+		while (iter < maxiter && !stop) {
+			/* Compute new x ------------------------------------------------- */
+			Marquardt_it(x, optimize, grad, hess, lambda);
+
+			/* Stopping criteria --------------------------------------------- */
+			/* Compute difference with the previous iteration */
+			max_normx = improvementx = 0;
+			for (i = 0; i < M; i++) {
+				diffx[i] = x[i] - rescuedx[i];
+				distx = Math.abs(diffx[i]);
+				improvementx += distx * distx;
+				aux = Math.abs(rescuedx[i]) < Math.abs(x[i]) ? x[i] : rescuedx[i];
+				max_normx += aux * aux;
+			}
+
+			if (TINY < max_normx)
+				improvementx = improvementx / max_normx;
+
+			improvementx = (double) Math.sqrt(Math.sqrt(improvementx));
+
+			/*
+			 * If there is no change with respect to the old geometry then finish the
+			 * iterations
+			 */
+			if (improvementx < Math.sqrt(TINY))
+				break;
+
+			/* Estimate the new function value -------------------------------- */
+			// f = evaluateSimilarity(x, intervals, grad, false, false, false);
+			f = evaluateSimilarityMultiThread(x, intervals, grad, false, false);
+
+			iter++;
+			if (showMarquardtOptim)
+				System.out.println("f(" + iter + ")=" + f + " lambda=" + lambda);
+			// TODO ProgressBar.stepProgressBar();
+
+			/* Update lambda -------------------------------------------------- */
+			if (rescuedf > f) {
+				// We save the last energy terms values in order to be displayed.
+				this.finalDirectConsistencyError = this.partialDirectConsitencyError;
+				this.finalDirectSimilarityError = this.partialDirectSimilarityError;
+				this.finalDirectRegularizationError = this.partialDirectRegularizationError;
+				this.finalDirectLandmarkError = this.partialDirectLandmarkError;
+
+				/* Check if the improvement is only residual */
+				lastBest.push_back(rescuedf - f);
+				if (lastBest.currentSize() == CUMULATIVE_SIZE && lastBest.getSum() / f < thChangef)
+					break;
+
+				/*
+				 * If we have improved then estimate the hessian, update the geometry,
+				 * and decrease the lambda
+				 */
+				/* Estimate the hessian ....................................... */
+				if (showMarquardtOptim)
+					System.out.println("  Accepted");
+				if ((last_successful_iter++ % 10) == 0 && outputLevel > -1)
+					updateCurrentOutput(x, intervals, false);
+
+				/* Estimate the difference between gradients */
+				for (i = 0; i < M; i++)
+					diffgrad[i] = grad[i] - rescuedgrad[i];
+
+				/* Multiply this difference by the current inverse of the hessian */
+				for (i = 0, p = 0; i < M; i++) {
+					Hdx[i] = 0.0F;
+					for (j = 0; j < M; j++, p++)
+						Hdx[i] += hess[p] * diffx[j];
+				}
+
+				/* Calculate dot products for the denominators ................ */
+				dgdx = dxHdx = sumdiffg = sumdiffx = 0.0F;
+				skip_update = true;
+				for (i = 0; i < M; i++) {
+					dgdx += diffgrad[i] * diffx[i];
+					dxHdx += diffx[i] * Hdx[i];
+					sumdiffg += diffgrad[i] * diffgrad[i];
+					sumdiffx += diffx[i] * diffx[i];
+					if (Math.abs(grad[i]) >= Math.abs(rescuedgrad[i]))
+						gmax = Math.abs(grad[i]);
+					else
+						gmax = Math.abs(rescuedgrad[i]);
+					if (gmax != 0 && Math.abs(diffgrad[i] - Hdx[i]) > Math.sqrt(EPS) * gmax)
+						skip_update = false;
+				}
+
+				/* Update hessian ............................................. */
+				/* Skip if fac not sufficiently positive */
+				if (dgdx > Math.sqrt(EPS * sumdiffg * sumdiffx) && !skip_update) {
+					fae = 1.0F / dxHdx;
+					fac = 1.0F / dgdx;
+
+					/* Update the hessian after BFGS formula */
+					for (i = 0, p = 0; i < M; i++)
+						for (j = 0; j < M; j++, p++) {
+							if (i <= j)
+								proposedHess[p] = hess[p] + fac * diffgrad[i] * diffgrad[j] - fae * (Hdx[i] * Hdx[j]);
+							else
+								proposedHess[p] = proposedHess[j * M + i];
+						}
+
+					ill_hessian = false;
+					if (!ill_hessian) {
+						for (i = 0, p = 0; i < M; i++)
+							for (j = 0; j < M; j++, p++)
+								hess[p] = proposedHess[p];
+					} else if (showMarquardtOptim)
+						System.out.println("Hessian cannot be safely updated, ill-conditioned");
+
+				} else if (showMarquardtOptim)
+					System.out.println("Hessian cannot be safely updated");
+
+				/* Update geometry and lambda ................................. */
+				rescuedf = f;
+				for (i = 0, p = 0; i < M; i++) {
+					rescuedx[i] = x[i];
+					rescuedgrad[i] = grad[i];
+					for (j = 0; j < M; j++, p++)
+						rescuedhess[p] = hess[p];
+				}
+				if (1e-4 < lambda)
+					lambda = lambda / 10;
+			} else {
+				/*
+				 * else, if it is worse, then recover the last geometry and increase
+				 * lambda, saturate lambda with FIRSTLAMBDA
+				 */
+				for (i = 0, p = 0; i < M; i++) {
+					x[i] = rescuedx[i];
+					grad[i] = rescuedgrad[i];
+					for (j = 0; j < M; j++, p++)
+						hess[p] = rescuedhess[p];
+				}
+				if (lambda < 1.0 / TINY)
+					lambda *= 10;
+				else
+					break;
+				if (lambda < FIRSTLAMBDA)
+					lambda = FIRSTLAMBDA;
+			}
+
+			stop = plugin != null && ((BUnwarp) plugin).isPluginInterrumped();
+		}
+
+		// Copy the values back to the input arrays
+		for (i = 0, p = 0; i < intervals + 3; i++)
+			for (j = 0; j < intervals + 3; j++, p++) {
+				cxTargetToSource[i][j] = x[p];
+
+				cyTargetToSource[i][j] = x[halfM + p];
+			}
+
+		// TODO ProgressBar.skipProgressBar(maxiter - iter);
+		return f;
 	}
 
-	// ------------------------------------------------------------------------------------------
 	/**
-	 * Correct scale on initial affine transform
-	 * 
-	 * @param scaleCorrection
-	 *          percentage of scale correction (0.0 - 1.0)
+	 * Propagate deformation coefficients to the next level.
+	 *
+	 * @param intervals
+	 *          number of intervals in the deformation
+	 * @param c
+	 *          B-spline coefficients
+	 * @param expansionFactor
+	 *          due to the change of size in the represented image
+	 * @return propagated coefficients
 	 */
-	public void setScaleCorrection(double scaleCorrection) {
-		if (scaleCorrection >= 0 && scaleCorrection <= 1.0)
-			this.tweakScale = scaleCorrection;
+	private double[][] propagateCoeffsToNextLevel(int intervals, final double[][] c, double expansionFactor) {
+		// Expand the coefficients for the next scale
+		intervals *= 2;
+		double[][] cs_expand = new double[intervals + 7][intervals + 7];
+
+		// Upsample
+		for (int i = 0; i < intervals + 7; i++)
+			for (int j = 0; j < intervals + 7; j++) {
+				// If it is not in an even sample then set it to 0
+				if (i % 2 == 0 || j % 2 == 0)
+					cs_expand[i][j] = 0.0F;
+				else {
+					// Now look for this sample in the coarser level
+					int ipc = (i - 1) / 2;
+					int jpc = (j - 1) / 2;
+					cs_expand[i][j] = c[ipc][jpc];
+				}
+			}
+
+		// Define the FIR filter
+		double[][] u2n = new double[4][];
+		u2n[0] = null;
+		u2n[1] = new double[3];
+		u2n[1][0] = 0.5F;
+		u2n[1][1] = 1.0F;
+		u2n[1][2] = 0.5F;
+		u2n[2] = null;
+		u2n[3] = new double[5];
+		u2n[3][0] = 0.125F;
+		u2n[3][1] = 0.5F;
+		u2n[3][2] = 0.75F;
+		u2n[3][3] = 0.5F;
+		u2n[3][4] = 0.125F;
+		int[] half_length_u2n = { 0, 1, 0, 2 };
+		int kh = half_length_u2n[transformationSplineDegree];
+
+		// Apply the u2n filter to rows
+		double[][] cs_expand_aux = new double[intervals + 7][intervals + 7];
+
+		for (int i = 1; i < intervals + 7; i += 2)
+			for (int j = 0; j < intervals + 7; j++) {
+				cs_expand_aux[i][j] = 0.0F;
+				for (int k = -kh; k <= kh; k++)
+					if (j + k >= 0 && j + k <= intervals + 6)
+						cs_expand_aux[i][j] += u2n[transformationSplineDegree][k + kh] * cs_expand[i][j + k];
+			}
+
+		// Apply the u2n filter to columns
+		for (int i = 0; i < intervals + 7; i++)
+			for (int j = 0; j < intervals + 7; j++) {
+				cs_expand[i][j] = 0.0F;
+				for (int k = -kh; k <= kh; k++)
+					if (i + k >= 0 && i + k <= intervals + 6)
+						cs_expand[i][j] += u2n[transformationSplineDegree][k + kh] * cs_expand_aux[i + k][j];
+			}
+
+		// Copy the central coefficients to c
+		double[][] newc = new double[intervals + 3][intervals + 3];
+		for (int i = 0; i < intervals + 3; i++)
+			for (int j = 0; j < intervals + 3; j++)
+				newc[i][j] = cs_expand[i + 2][j + 2] * expansionFactor;
+
+		// Return the new set of coefficients
+		return newc;
 	}
 
-	// ------------------------------------------------------------------------------------------
 	/**
-	 * Correct anisotropy on initial affine transform
-	 * 
-	 * @param isoCorrection
-	 *          percentage of anisotropy correction (0.0 - 1.0)
+	 * Show the direct transformation results(multi-thread version).
 	 */
-	public void setAnisotropyCorrection(double isoCorrection) {
-		if (isoCorrection >= 0 && isoCorrection <= 1.0)
-			this.tweakIso = isoCorrection;
+	public void showDirectResults() {
+		showTransformationMultiThread(intervals, cxTargetToSource, cyTargetToSource, false);
 	}
 
-} // end class Transformation
+	/**
+	 * Show the transformation (multi-thread version).
+	 *
+	 * @param intervals
+	 *          number of intervals in the deformation
+	 * @param cx
+	 *          x- deformation coefficients
+	 * @param cy
+	 *          y- deformation coefficients
+	 * @param bIsReverse
+	 *          flag to determine the transformation direction
+	 *          (target-source=FALSE or source-target=TRUE)
+	 */
+	private void showTransformationMultiThread(final int intervals, final double[][] cx, // Input,
+	                                                                                     // spline
+	                                                                                     // coefficients
+	    final double[][] cy, boolean bIsReverse) {
+
+		Sequence outputSeq = (!bIsReverse) ? this.outputSeq1 : this.outputSeq2;
+
+		// Calculate tranformation results
+		System.out.println("Calculating result window...");
+		Sequence result_imp = applyTransformationMultiThread(intervals, cx, cy, bIsReverse);
+
+		plugin.removeSequence(outputSeq);
+
+		outputSeq = result_imp;
+
+		plugin.addSequence(outputSeq);
+
+	}
+
+	/**
+	 * Apply the final transformation (multi-thread version).
+	 *
+	 * @param intervals
+	 *          number of intervals in the deformation
+	 * @param cx
+	 *          x- deformation coefficients
+	 * @param cy
+	 *          y- deformation coefficients
+	 * @param bIsReverse
+	 *          flag to determine the transformation direction
+	 *          (target-source=FALSE or source-target=TRUE)
+	 * 
+	 * @return output images (depending on the output level)
+	 */
+	private Sequence applyTransformationMultiThread(final int intervals, final double[][] cx, // Input,
+	                                                                                          // spline
+	                                                                                          // coefficients
+	    final double[][] cy, boolean bIsReverse) {
+		BSplineModel auxTarget = targetModel;
+		BSplineModel auxSource = sourceModel;
+		ROI2DPolygon auxTargetMsk = targetMask;
+		ROI2DPolygon auxSourceMsk = sourceMask;
+		int auxTargetWidth = this.originalTargetIBI.getWidth();
+		int auxTargetHeight = this.originalTargetIBI.getHeight();
+		IcyBufferedImage originalIBI = this.originalSourceIBI;
+
+		// Change if necessary
+		if (bIsReverse) {
+			auxTarget = sourceModel;
+			auxSource = targetModel;
+			auxTargetMsk = sourceMask;
+			auxSourceMsk = targetMask;
+			auxTargetWidth = this.originalSourceIBI.getWidth();
+			auxTargetHeight = this.originalSourceIBI.getHeight();
+			originalIBI = this.originalTargetIBI;
+		}
+
+		final Sequence is = new Sequence();
+		final String s = bIsReverse ? new String("Target") : new String("Source");
+
+		// Create transformation B-spline models
+		BSplineModel swx = new BSplineModel(cx);
+		BSplineModel swy = new BSplineModel(cy);
+
+		// We compute the deformation (transformation_x and transformation_y) on the
+		// fly
+
+		// /* GRAY SCALE IMAGES */
+		// if(!(originalIP instanceof ColorProcessor))
+		// {
+		// final FloatProcessor fp = new FloatProcessor(auxTargetWidth,
+		// auxTargetHeight);
+		// final FloatProcessor fp_mask = new FloatProcessor(auxTargetWidth,
+		// auxTargetHeight);
+		// final FloatProcessor fp_target = new FloatProcessor(auxTargetWidth,
+		// auxTargetHeight, auxTarget.getOriginalImage());
+		//
+		//
+		// // take original processor if necessary
+		// if(auxSource.getOriginalImageWidth() > auxSource.getWidth())
+		// {
+		// auxSource = new BSplineModel( originalIP, false, 1);
+		// auxSource.setPyramidDepth(0);
+		// auxSource.startPyramids();
+		//
+		// // Join thread
+		// try {
+		// auxSource.getThread().join();
+		// } catch (InterruptedException e) {
+		// IJ.error("Unexpected interruption exception " + e);
+		// }
+		// }
+		//
+		// // Check the number of processors in the computer
+		// int nproc = Runtime.getRuntime().availableProcessors();
+		//
+		// // We will use threads to display parts of the output image
+		// int block_height = auxTargetHeight / nproc;
+		// if (auxTargetHeight % 2 != 0)
+		// block_height++;
+		//
+		//
+		// int nThreads = nproc; /*(nproc > 1) ? (nproc / 2) : 1;
+		// if (this.accurate_mode == MainDialog.MONO_MODE)
+		// nThreads *= 2;*/
+		//
+		//
+		// Thread[] threads = new Thread[nThreads];
+		// Rectangle[] rects = new Rectangle[nThreads];
+		// FloatProcessor[] fp_tile = new FloatProcessor[nThreads];
+		// FloatProcessor[] fp_mask_tile = new FloatProcessor[nThreads];
+		//
+		// for (int i=0; i<nThreads; i++)
+		// {
+		// // last block size is the rest of the window
+		// int y_start = i*block_height;
+		//
+		// if (nThreads-1 == i)
+		// block_height = auxTargetHeight - i*block_height;
+		//
+		// rects[i] = new Rectangle(0, y_start, auxTargetWidth, block_height);
+		//
+		// //IJ.log("block = 0 " + (i*block_height) + " " + auxTargetWidth + " " +
+		// block_height );
+		//
+		// fp_tile[i] = new FloatProcessor(rects[i].width, rects[i].height);
+		// fp_mask_tile[i] = new FloatProcessor(rects[i].width, rects[i].height);
+		//
+		// threads[i] = new Thread(new GrayscaleResultTileMaker(swx, swy, auxSource,
+		// auxTargetWidth, auxTargetHeight,
+		// auxTargetMsk, auxSourceMsk,
+		// rects[i], fp_tile[i], fp_mask_tile[i]));
+		// threads[i].start();
+		// }
+		//
+		// for (int i=0; i<nThreads; i++)
+		// {
+		// try {
+		// threads[i].join();
+		// threads[i] = null;
+		// } catch (InterruptedException e) {
+		// e.printStackTrace();
+		// }
+		// }
+		//
+		// for (int i=0; i<nThreads; i++)
+		// {
+		// fp.insert(fp_tile[i], rects[i].x, rects[i].y);
+		// fp_tile[i] = null;
+		// fp_mask.insert(fp_mask_tile[i], rects[i].x, rects[i].y);
+		// fp_mask_tile[i] = null;
+		// rects[i] = null;
+		// }
+		//
+		// fp.resetMinAndMax();
+		//
+		// // Add slices to result stack
+		// is.addSlice("Registered " + s + " Image", fp);
+		// //if (outputLevel > -1)
+		// is.addSlice("Target Image", fp_target);
+		// //if (outputLevel > -1)
+		// is.addSlice("Warped Source Mask",fp_mask);
+		// }
+		// else /* COLOR IMAGES */
+		{
+			BSplineModel[] sourceModels = new BSplineModel[originalIBI.getSizeC()];
+			for (int c = 0; c < originalIBI.getSizeC(); c++) {
+				sourceModels[c] = new BSplineModel(IcyBufferedImageUtil.extractChannel(originalIBI, c), false, 1);
+				sourceModels[c].setPyramidDepth(0);
+				sourceModels[c].startPyramids();
+			}
+
+			// Join threads
+			try {
+				for (int c = 0; c < originalIBI.getSizeC(); c++) {
+					sourceModels[c].join();
+				}
+			} catch (InterruptedException e) {
+				System.err.println("Unexpected interruption exception " + e);
+			}
+
+			// Calculate warped RGB image
+			IcyBufferedImage ibi = new IcyBufferedImage(auxTargetWidth, auxTargetHeight, originalIBI.getSizeC(),
+			    originalIBI.getDataType_());
+			IcyBufferedImage ibi_mask = new IcyBufferedImage(auxTargetWidth, auxTargetHeight, originalIBI.getSizeC(),
+			    originalIBI.getDataType_());
+
+			// Check the number of processors in the computer
+			int nproc = Runtime.getRuntime().availableProcessors();
+
+			// We will use threads to display parts of the output image
+			int block_height = auxTargetHeight / nproc;
+			if (auxTargetHeight % 2 != 0)
+				block_height++;
+
+			int nThreads = nproc; /*
+			                       * (nproc > 1) ? (nproc / 2) : 1; if
+			                       * (this.accurate_mode == MainDialog.MONO_MODE)
+			                       * nThreads *= 2;
+			                       */
+
+			Thread[] threads = new Thread[nThreads];
+			Rectangle[] rects = new Rectangle[nThreads];
+			IcyBufferedImage[] ibi_tile = new IcyBufferedImage[nThreads];
+			IcyBufferedImage[] ibi_mask_tile = new IcyBufferedImage[nThreads];
+
+			for (int i = 0; i < nThreads; i++) {
+				// last block size is the rest of the window
+				int y_start = i * block_height;
+
+				if (nThreads - 1 == i)
+					block_height = auxTargetHeight - i * block_height;
+
+				rects[i] = new Rectangle(0, y_start, auxTargetWidth, block_height);
+
+				// IJ.log("block = 0 " + (i*block_height) + " " + auxTargetWidth + " " +
+				// block_height );
+
+				ibi_tile[i] = new IcyBufferedImage(rects[i].width, rects[i].height, originalIBI.getSizeC(),
+				    originalIBI.getDataType_());
+				ibi_mask_tile[i] = new IcyBufferedImage(rects[i].width, rects[i].height, originalIBI.getSizeC(),
+				    originalIBI.getDataType_());
+
+				threads[i] = new Thread(new ColorResultTileMaker(swx, swy, sourceModels, auxTargetWidth, auxTargetHeight,
+				    auxTargetMsk, auxSourceMsk, rects[i], ibi_tile[i], ibi_mask_tile[i]));
+				threads[i].start();
+			}
+
+			for (int i = 0; i < nThreads; i++) {
+				try {
+					threads[i].join();
+					threads[i] = null;
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			}
+
+			for (int i = 0; i < nThreads; i++) {
+				ibi.copyData(ibi_tile[i], null, new Point(rects[i].x, rects[i].y));
+				ibi_tile[i] = null;
+
+				ibi_mask.copyData(ibi_mask_tile[i], null, new Point(rects[i].x, rects[i].y));
+				ibi_mask_tile[i] = null;
+				rects[i] = null;
+			}
+
+			ibi.dataChanged();
+
+			// Add slices to result stack
+			is.beginUpdate();
+			is.setName("Registered " + s + " Image");
+			is.addImage(ibi);
+			// if (outputLevel > -1)
+			is.addImage(bIsReverse ? this.originalSourceIBI : this.originalTargetIBI);
+			// if (outputLevel > -1)
+			is.addImage(ibi_mask);
+
+		} // end caculate warped color image
+
+		if (outputLevel == 2) {
+			computeDeformationVectors(intervals, cx, cy, is, bIsReverse);
+			computeDeformationGrid(intervals, cx, cy, is, bIsReverse);
+		}
+
+		is.endUpdate();
+		return is;
+	}
+
+	/**
+	 * Class to run concurrent tile windows for final results (color)
+	 * 
+	 */
+	private class ColorResultTileMaker implements Runnable {
+		final BSplineModel swx;
+		final BSplineModel swy;
+		final BSplineModel[] sourceModels;
+		final int auxTargetCurrentWidth;
+		final int auxTargetCurrentHeight;
+		final ROI2DPolygon auxTargetMsk;
+		final ROI2DPolygon auxSourceMsk;
+		final Rectangle rect;
+		final private IcyBufferedImage ibiTile;
+		final private IcyBufferedImage ibiMaskTile;
+
+		// ------------------------------------------------------------------
+		/**
+		 * Color result tile maker constructor
+		 * 
+		 * @param swx
+		 *          B-spline interpolator for transformation in x-
+		 * @param swy
+		 *          B-spline interpolator for transformation in y-
+		 * @param sourceR
+		 *          red source image
+		 * @param sourceG
+		 *          green source image
+		 * @param sourceB
+		 *          blue source image
+		 * @param auxTargetCurrentWidth
+		 *          current target height
+		 * @param auxTargetCurrentHeight
+		 *          current target height
+		 * @param auxTargetMsk
+		 *          target mask
+		 * @param auxSourceMsk
+		 *          source mask
+		 * @param rect
+		 *          retangle with the coordinates of the output image to be updated
+		 * @param fpR
+		 *          red channel processor to be updated
+		 * @param fpG
+		 *          green channel processor to be updated
+		 * @param fpB
+		 *          blue channel processor to be updated
+		 * @param cp_mask
+		 *          mask color processor to be updated
+		 */
+		ColorResultTileMaker(BSplineModel swx, BSplineModel swy, BSplineModel[] sourceModels, int auxTargetCurrentWidth,
+		    int auxTargetCurrentHeight, ROI2DPolygon auxTargetMsk, ROI2DPolygon auxSourceMsk, Rectangle rect,
+		    IcyBufferedImage fpB, IcyBufferedImage cp_mask) {
+			this.swx = swx;
+			this.swy = swy;
+			this.sourceModels = sourceModels;
+			this.auxTargetCurrentWidth = auxTargetCurrentWidth;
+			this.auxTargetCurrentHeight = auxTargetCurrentHeight;
+			this.auxTargetMsk = auxTargetMsk;
+			this.auxSourceMsk = auxSourceMsk;
+			this.rect = rect;
+			this.ibiTile = fpB;
+			this.ibiMaskTile = cp_mask;
+		}
+
+		// ------------------------------------------------------------------
+		/**
+		 * Run method to update the intermediate window. Only the part defined by
+		 * the rectangle will be updated (in this thread).
+		 */
+		public void run() {
+			// Compute the warped image
+			int auxTargetHeight = rect.y + rect.height;
+			int auxTargetWidth = rect.x + rect.width;
+
+			double[][] ibiData = Array2DUtil.arrayToDoubleArray(ibiTile.getDataXYC(), ibiTile.isSignedDataType());
+			double[][] ibiMaskData = Array2DUtil.arrayToDoubleArray(ibiMaskTile.getDataXYC(), ibiMaskTile.isSignedDataType());
+
+			for (int v_rect = 0, v = rect.y; v < auxTargetHeight; v++, v_rect++) {
+				final int v_offset = v_rect * rect.width;
+				final double tv = (double) (v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
+
+				for (int u_rect = 0, u = rect.x; u < auxTargetWidth; u++, u_rect++) {
+
+					final double tu = (double) (u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
+					final double transformation_x_v_u = swx.prepareForInterpolationAndInterpolateI(tu, tv, false, ORIGINAL);
+					final double transformation_y_v_u = swy.prepareForInterpolationAndInterpolateI(tu, tv, false, ORIGINAL);
+
+					if (!auxTargetMsk.contains(u, v)) {
+						for (int c = 0; c < ibiTile.getSizeC(); c++) {
+							ibiData[c][u_rect + v_offset] = 0;
+							ibiMaskData[c][u_rect + v_offset] = 0;
+						}
+					} else {
+
+						final double x = transformation_x_v_u;
+						final double y = transformation_y_v_u;
+						if (auxSourceMsk.contains(x, y)) {
+							for (int c = 0; c < ibiTile.getSizeC(); c++) {
+								ibiData[c][u_rect + v_offset] = sourceModels[c].prepareForInterpolationAndInterpolateI(x, y, false,
+								    ORIGINAL);
+								ibiMaskData[c][u_rect + v_offset] = ibiMaskTile.getDataTypeMax();
+							}
+						} else {
+							for (int c = 0; c < ibiTile.getSizeC(); c++) {
+								ibiData[c][u_rect + v_offset] = 0;
+								ibiMaskData[c][u_rect + v_offset] = 0;
+							}
+						}
+					}
+				}
+			}
+
+			Array2DUtil.doubleArrayToArray(ibiData, ibiTile.getDataXYC());
+			Array2DUtil.doubleArrayToArray(ibiMaskData, ibiMaskTile.getDataXYC());
+			/*
+			 * (new ImagePlus("Red", fpR)).show(); (new ImagePlus("Green",
+			 * fpG)).show(); (new ImagePlus("Blue", fpB)).show();
+			 */
+
+		} /* end run method */
+
+	}
+
+	/**
+	 * Compute and draw the final deformation vectors.
+	 *
+	 * @param intervals
+	 *          number of intervals in the deformation
+	 * @param cx
+	 *          x- deformation coefficients
+	 * @param cy
+	 *          y- deformation coefficients
+	 * @param is
+	 *          image stack where we want to show the deformation vectors
+	 * @param bIsReverse
+	 *          flag to determine the transformation direction
+	 *          (target-source=FALSE or source-target=TRUE)
+	 */
+	private void computeDeformationVectors(int intervals, double[][] cx, double[][] cy, Sequence is, boolean bIsReverse) {
+		// Auxiliar variables for changing from source to target and inversely
+		ROI2DPolygon auxTargetMsk = this.targetMask;
+		ROI2DPolygon auxSourceMsk = this.sourceMask;
+		int auxTargetCurrentHeight = this.targetCurrentHeight;
+		int auxTargetCurrentWidth = this.targetCurrentWidth;
+
+		// Change if necessary
+		if (bIsReverse) {
+			auxTargetMsk = this.sourceMask;
+			auxSourceMsk = this.targetMask;
+			auxTargetCurrentHeight = this.sourceCurrentHeight;
+			auxTargetCurrentWidth = this.sourceCurrentWidth;
+		}
+
+		// Initialize output image
+		int stepv = Math.min(Math.max(10, auxTargetCurrentHeight / 15), 30);
+		int stepu = Math.min(Math.max(10, auxTargetCurrentWidth / 15), 30);
+
+		final double transformedImage[][] = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
+
+		for (int v = 0; v < auxTargetCurrentHeight; v++)
+			for (int u = 0; u < auxTargetCurrentWidth; u++)
+				transformedImage[v][u] = is.getDataTypeMax();
+
+		// Ask for memory for the transformation
+		double[][] transformation_x = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
+		double[][] transformation_y = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
+
+		// Compute the deformation
+		computeDeformation(intervals, cx, cy, transformation_x, transformation_y, bIsReverse);
+
+		// Show shift field ........................................
+		// Show deformation vectors
+		for (int v = 0; v < auxTargetCurrentHeight; v += stepv)
+			for (int u = 0; u < auxTargetCurrentWidth; u += stepu)
+				if (auxTargetMsk.contains(u, v)) {
+					final double x = transformation_x[v][u];
+					final double y = transformation_y[v][u];
+					if (auxSourceMsk.contains(x, y))
+						MiscTools.drawArrow(transformedImage, u, v, (int) Math.round(x), (int) Math.round(y), 0, 2);
+				}
+
+		// Set it to the image stack
+		IcyBufferedImage fp = new IcyBufferedImage(auxTargetCurrentWidth, auxTargetCurrentHeight, is.getSizeC(),
+		    is.getDataType_());
+		double[][] fpData = Array2DUtil.arrayToDoubleArray(fp.getDataXYC(), fp.isSignedDataType());
+		for (int v = 0; v < auxTargetCurrentHeight; v++)
+			for (int u = 0; u < auxTargetCurrentWidth; u++)
+				for (int c = 0; c < is.getSizeC(); c++)
+					fpData[c][auxTargetCurrentWidth] = transformedImage[v][u];
+
+		Array2DUtil.doubleArrayToArray(fpData, fp.getDataXYC());
+		fp.dataChanged();
+		is.addImage(fp);
+	}
+
+	/**
+	 * Compute the deformation.
+	 *
+	 * @param intervals
+	 *          input, number of intervals
+	 * @param cx
+	 *          input, X B-spline coefficients
+	 * @param cy
+	 *          input, Y B-spline coefficients
+	 * @param transformation_x
+	 *          output, X transformation map
+	 * @param transformation_y
+	 *          output, Y transformation map
+	 * @param bIsReverse
+	 *          determines the transformation direction (source-target=TRUE or
+	 *          target-source=FALSE)
+	 */
+	private void computeDeformation(final int intervals, final double[][] cx, final double[][] cy,
+	    final double[][] transformation_x, final double[][] transformation_y, boolean bIsReverse) {
+
+		int auxTargetCurrentHeight = this.targetCurrentHeight;
+		int auxTargetCurrentWidth = this.targetCurrentWidth;
+
+		if (bIsReverse) {
+			auxTargetCurrentHeight = this.sourceCurrentHeight;
+			auxTargetCurrentWidth = this.sourceCurrentWidth;
+		}
+
+		/*
+		 * // Set these coefficients to an interpolator BSplineModel swx = new
+		 * BSplineModel(cx); BSplineModel swy = new BSplineModel(cy);
+		 * 
+		 * 
+		 * // Compute the transformation mapping for (int v=0;
+		 * v<auxTargetCurrentHeight; v++) { final double tv = (double)(v *
+		 * intervals) / (double)(auxTargetCurrentHeight - 1) + 1.0F; for (int u = 0;
+		 * u<auxTargetCurrentWidth; u++) { final double tu = (double)(u * intervals)
+		 * / (double)(auxTargetCurrentWidth - 1) + 1.0F;
+		 * swx.prepareForInterpolation(tu, tv, ORIGINAL); transformation_x[v][u] =
+		 * swx.interpolateI(); swy.prepareForInterpolation(tu, tv, ORIGINAL);
+		 * transformation_y[v][u] = swy.interpolateI(); } }
+		 * 
+		 */
+
+		Thread x_thread = new Thread(
+		    new ConcurrentDeformation(cx, auxTargetCurrentHeight, auxTargetCurrentWidth, transformation_x, intervals));
+
+		Thread y_thread = new Thread(
+		    new ConcurrentDeformation(cy, auxTargetCurrentHeight, auxTargetCurrentWidth, transformation_y, intervals));
+
+		x_thread.start();
+		y_thread.start();
+
+		try {
+			x_thread.join();
+			y_thread.join();
+			x_thread = null;
+			y_thread = null;
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+
+	/**
+	 * Class to concurrently calculate the two deformation mapping tables
+	 * 
+	 */
+	private class ConcurrentDeformation extends Thread {
+		final double[][] c;
+		final int auxTargetCurrentHeight;
+		final int auxTargetCurrentWidth;
+		final double[][] transformation;
+		final int intervals;
+
+		ConcurrentDeformation(double[][] c, int auxTargetCurrentHeight, int auxTargetCurrentWidth,
+		    double[][] transformation, int intervals) {
+			this.c = c;
+			this.auxTargetCurrentWidth = auxTargetCurrentWidth;
+			this.auxTargetCurrentHeight = auxTargetCurrentHeight;
+			this.transformation = transformation;
+			this.intervals = intervals;
+		}
+
+		// ------------------------------------------------------------------
+		/**
+		 * Run method to calculate the corresponding X or Y transformation table.
+		 */
+		public void run() {
+			// Set these coefficients to an interpolator
+			BSplineModel sw = new BSplineModel(c);
+
+			// Compute the transformation mapping
+			for (int v = 0; v < auxTargetCurrentHeight; v++) {
+				final double tv = (double) (v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
+				for (int u = 0; u < auxTargetCurrentWidth; u++) {
+					final double tu = (double) (u * intervals) / (double) (auxTargetCurrentWidth - 1) + 1.0F;
+					transformation[v][u] = sw.prepareForInterpolationAndInterpolateI(tu, tv, false, ORIGINAL);
+				}
+			}
+		} /* end run */
+	}
+
+	/**
+	 * Compute and draw the final deformation grid.
+	 *
+	 * @param intervals
+	 *          number of intervals in the deformation
+	 * @param cx
+	 *          x- deformation coefficients
+	 * @param cy
+	 *          y- deformation coefficients
+	 * @param is
+	 *          image stack where we want to show the deformation grid
+	 * @param bIsReverse
+	 *          flag to determine the transformation direction
+	 *          (target-source=FALSE or source-target=TRUE)
+	 */
+	private void computeDeformationGrid(int intervals, double[][] cx, double[][] cy, Sequence is, boolean bIsReverse) {
+
+		int auxTargetCurrentHeight = this.targetCurrentHeight;
+		int auxTargetCurrentWidth = this.targetCurrentWidth;
+
+		if (bIsReverse) {
+			auxTargetCurrentHeight = sourceCurrentHeight;
+			auxTargetCurrentWidth = sourceCurrentWidth;
+		}
+		// Initialize output image
+		int stepv = Math.min(Math.max(10, auxTargetCurrentHeight / 15), 30);
+		int stepu = Math.min(Math.max(10, auxTargetCurrentWidth / 15), 30);
+		final double transformedImage[][] = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
+		for (int v = 0; v < auxTargetCurrentHeight; v++)
+			for (int u = 0; u < auxTargetCurrentWidth; u++)
+				transformedImage[v][u] = is.getDataTypeMax();
+
+		// Ask for memory for the transformation
+		double[][] transformation_x = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
+		double[][] transformation_y = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
+
+		// Compute the deformation
+		computeDeformation(intervals, cx, cy, transformation_x, transformation_y, bIsReverse);
+
+		// Show deformed grid ........................................
+		// Show deformation vectors
+		for (int v = 0; v < auxTargetCurrentHeight; v += stepv)
+			for (int u = 0; u < auxTargetCurrentWidth; u += stepu) {
+				final double x = transformation_x[v][u];
+				final double y = transformation_y[v][u];
+				// Draw horizontal line
+				int uh = u + stepu;
+				if (uh < auxTargetCurrentWidth) {
+					final double xh = transformation_x[v][uh];
+					final double yh = transformation_y[v][uh];
+					MiscTools.drawLine(transformedImage, (int) Math.round(x), (int) Math.round(y), (int) Math.round(xh),
+					    (int) Math.round(yh), 0);
+				}
+
+				// Draw vertical line
+				int vv = v + stepv;
+				if (vv < auxTargetCurrentHeight) {
+					final double xv = transformation_x[vv][u];
+					final double yv = transformation_y[vv][u];
+					MiscTools.drawLine(transformedImage, (int) Math.round(x), (int) Math.round(y), (int) Math.round(xv),
+					    (int) Math.round(yv), 0);
+				}
+			}
+
+		// Set it to the image stack
+		IcyBufferedImage fp = new IcyBufferedImage(auxTargetCurrentWidth, auxTargetCurrentHeight, is.getSizeC(),
+		    is.getDataType_());
+		double[][] fpData = Array2DUtil.arrayToDoubleArray(fp.getDataXYC(), fp.isSignedDataType());
+		for (int v = 0; v < auxTargetCurrentHeight; v++)
+			for (int u = 0; u < auxTargetCurrentWidth; u++)
+				for (int c = 0; c < fp.getSizeC(); c++)
+					fpData[c][u + v * auxTargetCurrentWidth] = transformedImage[v][u];
+
+		Array2DUtil.doubleArrayToArray(fpData, fp.getDataXYC());
+		fp.dataChanged();
+		is.addImage(fp);
+	}
+
+	/**
+	 * Registration method. It applies the consistent and elastic registration
+	 * algorithm to the selected source and target images.
+	 */
+	public void doBidirectionalRegistration() {
+		// This function can only be applied with splines of an odd order
+
+		// Bring into consideration the image/coefficients at the smallest scale
+		sourceModel.popFromPyramid();
+		targetModel.popFromPyramid();
+
+		// size correction factor
+		int sizeCorrectionFactor = 0; // this.targetHeight / (1024 * (int)
+		                              // Math.pow(2,
+		                              // this.maxImageSubsamplingFactor));
+		// System.out.println("Size correction factor = " + sizeCorrectionFactor);
+
+		targetCurrentHeight = targetModel.getCurrentHeight();
+		targetCurrentWidth = targetModel.getCurrentWidth();
+
+		targetFactorHeight = targetModel.getFactorHeight();
+		targetFactorWidth = targetModel.getFactorWidth();
+
+		sourceCurrentHeight = sourceModel.getCurrentHeight();
+		sourceCurrentWidth = sourceModel.getCurrentWidth();
+
+		sourceFactorHeight = sourceModel.getFactorHeight();
+		sourceFactorWidth = sourceModel.getFactorWidth();
+
+		// Ask memory for the transformation coefficients
+		intervals = (int) Math.pow(2, minScaleDeformation + sizeCorrectionFactor);
+
+		cxTargetToSource = new double[intervals + 3][intervals + 3];
+		cyTargetToSource = new double[intervals + 3][intervals + 3];
+
+		// Build matrices for computing the regularization
+		buildRegularizationTemporary(intervals, false);
+		buildRegularizationTemporary(intervals, true);
+
+		// Ask for memory for the residues
+		final int K;
+		if (targetLandmarks != null)
+			K = targetLandmarks.size();
+		else
+			K = 0;
+		double[] dxTargetToSource = new double[K];
+		double[] dyTargetToSource = new double[K];
+		computeInitialResidues(dxTargetToSource, dyTargetToSource, false);
+		computeInitialResidues(dxTargetToSource, dyTargetToSource, false);
+
+		// Compute the affine transformation FROM THE TARGET TO THE SOURCE
+		// coordinates
+		// Notice that this matrix is independent of the scale (unless it was loaded
+		// from
+		// file), but the residues are not
+		double[][] affineMatrix = null;
+		// NOTE: after version 1.1 the landmarks are always used to calculate
+		// an initial affine transformation (whether the landmarks weight is 0 or
+		// not).
+		affineMatrix = computeAffineMatrix(false);
+
+		// Incorporate the affine transformation into the spline coefficient
+		for (int i = 0; i < intervals + 3; i++) {
+			final double v = (double) ((i - 1) * (targetCurrentHeight - 1)) / (double) intervals;
+			final double xv = affineMatrix[0][2] + affineMatrix[0][1] * v;
+			final double yv = affineMatrix[1][2] + affineMatrix[1][1] * v;
+			for (int j = 0; j < intervals + 3; j++) {
+				final double u = (double) ((j - 1) * (targetCurrentWidth - 1)) / (double) intervals;
+				cxTargetToSource[i][j] = xv + affineMatrix[0][0] * u;
+				cyTargetToSource[i][j] = yv + affineMatrix[1][0] * u;
+			}
+		}
+
+		// Compute the affine transformation FROM THE SOURCE TO THE TARGET
+		// coordinates
+		// Notice again that this matrix is independent of the scale, but the
+		// residues are not
+		// Ask for memory for the residues
+		final int K2;
+		if (sourceLandmarks != null)
+			K2 = sourceLandmarks.size();
+		else
+			K2 = 0;
+		double[] dxSourceToTarget = new double[K2];
+		double[] dySourceToTarget = new double[K2];
+		computeInitialResidues(dxSourceToTarget, dySourceToTarget, true);
+		computeInitialResidues(dxSourceToTarget, dySourceToTarget, true);
+
+		cxSourceToTarget = new double[intervals + 3][intervals + 3];
+		cySourceToTarget = new double[intervals + 3][intervals + 3];
+
+		// NOTE: after version 1.1 the landmarks are always used to calculate
+		// an initial affine transformation (whether the landmarks weight is 0 or
+		// not).
+		affineMatrix = computeAffineMatrix(true);
+
+		// Incorporate the affine transformation into the spline coefficient
+		for (int i = 0; i < intervals + 3; i++) {
+			final double v = (double) ((i - 1) * (sourceCurrentHeight - 1)) / (double) intervals;
+			final double xv = affineMatrix[0][2] + affineMatrix[0][1] * v;
+			final double yv = affineMatrix[1][2] + affineMatrix[1][1] * v;
+			for (int j = 0; j < intervals + 3; j++) {
+				final double u = (double) ((j - 1) * (sourceCurrentWidth - 1)) / (double) intervals;
+				cxSourceToTarget[i][j] = xv + affineMatrix[0][0] * u;
+				cySourceToTarget[i][j] = yv + affineMatrix[1][0] * u;
+			}
+		}
+
+		// Now refine with the different scales
+		int state; // state=-1 --> Finish
+		// state= 0 --> Increase deformation detail
+		// state= 1 --> Increase image detail
+		// state= 2 --> Do nothing until the finest image scale
+		if (minScaleDeformation == maxScaleDeformation)
+			state = 1;
+		else
+			state = 0;
+		int s = minScaleDeformation;
+		int step = 0;
+		computeTotalWorkload();
+
+		while (state != -1) {
+			int currentDepth = targetModel.getCurrentDepth();
+
+			// Update the deformation coefficients only in states 0 and 1
+			if (state == 0 || state == 1) {
+				// Update the deformation coefficients with the error of the landmarks
+				// The following conditional is now useless but it is there to allow
+				// easy changes like applying the landmarks only in the coarsest
+				// deformation
+				if (s >= minScaleDeformation) {
+					// Number of intervals at this scale and ask for memory
+					intervals = (int) Math.pow(2, s + sizeCorrectionFactor);
+					final double[][] newcxTargetToSource = new double[intervals + 3][intervals + 3];
+					final double[][] newcyTargetToSource = new double[intervals + 3][intervals + 3];
+
+					final double[][] newcxSourceToTarget = new double[intervals + 3][intervals + 3];
+					final double[][] newcySourceToTarget = new double[intervals + 3][intervals + 3];
+
+					// Compute the coefficients at this scale
+					boolean underconstrained = true;
+					// FROM TARGET TO SOURCE.
+					if (divWeight == 0 && curlWeight == 0)
+						underconstrained = computeCoefficientsScale(intervals, dxTargetToSource, dyTargetToSource,
+						    newcxTargetToSource, newcyTargetToSource, false);
+					else
+						underconstrained = computeCoefficientsScaleWithRegularization(intervals, dxTargetToSource, dyTargetToSource,
+						    newcxTargetToSource, newcyTargetToSource, false);
+
+					// Incorporate information from the previous scale
+					if (!underconstrained || (step == 0 && landmarkWeight != 0)) {
+						for (int i = 0; i < intervals + 3; i++)
+							for (int j = 0; j < intervals + 3; j++) {
+								cxTargetToSource[i][j] += newcxTargetToSource[i][j];
+								cyTargetToSource[i][j] += newcyTargetToSource[i][j];
+							}
+					}
+
+					// FROM SOURCE TO TARGET.
+					underconstrained = true;
+					if (divWeight == 0 && curlWeight == 0)
+						underconstrained = computeCoefficientsScale(intervals, dxSourceToTarget, dySourceToTarget,
+						    newcxSourceToTarget, newcySourceToTarget, true);
+					else
+						underconstrained = computeCoefficientsScaleWithRegularization(intervals, dxSourceToTarget, dySourceToTarget,
+						    newcxSourceToTarget, newcySourceToTarget, true);
+
+					// Incorporate information from the previous scale
+					if (!underconstrained || (step == 0 && landmarkWeight != 0)) {
+						for (int i = 0; i < intervals + 3; i++)
+							for (int j = 0; j < intervals + 3; j++) {
+								cxSourceToTarget[i][j] += newcxSourceToTarget[i][j];
+								cySourceToTarget[i][j] += newcySourceToTarget[i][j];
+							}
+					}
+				}
+
+				// Optimize deformation coefficients
+				// if (imageWeight!=0)
+				optimizeCoeffs(intervals, stopThreshold, cxTargetToSource, cyTargetToSource, cxSourceToTarget,
+				    cySourceToTarget);
+			}
+
+			// Prepare for next iteration
+			step++;
+			switch (state) {
+			case 0:
+				// Finer details in the deformation
+				if (s < maxScaleDeformation) {
+					cxTargetToSource = propagateCoeffsToNextLevel(intervals, cxTargetToSource, 1);
+					cyTargetToSource = propagateCoeffsToNextLevel(intervals, cyTargetToSource, 1);
+					cxSourceToTarget = propagateCoeffsToNextLevel(intervals, cxSourceToTarget, 1);
+					cySourceToTarget = propagateCoeffsToNextLevel(intervals, cySourceToTarget, 1);
+					s++;
+					intervals *= 2;
+
+					// Prepare matrices for the regularization term
+					buildRegularizationTemporary(intervals, false);
+					buildRegularizationTemporary(intervals, true);
+
+					if (currentDepth > minScaleImage)
+						state = 1;
+					else
+						state = 0;
+				} else if (currentDepth > minScaleImage)
+					state = 1;
+				else
+					state = 2;
+				break;
+			case 1: // Finer details in the image, go on optimizing
+			case 2: // Finer details in the image, do not optimize
+				// Compute next state
+				if (state == 1) {
+					if (s == maxScaleDeformation && currentDepth == minScaleImage)
+						state = 2;
+					else if (s == maxScaleDeformation)
+						state = 1;
+					else
+						state = 0;
+				} else if (state == 2) {
+					if (currentDepth == 0)
+						state = -1;
+					else
+						state = 2;
+				}
+
+				// Pop another image and prepare the deformation
+				if (currentDepth != 0) {
+					double oldTargetCurrentHeight = targetCurrentHeight;
+					double oldTargetCurrentWidth = targetCurrentWidth;
+					double oldSourceCurrentHeight = sourceCurrentHeight;
+					double oldSourceCurrentWidth = sourceCurrentWidth;
+
+					sourceModel.popFromPyramid();
+					targetModel.popFromPyramid();
+
+					targetCurrentHeight = targetModel.getCurrentHeight();
+					targetCurrentWidth = targetModel.getCurrentWidth();
+					targetFactorHeight = targetModel.getFactorHeight();
+					targetFactorWidth = targetModel.getFactorWidth();
+
+					sourceCurrentHeight = sourceModel.getCurrentHeight();
+					sourceCurrentWidth = sourceModel.getCurrentWidth();
+					sourceFactorHeight = sourceModel.getFactorHeight();
+					sourceFactorWidth = sourceModel.getFactorWidth();
+
+					// Adapt the transformation to the new image size
+					double targetFactorY = (targetCurrentHeight - 1) / (oldTargetCurrentHeight - 1);
+					double targetFactorX = (targetCurrentWidth - 1) / (oldTargetCurrentWidth - 1);
+					double sourceFactorY = (sourceCurrentHeight - 1) / (oldSourceCurrentHeight - 1);
+					double sourceFactorX = (sourceCurrentWidth - 1) / (oldSourceCurrentWidth - 1);
+
+					for (int i = 0; i < intervals + 3; i++)
+						for (int j = 0; j < intervals + 3; j++) {
+							cxTargetToSource[i][j] *= targetFactorX;
+							cyTargetToSource[i][j] *= targetFactorY;
+							cxSourceToTarget[i][j] *= sourceFactorX;
+							cySourceToTarget[i][j] *= sourceFactorY;
+						}
+
+					// Prepare matrices for the regularization term
+					buildRegularizationTemporary(intervals, false);
+					buildRegularizationTemporary(intervals, true);
+				}
+				break;
+			}
+
+			// In accurate_mode reduce the stopping threshold for the last iteration
+			if ((state == 0 || state == 1) && s == maxScaleDeformation && currentDepth == minScaleImage + 1
+			    && accurateMode == 1)
+				stopThreshold /= 10;
+
+		} // end while (state != -1).
+
+		// Adapt coefficients if necessary
+		if (sourceModel.getOriginalImageWidth() > this.sourceCurrentWidth) {
+			if (sourceModel.isSubOutput() || targetModel.isSubOutput())
+				System.out.println("Adapting coefficients from " + this.sourceCurrentWidth + " to "
+				    + sourceModel.getOriginalImageWidth() + "...");
+			// Adapt the transformation to the new image size
+			double targetFactorY = (targetModel.getOriginalImageHeight() - 1) / (targetCurrentHeight - 1);
+			double targetFactorX = (targetModel.getOriginalImageWidth() - 1) / (targetCurrentWidth - 1);
+			double sourceFactorY = (sourceModel.getOriginalImageHeight() - 1) / (sourceCurrentHeight - 1);
+			double sourceFactorX = (sourceModel.getOriginalImageWidth() - 1) / (sourceCurrentWidth - 1);
+
+			for (int i = 0; i < intervals + 3; i++)
+				for (int j = 0; j < intervals + 3; j++) {
+					cxTargetToSource[i][j] *= targetFactorX;
+					cyTargetToSource[i][j] *= targetFactorY;
+					cxSourceToTarget[i][j] *= sourceFactorX;
+					cySourceToTarget[i][j] *= sourceFactorY;
+				}
+			this.targetCurrentHeight = targetModel.getOriginalImageHeight();
+			this.targetCurrentWidth = targetModel.getOriginalImageWidth();
+			this.sourceCurrentHeight = sourceModel.getOriginalImageHeight();
+			this.sourceCurrentWidth = sourceModel.getOriginalImageWidth();
+		}
+		
+		// Display final errors.
+		if (this.outputLevel == 2) {
+			if (this.imageWeight != 0) {
+				System.out.println(" Optimal direct similarity error = " + this.finalDirectSimilarityError);
+				System.out.println(" Optimal inverse similarity error = " + this.finalInverseSimilarityError);
+			}
+			if (this.curlWeight != 0 || this.divWeight != 0) {
+				System.out.println(" Optimal direct regularization error = " + this.finalDirectRegularizationError);
+				System.out.println(" Optimal inverse regularization error = " + this.finalInverseRegularizationError);
+			}
+			if (this.landmarkWeight != 0) {
+				System.out.println(" Optimal direct landmark error = " + this.finalDirectLandmarkError);
+				System.out.println(" Optimal inverse landmark error = " + this.finalInverseLandmarkError);
+			}
+			if (this.consistencyWeight != 0) {
+				System.out.println(" Optimal direct consistency error = " + this.finalDirectConsistencyError);
+				System.out.println(" Optimal inverse consistency error = " + this.finalInverseConsistencyError);
+			}
+		}
+
+	}
+
+	/**
+	 * Show the inverse transformation results (multi-thread version).
+	 */
+	public void showInverseResults() {
+		showTransformationMultiThread(intervals, cxSourceToTarget, cySourceToTarget, true);
+	}
+}

@@ -8,13 +8,19 @@ package algorithms.danyfel80.registration.bunwarp;
  * @author Daniel Felipe Gonzalez Obando
  */
 public enum RegistrationModeEnum {
- FAST("Fast"),
- ACCURATE("Accurate"),
- MONO("Mono");
+ FAST(0, "Fast"),
+ ACCURATE(1, "Accurate"),
+ MONO(2, "Mono");
  
  private final String name;
- RegistrationModeEnum(String name) {
+ private final int number;
+ RegistrationModeEnum(int number, String name) {
 	 this.name = name;
+	 this.number = number;
+ }
+ 
+ public int getNumber() {
+	 return number;
  }
  
  @Override
