@@ -67,9 +67,13 @@ public class BUnwarpper extends Thread {
 	/** maximum depth for the image pyramid */
 	private int imagePyramidDepth;
 
+	/** warp transformation */
+	private Transformation warp;
+
 	// Ez Plugin
 	/** Ez Plugin reference */
 	private EzPlug plugin;
+
 	/*
 	 * List<ROI2DPoint> srcLandmarks, List<ROI2DPoint> tgtLandmarks, ROI2DPolygon
 	 * srcMask, ROI2DPolygon tgtMask, RegistrationModeEnum mode, Integer
@@ -137,7 +141,8 @@ public class BUnwarpper extends Thread {
 		// Start pyramids
 		System.out.println("Starting image pyramids...");
 		if (targetModel.getWidth() > BSplineModel.MAX_OUTPUT_SIZE || targetModel.getHeight() > BSplineModel.MAX_OUTPUT_SIZE
-		    || sourceModel.getWidth() > BSplineModel.MAX_OUTPUT_SIZE || sourceModel.getHeight() > BSplineModel.MAX_OUTPUT_SIZE)
+		    || sourceModel.getWidth() > BSplineModel.MAX_OUTPUT_SIZE
+		    || sourceModel.getHeight() > BSplineModel.MAX_OUTPUT_SIZE)
 			System.out.println("Starting image pyramids...");
 
 		sourceModel.startPyramids();
@@ -146,10 +151,10 @@ public class BUnwarpper extends Thread {
 		try {
 			sourceModel.join();
 			targetModel.join();
-		} catch(InterruptedException e) {
+		} catch (InterruptedException e) {
 			System.err.println("Unhandled interruption: " + e);
 		}
-		
+
 		// Create output image (source-target)
 		final Sequence[] outputSeqs = initializeOutputSeqs();
 
@@ -161,10 +166,10 @@ public class BUnwarpper extends Thread {
 		// maxImageSubsamplingFactor);
 
 		// Prepare registration parameters
-		final Transformation warp = new Transformation(sourceSeq, targetSeq, sourceModel, targetModel, sourceLandmarks, targetLandmarks, sourceMask,
-		    targetMask, minScaleDeformation, maxScaleDeformation,
-		    minScaleImage, divWeight, curlWeight, landmarkWeight, imageWeight, consistencyWeight, stopThreshold,
-		    outputLevel, showMarquardtOptim, accurateMode, outputSeqs[0], outputSeqs[1], plugin);
+		warp = new Transformation(sourceSeq, targetSeq, sourceModel, targetModel, sourceLandmarks, targetLandmarks,
+		    sourceMask, targetMask, minScaleDeformation, maxScaleDeformation, minScaleImage, divWeight, curlWeight,
+		    landmarkWeight, imageWeight, consistencyWeight, stopThreshold, outputLevel, showMarquardtOptim, accurateMode,
+		    outputSeqs[0], outputSeqs[1], plugin);
 
 		// Perform the registration
 		System.out.println("Registering...");
@@ -196,113 +201,112 @@ public class BUnwarpper extends Thread {
 		long stop = System.currentTimeMillis(); // stop timing
 		if (outputLevel == 2)
 			System.out.println("\nRegistration time: " + (stop - start) + "ms"); // print
-		
-		((BUnwarp)plugin).restoreAll();
+
+		((BUnwarp) plugin).restoreAll();
 	}
 
 	private Sequence[] initializeOutputSeqs() {
+		int Xdimt = targetModel.getWidth();
 		int Ydimt = targetModel.getHeight();
-    int Xdimt = targetModel.getWidth();
-    int Xdims = sourceModel.getWidth();
-    int Ydims = sourceModel.getHeight();
-    double[] tImage = targetModel.isSubOutput() ? targetModel.getSubImage() : targetModel.getImage();
-    double[] sImage = sourceModel.isSubOutput() ? sourceModel.getSubImage() : sourceModel.getImage(); 
-    int sSubFactorX = 1;
-    int sSubFactorY = 1;
-    int tSubFactorX = 1;
-    int tSubFactorY = 1;
-    Sequence[] outputSeqs = new Sequence[2];
-    	
-    String extraTitleS = "";
-    String extraTitleT = "";
+		int Xdims = sourceModel.getWidth();
+		int Ydims = sourceModel.getHeight();
+		double[] tImage = targetModel.isSubOutput() ? targetModel.getSubImage() : targetModel.getImage();
+		double[] sImage = sourceModel.isSubOutput() ? sourceModel.getSubImage() : sourceModel.getImage();
+		int sSubFactorX = 1;
+		int sSubFactorY = 1;
+		int tSubFactorX = 1;
+		int tSubFactorY = 1;
+		Sequence[] outputSeqs = new Sequence[2];
 
-    if(targetModel.isSubOutput() || sourceModel.isSubOutput())
-    	System.out.println("Initializing output windows...");
-    
-    // If the output (difference) images are subsampled (because they were
-    // larger than the maximum size), update variables.
-    if(targetModel.isSubOutput())
-    {        	
-    	tSubFactorX = Xdimt / targetModel.getSubWidth();
-    	tSubFactorY = Ydimt / targetModel.getSubHeight();
-    	extraTitleT = " (Subsampled)";
-    	Xdimt = targetModel.getSubWidth();
-    	Ydimt = targetModel.getSubHeight();        	          	        	       			        	
-    }
-    
-    if(sourceModel.isSubOutput())
-	{
-		sSubFactorX = Xdims / sourceModel.getSubWidth();
-    	sSubFactorY = Ydims / sourceModel.getSubHeight();
-    	extraTitleS = " (Subsampled)";
-		Xdims = sourceModel.getSubWidth();
-		Ydims = sourceModel.getSubHeight();
-	} 
-    
-    // Float processor for the output source-target image.
-    final IcyBufferedImage ibi = new IcyBufferedImage(Xdimt, Ydimt, 1, DataType.FLOAT);
-    float[] ibiData = ibi.getDataXYAsFloat(0);               
-                    
-    for (int i=0; i<Ydimt; i++)
-	{
-		final int i_offset_t = i * Xdimt; 
-		final int i_offset_s = i * Xdims; 
-		final int i_s_sub = i * sSubFactorY;
-		final int i_t_sub = i * tSubFactorY;
-		
-		for (int j=0; j<Xdimt; j++)
-		{
-			    				
-			if (sourceMask.contains(j * sSubFactorX, i_s_sub) && targetMask.contains(j * tSubFactorX, i_t_sub)
-					&& j < Xdims && i < Ydims)
-				ibiData[j + i_offset_t] = (float) (tImage[i_offset_t + j] - sImage[i_offset_s + j]);
-			else
-			{
-				ibiData[j + i_offset_t] = 0;
-			}
+		String extraTitleS = "";
+		String extraTitleT = "";
 
+		if (targetModel.isSubOutput() || sourceModel.isSubOutput())
+			System.out.println("Initializing output windows...");
+
+		// If the output (difference) images are subsampled (because they were
+		// larger than the maximum size), update variables.
+		if (targetModel.isSubOutput()) {
+			tSubFactorX = Xdimt / targetModel.getSubWidth();
+			tSubFactorY = Ydimt / targetModel.getSubHeight();
+			extraTitleT = " (Subsampled)";
+			Xdimt = targetModel.getSubWidth();
+			Ydimt = targetModel.getSubHeight();
 		}
+
+		if (sourceModel.isSubOutput()) {
+			sSubFactorX = Xdims / sourceModel.getSubWidth();
+			sSubFactorY = Ydims / sourceModel.getSubHeight();
+			extraTitleS = " (Subsampled)";
+			Xdims = sourceModel.getSubWidth();
+			Ydims = sourceModel.getSubHeight();
+		}
+
+		// Float processor for the output source-target image.
+		final IcyBufferedImage ibi = new IcyBufferedImage(Xdimt, Ydimt, 1, DataType.FLOAT);
+		float[] ibiData = ibi.getDataXYAsFloat(0);
+
+		for (int i = 0; i < Ydimt; i++) {
+			final int i_offset_t = i * Xdimt;
+			final int i_offset_s = i * Xdims;
+			final int i_s_sub = i * sSubFactorY;
+			final int i_t_sub = i * tSubFactorY;
+
+			for (int j = 0; j < Xdimt; j++) {
+
+				if (sourceMask.contains(j * sSubFactorX, i_s_sub) && targetMask.contains(j * tSubFactorX, i_t_sub) && j < Xdims
+				    && i < Ydims)
+					ibiData[j + i_offset_t] = (float) (tImage[i_offset_t + j] - sImage[i_offset_s + j]);
+				else {
+					ibiData[j + i_offset_t] = 0;
+				}
+
+			}
+		}
+		ibi.dataChanged();
+
+		final Sequence seq1 = new Sequence("Output Source-Target" + extraTitleS, ibi);
+		plugin.addSequence(seq1);
+
+		outputSeqs[0] = seq1;
+
+		// Create output image (target-source) if necessary
+
+		if (this.accurateMode != RegistrationModeEnum.MONO.getNumber()) {
+			final IcyBufferedImage ibi2 = new IcyBufferedImage(Xdims, Ydims, 1, DataType.FLOAT);
+			float[] ibi2Data = ibi2.getDataXYAsFloat(0);
+
+			for (int i = 0; i < Ydims; i++) {
+				int i_offset_t = i * Xdimt;
+				int i_offset_s = i * Xdims;
+				int i_s_sub = i * sSubFactorY;
+				int i_t_sub = i * tSubFactorY;
+
+				for (int j = 0; j < Xdims; j++)
+					if (targetMask.contains(j * tSubFactorX, i_t_sub) && sourceMask.contains(j * sSubFactorX, i_s_sub)
+					    && i < Ydimt && j < Xdimt)
+						ibi2Data[j + i_offset_s] = (float) (sImage[i_offset_s + j] - tImage[i_offset_t + j]);
+					else
+						ibi2Data[j + i_offset_s] = 0;
+			}
+			ibi2.dataChanged();
+
+			final Sequence seq2 = new Sequence("Output Target-Source" + extraTitleT, ibi2);
+			plugin.addSequence(seq2);
+
+			outputSeqs[1] = seq2;
+		} else
+			outputSeqs[1] = null;
+
+		return outputSeqs;
 	}
-	ibi.dataChanged();
 
-    final Sequence seq1 = new Sequence("Output Source-Target" + extraTitleS, ibi);
-    plugin.addSequence(seq1);
-    
-    outputSeqs[0] = seq1;
+	public void getRegisteredSource(Sequence srcTgtSeq) {
+		warp.getRegisteredSource(srcTgtSeq);
+	}
 
-    // Create output image (target-source) if necessary                        
-    
-    if(this.accurateMode != RegistrationModeEnum.MONO.getNumber())
-    {
-    	final IcyBufferedImage ibi2 = new IcyBufferedImage(Xdims, Ydims, 1, DataType.FLOAT);
-    	float[] ibi2Data = ibi2.getDataXYAsFloat(0);
-
-    	for (int i=0; i<Ydims; i++)
-    	{
-    		int i_offset_t = i * Xdimt; 
-    		int i_offset_s = i * Xdims; 
-    		int i_s_sub = i * sSubFactorY;
-    		int i_t_sub = i * tSubFactorY;
-    		
-    		for (int j=0; j<Xdims; j++)
-    			if (targetMask.contains(j * tSubFactorX, i_t_sub) && sourceMask.contains(j * sSubFactorX, i_s_sub)
-    					&& i < Ydimt && j < Xdimt)
-    				ibi2Data[j + i_offset_s] = (float) (sImage[i_offset_s + j] - tImage[i_offset_t + j]);
-    			else 
-    				ibi2Data[j + i_offset_s] = 0;
-    	}
-    	ibi2.dataChanged();
-    	
-    	
-    	final Sequence seq2 = new Sequence("Output Target-Source" + extraTitleT, ibi2);
-    	plugin.addSequence(seq2);
-    	
-    	outputSeqs[1] = seq2;
-    }
-    else
-    	outputSeqs[1] = null;
-    
-    return outputSeqs;
+	public void getRegisteredTarget(Sequence tgtTgtSeq) {
+		warp.getRegisteredTarget(tgtTgtSeq);
 	}
 
 }

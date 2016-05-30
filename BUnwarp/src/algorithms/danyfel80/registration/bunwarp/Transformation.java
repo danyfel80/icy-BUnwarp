@@ -936,7 +936,7 @@ public class Transformation {
 		int K = 0;
 
 		if (auxTargetPh != null)
-			auxTargetPh.size();
+			K = auxTargetPh.size();
 
 		for (int k = 0; k < K; k++) {
 			final Point2D sourcePoint = sourceVector.get(k);
@@ -2766,7 +2766,7 @@ public class Transformation {
 			// Last block goes to the end of the window
 			int x_start = i * block_height;
 			if (nThreads - 1 == i)
-				block_height = auxTargetHeight / (int) subFactorWidth - i * block_height;
+				block_height = auxTargetHeight / (int) subFactorHeight - i * block_height;
 			/*
 			 * IJ.log("block height " + block_height); IJ.log("Update : 0 " + " "+
 			 * x_start +" " + (auxTargetWidth / (int)subFactorWidth) + " " +
@@ -3777,8 +3777,8 @@ public class Transformation {
 	                                                                                          // spline
 	                                                                                          // coefficients
 	    final double[][] cy, boolean bIsReverse) {
-//		BSplineModel auxTarget = targetModel;
-//		BSplineModel auxSource = sourceModel;
+		// BSplineModel auxTarget = targetModel;
+		// BSplineModel auxSource = sourceModel;
 		ROI2DPolygon auxTargetMsk = targetMask;
 		ROI2DPolygon auxSourceMsk = sourceMask;
 		int auxTargetWidth = this.originalTargetIBI.getWidth();
@@ -3787,8 +3787,8 @@ public class Transformation {
 
 		// Change if necessary
 		if (bIsReverse) {
-			//auxTarget = sourceModel;
-			//auxSource = targetModel;
+			// auxTarget = sourceModel;
+			// auxSource = targetModel;
 			auxTargetMsk = sourceMask;
 			auxSourceMsk = targetMask;
 			auxTargetWidth = this.originalSourceIBI.getWidth();
@@ -4119,8 +4119,8 @@ public class Transformation {
 				}
 			}
 
-			Array2DUtil.doubleArrayToArray(ibiData, ibiTile.getDataXYC());
-			Array2DUtil.doubleArrayToArray(ibiMaskData, ibiMaskTile.getDataXYC());
+			Array2DUtil.doubleArrayToSafeArray(ibiData, ibiTile.getDataXYC(), ibiTile.isSignedDataType());
+			Array2DUtil.doubleArrayToSafeArray(ibiMaskData, ibiMaskTile.getDataXYC(), ibiMaskTile.isSignedDataType());
 			/*
 			 * (new ImagePlus("Red", fpR)).show(); (new ImagePlus("Green",
 			 * fpG)).show(); (new ImagePlus("Blue", fpB)).show();
@@ -4195,9 +4195,9 @@ public class Transformation {
 		for (int v = 0; v < auxTargetCurrentHeight; v++)
 			for (int u = 0; u < auxTargetCurrentWidth; u++)
 				for (int c = 0; c < is.getSizeC(); c++)
-					fpData[c][auxTargetCurrentWidth] = transformedImage[v][u];
+					fpData[c][u + v*auxTargetCurrentWidth] = transformedImage[v][u];
 
-		Array2DUtil.doubleArrayToArray(fpData, fp.getDataXYC());
+		Array2DUtil.doubleArrayToSafeArray(fpData, fp.getDataXYC(), fp.isSignedDataType());
 		fp.dataChanged();
 		is.addImage(fp);
 	}
@@ -4377,7 +4377,7 @@ public class Transformation {
 				for (int c = 0; c < fp.getSizeC(); c++)
 					fpData[c][u + v * auxTargetCurrentWidth] = transformedImage[v][u];
 
-		Array2DUtil.doubleArrayToArray(fpData, fp.getDataXYC());
+		Array2DUtil.doubleArrayToSafeArray(fpData, fp.getDataXYC(), fp.isSignedDataType());
 		fp.dataChanged();
 		is.addImage(fp);
 	}
@@ -4679,7 +4679,7 @@ public class Transformation {
 			this.sourceCurrentHeight = sourceModel.getOriginalImageHeight();
 			this.sourceCurrentWidth = sourceModel.getOriginalImageWidth();
 		}
-		
+
 		// Display final errors.
 		if (this.outputLevel == 2) {
 			if (this.imageWeight != 0) {
@@ -4708,4 +4708,19 @@ public class Transformation {
 	public void showInverseResults() {
 		showTransformationMultiThread(intervals, cxSourceToTarget, cySourceToTarget, true);
 	}
+
+	public void getRegisteredSource(Sequence srcTgtSeq) {
+		applyTransformationMT(srcTgtSeq, targetSeq, sourceModel, intervals, cxTargetToSource, cyTargetToSource);
+	}
+
+	public void getRegisteredTarget(Sequence tgtTgtSeq) {
+		applyTransformationMT(tgtTgtSeq, sourceSeq, targetModel, intervals, cxSourceToTarget, cySourceToTarget);
+	}
+
+	private void applyTransformationMT(Sequence source, Sequence target, BSplineModel srcModel, int intervals,
+	    double[][] cx, double[][] cy) {
+		// Apply transformation
+		MiscTools.applyTransformationToSourceMT(source, target, srcModel, intervals, cx, cy);
+	}
+
 }

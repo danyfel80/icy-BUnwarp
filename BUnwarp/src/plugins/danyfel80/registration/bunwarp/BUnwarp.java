@@ -1,5 +1,8 @@
 package plugins.danyfel80.registration.bunwarp;
 
+import java.awt.geom.Point2D;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import algorithms.danyfel80.registration.bunwarp.BUnwarpper;
@@ -10,6 +13,7 @@ import icy.gui.dialog.MessageDialog;
 import icy.image.IcyBufferedImage;
 import icy.roi.ROI;
 import icy.sequence.Sequence;
+import icy.sequence.SequenceUtil;
 import plugins.adufour.blocks.lang.Block;
 import plugins.adufour.blocks.util.VarList;
 import plugins.adufour.ezplug.EzGroup;
@@ -22,6 +26,7 @@ import plugins.adufour.ezplug.EzVarEnum;
 import plugins.adufour.ezplug.EzVarInteger;
 import plugins.adufour.ezplug.EzVarListener;
 import plugins.adufour.ezplug.EzVarSequence;
+import plugins.adufour.vars.lang.VarSequence;
 import plugins.kernel.roi.roi2d.ROI2DPoint;
 import plugins.kernel.roi.roi2d.ROI2DPolygon;
 
@@ -31,10 +36,17 @@ import plugins.kernel.roi.roi2d.ROI2DPolygon;
 public class BUnwarp extends EzPlug implements Block, EzStoppable {
 
 	// Input variables
+	// Images
 	// - Source image
 	EzVarSequence inSrcSeq = new EzVarSequence("Source");
 	// - Target image
 	EzVarSequence inTgtSeq = new EzVarSequence("Target");
+	// - Source transformation target image
+	EzVarSequence inSrcTgtSeq = new EzVarSequence("Transformation Source");
+	// - Target transformation target image
+	EzVarSequence inTgtTgtSeq = new EzVarSequence("Transformation Target");
+
+	// Parameters
 	// - Registration mode
 	EzVarEnum<RegistrationModeEnum> inMode = new EzVarEnum<>("Mode", RegistrationModeEnum.values(),
 	    RegistrationModeEnum.ACCURATE);
@@ -47,7 +59,8 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 	// - Final deformation
 	EzVarEnum<MaximumScaleDeformationEnum> inFnlDef = new EzVarEnum<>("Final Deformation",
 	    MaximumScaleDeformationEnum.values(), MaximumScaleDeformationEnum.FINE);
-	// - Weights
+
+	// Weights
 	// - Divergence Weight
 	EzVarDouble inDivWeight = new EzVarDouble("Divergence Weight");
 	// - Curl Weight
@@ -72,15 +85,20 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 
 	// Output variables
 
+	VarSequence outSrcSeq = new VarSequence("Source Registered", (Sequence) null);
+	VarSequence outTgtSeq = new VarSequence("Target Registered", (Sequence) null);
+
 	// Internal variables
 	Sequence srcSeq;
 	Sequence tgtSeq;
+	Sequence srcTgtSeq;
+	Sequence tgtTgtSeq;
 
 	IcyBufferedImage originalSrcIBI;
 	IcyBufferedImage originalTgtIBI;
-	
+
 	private boolean isPluginInterrupted;
-			
+
 	/*
 	 * (non-Javadoc)
 	 * 
@@ -92,6 +110,8 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 	public void declareInput(VarList inputMap) {
 		inputMap.add(inSrcSeq.name, inSrcSeq.getVariable());
 		inputMap.add(inTgtSeq.name, inTgtSeq.getVariable());
+		inputMap.add(inSrcTgtSeq.name, inSrcTgtSeq.getVariable());
+		inputMap.add(inTgtTgtSeq.name, inTgtTgtSeq.getVariable());
 		inputMap.add(inMode.name, inMode.getVariable());
 		inputMap.add(inSubsampleFactor.name, inSubsampleFactor.getVariable());
 		inputMap.add(inIniDef.name, inIniDef.getVariable());
@@ -114,7 +134,8 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 	 */
 	@Override
 	public void declareOutput(VarList outputMap) {
-		// TODO Auto-generated method stub
+		outputMap.add(outSrcSeq.getName(), outSrcSeq);
+		outputMap.add(outTgtSeq.getName(), outTgtSeq);
 	}
 
 	/*
@@ -126,11 +147,14 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 	protected void initialize() {
 		addEzComponent(inSrcSeq);
 		addEzComponent(inTgtSeq);
+		addEzComponent(inSrcTgtSeq);
+		addEzComponent(inTgtTgtSeq);
 		addEzComponent(inMode);
+		addEzComponent(inSubsampleFactor);
 		addEzComponent(advancedParamsGroup);
 
-		inDivWeight.setValue(0.1);
-		inCurlWeight.setValue(0.1);
+		inDivWeight.setValue(0d);
+		inCurlWeight.setValue(0d);
 		inLandmarkWeight.setValue(0d);
 		inImageWeight.setValue(1d);
 		inConsistencyWeight.setValue(10d);
@@ -158,11 +182,28 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 		}
 		srcSeq = inSrcSeq.getValue();
 		tgtSeq = inTgtSeq.getValue();
+		srcTgtSeq = inSrcTgtSeq.getValue();
+		tgtTgtSeq = inTgtTgtSeq.getValue();
+		if (srcTgtSeq == null)
+			srcTgtSeq = srcSeq;
+		if (tgtTgtSeq == null)
+			tgtTgtSeq = tgtSeq;
+
 		originalSrcIBI = srcSeq.getFirstImage();
 		originalTgtIBI = tgtSeq.getFirstImage();
 
 		List<? extends ROI> srcLandmarks = srcSeq.getROIs(ROI2DPoint.class);
 		List<? extends ROI> tgtLandmarks = tgtSeq.getROIs(ROI2DPoint.class);
+
+		Comparator<ROI> comp = new Comparator<ROI>() {
+			@Override
+			public int compare(ROI o1, ROI o2) {
+				return o1.getName().compareTo(o2.getName());
+			}
+		};
+
+		srcLandmarks.sort(comp);
+		tgtLandmarks.sort(comp);
 
 		ROI2DPolygon srcMask = null;
 		ROI2DPolygon tgtMask = null;
@@ -172,18 +213,48 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 		if (tgtSeq.getROICount(ROI2DPolygon.class) > 0) {
 			tgtMask = (ROI2DPolygon) tgtSeq.getROIs(ROI2DPolygon.class).get(0);
 		}
+		if (srcMask == null) {
+			List<Point2D> pts = new ArrayList<>();
+			pts.add(new Point2D.Double(0, 0));
+			pts.add(new Point2D.Double(0, srcSeq.getHeight()));
+			pts.add(new Point2D.Double(srcSeq.getWidth(), srcSeq.getHeight()));
+			pts.add(new Point2D.Double(srcSeq.getWidth(), 0));
+			srcMask = new ROI2DPolygon(pts);
+		}
+		
+		if (tgtMask == null) {
+			List<Point2D> pts = new ArrayList<>();
+			pts.add(new Point2D.Double(0, 0));
+			pts.add(new Point2D.Double(0, tgtSeq.getHeight()));
+			pts.add(new Point2D.Double(tgtSeq.getWidth(), tgtSeq.getHeight()));
+			pts.add(new Point2D.Double(tgtSeq.getWidth(), 0));
+			tgtMask = new ROI2DPolygon(pts);
+		}
 
 		@SuppressWarnings("unchecked")
-		BUnwarpper bu = new BUnwarpper(srcSeq, tgtSeq, (List<ROI2DPoint>) srcLandmarks,
-		    (List<ROI2DPoint>) tgtLandmarks, srcMask, tgtMask, inSubsampleFactor.getValue(),
-		    inIniDef.getValue().getNumber(), inFnlDef.getValue().getNumber(), 0, inDivWeight.getValue(), inCurlWeight.getValue(),
+		BUnwarpper bu = new BUnwarpper(srcSeq, tgtSeq, (List<ROI2DPoint>) srcLandmarks, (List<ROI2DPoint>) tgtLandmarks,
+		    srcMask, tgtMask, inSubsampleFactor.getValue(), inIniDef.getValue().getNumber(),
+		    inFnlDef.getValue().getNumber(), 0, inDivWeight.getValue(), inCurlWeight.getValue(),
 		    inLandmarkWeight.getValue(), inImageWeight.getValue(), inConsistencyWeight.getValue(),
-		    inStopThreshold.getValue(), inShowProcess.getValue()? 2: 1, inShowProcess.getValue(), inMode.getValue().getNumber(), this);
+		    inStopThreshold.getValue(), inShowProcess.getValue() ? 2 : 1, inShowProcess.getValue(),
+		    inMode.getValue().getNumber(), this);
 		bu.start();
 		try {
 			bu.join();
 		} catch (InterruptedException e) {
 			System.err.println("Thread interrupted: " + e.getMessage());
+		}
+		if (!this.isPluginInterrupted) {
+			Sequence srcTgtCopySeq = SequenceUtil.getCopy(srcTgtSeq);
+			bu.getRegisteredSource(srcTgtCopySeq);
+			outSrcSeq.setValue(srcTgtSeq);
+			addSequence(srcTgtCopySeq);
+			if (inMode.getValue() != RegistrationModeEnum.MONO) {
+				Sequence tgtTgtCopySeq = SequenceUtil.getCopy(tgtTgtSeq);
+				bu.getRegisteredTarget(tgtTgtCopySeq);
+				outTgtSeq.setValue(tgtTgtCopySeq);
+				addSequence(tgtTgtCopySeq);
+			}
 		}
 
 	}
@@ -219,10 +290,8 @@ public class BUnwarp extends EzPlug implements Block, EzStoppable {
 	 */
 	@Override
 	public void clean() {
-		// TODO Auto-generated method stub
-
 	}
-	
+
 	public boolean isPluginInterrumped() {
 		return this.isPluginInterrupted;
 	}

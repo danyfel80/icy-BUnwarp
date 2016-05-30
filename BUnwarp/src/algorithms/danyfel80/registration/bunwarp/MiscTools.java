@@ -1,10 +1,13 @@
 package algorithms.danyfel80.registration.bunwarp;
 
 import java.awt.Point;
+import java.awt.Rectangle;
 
 import icy.image.IcyBufferedImage;
 import icy.image.IcyBufferedImageUtil;
+import icy.sequence.Sequence;
 import icy.type.DataType;
+import icy.type.collection.array.Array2DUtil;
 
 /**
  * @author Daniel Felipe Gonzalez Obando
@@ -260,7 +263,7 @@ public class MiscTools {
 
 			// Rotate the points (without using matrices!)
 			int x = new Long(Math.round((cosTheta * p2.x) - (sinTheta * p2.y))).intValue();
-			p2.x = new Long(Math.round((sinTheta * p2.x) + (cosTheta * p2.y))).intValue();
+			p2.y = new Long(Math.round((sinTheta * p2.x) + (cosTheta * p2.y))).intValue();
 			p2.x = x;
 			x = new Long(Math.round((cosTheta * p3.x) - (sinTheta * p3.y))).intValue();
 			p3.y = new Long(Math.round((sinTheta * p3.x) + (cosTheta * p3.y))).intValue();
@@ -272,6 +275,228 @@ public class MiscTools {
 			drawLine(canvas, x2, y2, p2.x, p2.y, color);
 			drawLine(canvas, x2, y2, p3.x, p3.y, color);
 		}
+	}
+
+	public static void applyTransformationToSourceMT(Sequence source, Sequence target, BSplineModel sourceModel,
+	    int intervals, double[][] cx, double[][] cy) {
+
+		IcyBufferedImage result_imp = applyTransformationMT(source, target, sourceModel, intervals, cx, cy);
+
+		source.setImage(0, 0, result_imp);
+		source.dataChanged();
+	}
+
+	/**
+	 * Apply a given B-spline transformation to the source (gray-scale) image. The
+	 * result image is return. The target image is used to know the output size
+	 * (Multi-thread version).
+	 *
+	 * @param sourceSeq
+	 *          source image representation
+	 * @param targetSeq
+	 *          target image representation
+	 * @param sourceModel
+	 *          source image model
+	 * @param intervals
+	 *          intervals in the deformation
+	 * @param cx
+	 *          x- B-spline coefficients
+	 * @param cy
+	 *          y- B-spline coefficients
+	 * 
+	 * @return result transformed image
+	 */
+	public static IcyBufferedImage applyTransformationMT(Sequence sourceSeq, Sequence targetSeq, BSplineModel sourceModel,
+	    int intervals, double[][] cx, double[][] cy) {
+		final int targetHeight = targetSeq.getHeight();
+		final int targetWidth = targetSeq.getWidth();
+
+		// Compute the deformation
+		// Set these coefficients to an interpolator
+		BSplineModel swx = new BSplineModel(cx);
+		BSplineModel swy = new BSplineModel(cy);
+
+		// Compute the warped image
+
+		BSplineModel[] sourceModels = new BSplineModel[sourceSeq.getSizeC()];
+		for (int c = 0; c < sourceSeq.getSizeC(); c++) {
+			sourceModels[c] = new BSplineModel(IcyBufferedImageUtil.extractChannel(sourceSeq.getFirstImage(), c), false, 1);
+			sourceModels[c].setPyramidDepth(0);
+			sourceModels[c].startPyramids();
+		}
+
+		// Join threads
+		try {
+			for (int c = 0; c < sourceSeq.getSizeC(); c++) {
+				sourceModels[c].join();
+			}
+		} catch (InterruptedException e) {
+			System.out.println("Unexpected interruption exception " + e);
+		}
+
+		// Calculate warped RGB image
+		IcyBufferedImage cp = new IcyBufferedImage(targetWidth, targetHeight, sourceSeq.getSizeC(),
+		    sourceSeq.getDataType_());
+
+		// Check the number of processors in the computer
+		int nproc = Runtime.getRuntime().availableProcessors();
+
+		// We will use threads to display parts of the output image
+		int blockHeight = targetHeight / nproc;
+		if (targetHeight % 2 != 0)
+			blockHeight++;
+
+		int nThreads = nproc;
+
+		Thread[] threads = new Thread[nThreads];
+		Rectangle[] rects = new Rectangle[nThreads];
+		IcyBufferedImage[] fpTiles = new IcyBufferedImage[nThreads];
+
+		for (int i = 0; i < nThreads; i++) {
+			// last block size is the rest of the window
+			int y_start = i * blockHeight;
+
+			if (nThreads - 1 == i)
+				blockHeight = targetHeight - i * blockHeight;
+
+			rects[i] = new Rectangle(0, y_start, targetWidth, blockHeight);
+
+			// IJ.log("block = 0 " + (i*block_height) + " " + targetWidth + " " +
+			// block_height );
+
+			fpTiles[i] = new IcyBufferedImage(rects[i].width, rects[i].height, sourceSeq.getSizeC(),
+			    sourceSeq.getDataType_());
+
+			threads[i] = new Thread(new ColorApplyTransformTile(swx, swy, sourceModels, targetWidth, targetHeight, intervals,
+			    rects[i], fpTiles[i]));
+			threads[i].start();
+		}
+
+		for (int i = 0; i < nThreads; i++) {
+			try {
+				threads[i].join();
+				threads[i] = null;
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+
+		cp.beginUpdate();
+		for (int i = 0; i < nThreads; i++) {
+			for (int c = 0; c < cp.getSizeC(); c++) {
+				cp.copyData(fpTiles[i], null, new Point(rects[i].x, rects[i].y), c, c);
+			}
+			fpTiles[i] = null;
+			rects[i] = null;
+		}
+
+		cp.dataChanged();
+		cp.endUpdate();
+		return cp;
+
+	}
+
+	/**
+	 * Class to apply transformation to color images in a concurrent way
+	 * 
+	 */
+	private static class ColorApplyTransformTile implements Runnable {
+		/** B-spline deformation in x */
+		final BSplineModel swx;
+		/** B-spline deformation in y */
+		final BSplineModel swy;
+		/** source image model */
+		final BSplineModel[] sourceModels;
+		/** target current width */
+		final int targetCurrentWidth;
+		/** target current height */
+		final int targetCurrentHeight;
+		/** number of intervals between B-spline coefficients */
+		final int intervals;
+		/** area of the image to be transformed */
+		final Rectangle rect;
+		/** resulting float processor for the red channel */
+		final private IcyBufferedImage ibi;
+
+		/**
+		 * Constructor for color image transform
+		 * 
+		 * @param swx
+		 *          B-spline deformation in x
+		 * @param swy
+		 *          B-spline deformation in y
+		 * @param sourceR
+		 *          red source image
+		 * @param targetCurrentWidth
+		 *          target current width
+		 * @param targetCurrentHeight
+		 *          target current height
+		 * @param intervals
+		 *          number of intervals between B-spline coefficients
+		 * @param rect
+		 *          area of the image to be transformed
+		 * @param fpR
+		 *          red channel processor to be updated
+		 * @param fpG
+		 *          green channel processor to be updated
+		 * @param fpB
+		 *          blue channel processor to be updated
+		 */
+		ColorApplyTransformTile(BSplineModel swx, BSplineModel swy, BSplineModel[] sourceModels, int targetCurrentWidth,
+		    int targetCurrentHeight, int intervals, Rectangle rect, IcyBufferedImage ibi) {
+			this.swx = swx;
+			this.swy = swy;
+			this.sourceModels = sourceModels;
+			this.targetCurrentWidth = targetCurrentWidth;
+			this.targetCurrentHeight = targetCurrentHeight;
+			this.intervals = intervals;
+			this.rect = rect;
+			this.ibi = ibi;
+		}
+
+		// ------------------------------------------------------------------
+		/**
+		 * Run method to update the intermediate window. Only the part defined by
+		 * the rectangle will be updated (in this thread).
+		 */
+		public void run() {
+			// Compute the warped image
+			int auxTargetHeight = rect.y + rect.height;
+			int auxTargetWidth = rect.x + rect.width;
+
+			double[][] ibiArray = Array2DUtil.arrayToDoubleArray(ibi.getDataXYC(), ibi.isSignedDataType());
+
+			final int sourceWidth = sourceModels[0].getWidth();
+			final int sourceHeight = sourceModels[0].getHeight();
+
+			for (int v_rect = 0, v = rect.y; v < auxTargetHeight; v++, v_rect++) {
+				final int v_offset = v_rect * rect.width;
+				final double tv = (double) (v * intervals) / (double) (targetCurrentHeight - 1) + 1.0F;
+
+				for (int u_rect = 0, u = rect.x; u < auxTargetWidth; u++, u_rect++) {
+
+					final double tu = (double) (u * intervals) / (double) (targetCurrentWidth - 1) + 1.0F;
+
+					final double x = swx.prepareForInterpolationAndInterpolateI(tu, tv, false, false);
+					final double y = swy.prepareForInterpolationAndInterpolateI(tu, tv, false, false);
+
+					if (x >= 0 && x < sourceWidth && y >= 0 && y < sourceHeight) {
+						for (int c = 0; c < ibi.getSizeC(); c++) {
+							ibiArray[c][u_rect + v_offset] = sourceModels[c].prepareForInterpolationAndInterpolateI(x, y, false,
+							    false);
+						}
+					} else {
+						for (int c = 0; c < ibi.getSizeC(); c++) {
+							ibiArray[c][u_rect + v_offset] = 0;
+						}
+					}
+
+				}
+			}
+			Array2DUtil.doubleArrayToSafeArray(ibiArray, ibi.getDataXYC(), ibi.isSignedDataType());
+			ibi.dataChanged();
+		} // end run method
+
 	}
 
 }
