@@ -768,8 +768,8 @@ public class BSplineModel extends Thread {
 
 		// We compute the coefficients pyramid
 		for (int depth = 1; ((depth <= pyramidDepth) && (!super.isInterrupted())); depth++) {
-			System.out.println("Building coefficients pyramid...");
-			// TODO IJ.showProgress((double) depth / pyramidDepth );
+			ProgressBar.setProgressBarMessage("Building coefficients pyramid...");
+			ProgressBar.setProgressBarValue((double) depth / pyramidDepth);
 			fullWidth = halfWidth;
 			fullHeight = halfHeight;
 			halfWidth /= 2;
@@ -1046,8 +1046,8 @@ public class BSplineModel extends Thread {
 
 		// We compute the coefficients pyramid
 		for (int depth = 1; ((depth <= pyramidDepth) && (!super.isInterrupted())); depth++) {
-			System.out.println("Building coefficients pyramid...");
-			// TODO IJ.showProgress((double) depth / pyramidDepth);
+			ProgressBar.setProgressBarMessage("Building coefficients pyramid...");
+			ProgressBar.setProgressBarValue((double) depth / pyramidDepth);
 			fullWidth = halfWidth;
 			fullHeight = halfHeight;
 			halfWidth /= 2;
@@ -1100,8 +1100,8 @@ public class BSplineModel extends Thread {
 		cardinalToDual2D(image, fullDual, width, height, 3);
 
 		for (int depth = 1; depth <= pyramidDepth && !super.isInterrupted(); depth++) {
-			System.out.println("Building image pyramid...");
-			// TODO IJ.showProgress((double) depth / pyramidDepth);
+			ProgressBar.setProgressBarMessage("Building image pyramid...");
+			ProgressBar.setProgressBarValue((double) depth / pyramidDepth);
 
 			fullWidth = halfWidth;
 			fullHeight = halfHeight;

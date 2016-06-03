@@ -277,13 +277,15 @@ public class MiscTools {
 		}
 	}
 
-	public static void applyTransformationToSourceMT(Sequence source, Sequence target, BSplineModel sourceModel,
-	    int intervals, double[][] cx, double[][] cy) {
+	public static void applyTransformationToSourceMT(Sequence source, Sequence target, int intervals, double[][] cx,
+	    double[][] cy) {
 
-		IcyBufferedImage result_imp = applyTransformationMT(source, target, sourceModel, intervals, cx, cy);
+		IcyBufferedImage result_imp = applyTransformationMT(source, target, intervals, cx, cy);
 
+		source.beginUpdate();
 		source.setImage(0, 0, result_imp);
 		source.dataChanged();
+		source.endUpdate();
 	}
 
 	/**
@@ -295,8 +297,6 @@ public class MiscTools {
 	 *          source image representation
 	 * @param targetSeq
 	 *          target image representation
-	 * @param sourceModel
-	 *          source image model
 	 * @param intervals
 	 *          intervals in the deformation
 	 * @param cx
@@ -306,8 +306,8 @@ public class MiscTools {
 	 * 
 	 * @return result transformed image
 	 */
-	public static IcyBufferedImage applyTransformationMT(Sequence sourceSeq, Sequence targetSeq, BSplineModel sourceModel,
-	    int intervals, double[][] cx, double[][] cy) {
+	public static IcyBufferedImage applyTransformationMT(Sequence sourceSeq, Sequence targetSeq, int intervals,
+	    double[][] cx, double[][] cy) {
 		final int targetHeight = targetSeq.getHeight();
 		final int targetWidth = targetSeq.getWidth();
 
@@ -468,18 +468,31 @@ public class MiscTools {
 
 			final int sourceWidth = sourceModels[0].getWidth();
 			final int sourceHeight = sourceModels[0].getHeight();
-
+			Rectangle srcLimits = new Rectangle();
+			boolean firstLim = true;
 			for (int v_rect = 0, v = rect.y; v < auxTargetHeight; v++, v_rect++) {
 				final int v_offset = v_rect * rect.width;
 				final double tv = (double) (v * intervals) / (double) (targetCurrentHeight - 1) + 1.0F;
-
+				
 				for (int u_rect = 0, u = rect.x; u < auxTargetWidth; u++, u_rect++) {
-
 					final double tu = (double) (u * intervals) / (double) (targetCurrentWidth - 1) + 1.0F;
-
+					
 					final double x = swx.prepareForInterpolationAndInterpolateI(tu, tv, false, false);
 					final double y = swy.prepareForInterpolationAndInterpolateI(tu, tv, false, false);
-
+					
+					if (firstLim) {
+						firstLim = false;
+						srcLimits.x = (int)x;
+						srcLimits.y = (int)y;
+						srcLimits.width = (int)x;
+						srcLimits.height = (int)y;
+					} else {
+						srcLimits.x = Math.min(srcLimits.x, (int)x);
+						srcLimits.y = Math.min(srcLimits.y, (int)y);
+						srcLimits.width = Math.max(srcLimits.width, (int)x);
+						srcLimits.height = Math.max(srcLimits.height, (int)y);
+					}
+					
 					if (x >= 0 && x < sourceWidth && y >= 0 && y < sourceHeight) {
 						for (int c = 0; c < ibi.getSizeC(); c++) {
 							ibiArray[c][u_rect + v_offset] = sourceModels[c].prepareForInterpolationAndInterpolateI(x, y, false,
@@ -493,6 +506,7 @@ public class MiscTools {
 
 				}
 			}
+			System.out.println("limits: " + srcLimits);
 			Array2DUtil.doubleArrayToSafeArray(ibiArray, ibi.getDataXYC(), ibi.isSignedDataType());
 			ibi.dataChanged();
 		} // end run method

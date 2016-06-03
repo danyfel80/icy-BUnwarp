@@ -1,5 +1,6 @@
 package algorithms.danyfel80.registration.bunwarp;
 
+import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.geom.AffineTransform;
@@ -13,7 +14,6 @@ import icy.image.IcyBufferedImageUtil;
 import icy.sequence.Sequence;
 import icy.type.DataType;
 import icy.type.collection.array.Array2DUtil;
-import plugins.adufour.ezplug.EzPlug;
 import plugins.danyfel80.registration.bunwarp.BUnwarp;
 import plugins.kernel.roi.roi2d.ROI2DPoint;
 import plugins.kernel.roi.roi2d.ROI2DPolygon;
@@ -45,7 +45,7 @@ public class Transformation {
 	/** reference to the second output image */
 	private Sequence outputSeq2;
 	/** pointer to the BUnwarp EzPlug */
-	private EzPlug plugin;
+	private BUnwarp plugin;
 
 	// Images
 	/** pointer to the source image representation */
@@ -275,7 +275,7 @@ public class Transformation {
 	    ROI2DPolygon targetMask, int minScaleDeformation, int maxScaleDeformation, int minScaleImage, double divWeight,
 	    double curlWeight, double landmarkWeight, double imageWeight, double consistencyWeight, double stopThreshold,
 	    int outputLevel, boolean showMarquardtOptim, int accurateMode, Sequence outputSequence1, Sequence outputSequence2,
-	    EzPlug plugin) {
+	    BUnwarp plugin) {
 		this.sourceSeq = sourceSeq;
 		this.targetSeq = targetSeq;
 		this.sourceModel = sourceModel;
@@ -1404,7 +1404,6 @@ public class Transformation {
 			state = 0;
 		int s = minScaleDeformation;
 		int currentDepth = targetModel.getCurrentDepth();
-		@SuppressWarnings("unused") // TODO remove
 		int workload = 0;
 		while (state != -1) {
 			// Update the deformation coefficients only in states 0 and 1
@@ -1452,8 +1451,9 @@ public class Transformation {
 				break;
 			}
 		}
-		// TODO ProgressBar.resetProgressBar();
-		// TODO ProgressBar.addWorkload(workload);
+
+		ProgressBar.resetProgressBar();
+		ProgressBar.addWorkload(workload);
 	}
 
 	/**
@@ -1773,7 +1773,7 @@ public class Transformation {
 	 */
 	private double optimizeCoeffs(int intervals, double thChangef, double[][] cxTargetToSource,
 	    double[][] cyTargetToSource, double[][] cxSourceToTarget, double[][] cySourceToTarget) {
-		if (plugin != null && ((BUnwarp) plugin).isPluginInterrumped())
+		if (plugin != null && plugin.isPluginInterrumped())
 			return 0.0;
 
 		if (sourceModel.isSubOutput()) {
@@ -1869,11 +1869,11 @@ public class Transformation {
 		// Maximum iteration number
 		int maxiter = MAXITER_OPTIMCOEFF * (sourceModel.getCurrentDepth() + 1);
 
-		// TODO ProgressBar.stepProgressBar();
+		ProgressBar.stepProgressBar();
 
 		int last_successful_iter = 0;
 
-		boolean stop = plugin != null && ((BUnwarp) plugin).isPluginInterrumped();
+		boolean stop = plugin != null && plugin.isPluginInterrumped();
 
 		while (iter < maxiter && !stop) {
 			/* Compute new x ------------------------------------------------- */
@@ -1907,7 +1907,7 @@ public class Transformation {
 			iter++;
 			if (showMarquardtOptim)
 				System.out.println("f(" + iter + ")=" + f + " lambda=" + lambda);
-			// TODO ProgressBar.stepProgressBar();
+			ProgressBar.stepProgressBar();
 
 			/* Update lambda -------------------------------------------------- */
 			if (rescuedf > f) {
@@ -2019,7 +2019,7 @@ public class Transformation {
 					lambda = FIRSTLAMBDA;
 			}
 
-			stop = plugin != null && ((BUnwarp) plugin).isPluginInterrumped();
+			stop = plugin != null && plugin.isPluginInterrumped();
 		}
 
 		// Copy the values back to the input arrays
@@ -2032,7 +2032,7 @@ public class Transformation {
 				cySourceToTarget[i][j] = x[threeQuarterM + p];
 			}
 
-		// TODO ProgressBar.skipProgressBar(maxiter - iter);
+		ProgressBar.skipProgressBar(maxiter - iter);
 		return f;
 	}
 
@@ -3401,7 +3401,7 @@ public class Transformation {
 			System.out.println(" Source Image Size = " + this.sourceCurrentWidth + "x" + this.sourceCurrentHeight);
 		}
 
-		if (plugin != null && ((BUnwarp) plugin).isPluginInterrumped())
+		if (plugin != null && plugin.isPluginInterrumped())
 			return 0.0;
 
 		final double TINY = FLT_EPSILON;
@@ -3480,11 +3480,11 @@ public class Transformation {
 		// Maximum iteration number
 		int maxiter = MAXITER_OPTIMCOEFF * (sourceModel.getCurrentDepth() + 1);
 
-		// TODO ProgressBar.stepProgressBar();
+		ProgressBar.stepProgressBar();
 
 		int last_successful_iter = 0;
 
-		boolean stop = plugin != null && ((BUnwarp) plugin).isPluginInterrumped();
+		boolean stop = plugin != null && plugin.isPluginInterrumped();
 
 		while (iter < maxiter && !stop) {
 			/* Compute new x ------------------------------------------------- */
@@ -3520,7 +3520,7 @@ public class Transformation {
 			iter++;
 			if (showMarquardtOptim)
 				System.out.println("f(" + iter + ")=" + f + " lambda=" + lambda);
-			// TODO ProgressBar.stepProgressBar();
+			ProgressBar.stepProgressBar();
 
 			/* Update lambda -------------------------------------------------- */
 			if (rescuedf > f) {
@@ -3627,7 +3627,7 @@ public class Transformation {
 					lambda = FIRSTLAMBDA;
 			}
 
-			stop = plugin != null && ((BUnwarp) plugin).isPluginInterrumped();
+			stop = plugin != null && plugin.isPluginInterrumped();
 		}
 
 		// Copy the values back to the input arrays
@@ -3638,7 +3638,7 @@ public class Transformation {
 				cyTargetToSource[i][j] = x[halfM + p];
 			}
 
-		// TODO ProgressBar.skipProgressBar(maxiter - iter);
+		ProgressBar.skipProgressBar(maxiter - iter);
 		return f;
 	}
 
@@ -3747,7 +3747,7 @@ public class Transformation {
 		Sequence outputSeq = (!bIsReverse) ? this.outputSeq1 : this.outputSeq2;
 
 		// Calculate tranformation results
-		System.out.println("Calculating result window...");
+		ProgressBar.setProgressBarMessage("Calculating result window...");
 		Sequence result_imp = applyTransformationMultiThread(intervals, cx, cy, bIsReverse);
 
 		plugin.removeSequence(outputSeq);
@@ -4195,7 +4195,7 @@ public class Transformation {
 		for (int v = 0; v < auxTargetCurrentHeight; v++)
 			for (int u = 0; u < auxTargetCurrentWidth; u++)
 				for (int c = 0; c < is.getSizeC(); c++)
-					fpData[c][u + v*auxTargetCurrentWidth] = transformedImage[v][u];
+					fpData[c][u + v * auxTargetCurrentWidth] = transformedImage[v][u];
 
 		Array2DUtil.doubleArrayToSafeArray(fpData, fp.getDataXYC(), fp.isSignedDataType());
 		fp.dataChanged();
@@ -4710,17 +4710,46 @@ public class Transformation {
 	}
 
 	public void getRegisteredSource(Sequence srcTgtSeq) {
-		applyTransformationMT(srcTgtSeq, targetSeq, sourceModel, intervals, cxTargetToSource, cyTargetToSource);
+		applyTransformationMT(srcTgtSeq, targetSeq, intervals, cxTargetToSource, cyTargetToSource);
 	}
 
 	public void getRegisteredTarget(Sequence tgtTgtSeq) {
-		applyTransformationMT(tgtTgtSeq, sourceSeq, targetModel, intervals, cxSourceToTarget, cySourceToTarget);
+		applyTransformationMT(tgtTgtSeq, sourceSeq, intervals, cxSourceToTarget, cySourceToTarget);
 	}
 
-	private void applyTransformationMT(Sequence source, Sequence target, BSplineModel srcModel, int intervals,
-	    double[][] cx, double[][] cy) {
+	private void applyTransformationMT(Sequence source, Sequence target, int intervals, double[][] cx, double[][] cy) {
 		// Apply transformation
-		MiscTools.applyTransformationToSourceMT(source, target, srcModel, intervals, cx, cy);
+		MiscTools.applyTransformationToSourceMT(source, target, intervals, cx, cy);
+	}
+
+	public Sequence getRegisteredSource(String srcResultPath, String srcPath, String tgtPath) {
+		return BigImageTools.applyTransformationToImage(srcResultPath, srcPath, tgtPath, intervals, cxTargetToSource,
+		    cyTargetToSource, new Dimension(targetWidth, targetHeight));
+	}
+
+	public Sequence getRegisteredTarget(String tgtResultPath, String srcPath, String tgtPath) {
+		return BigImageTools.applyTransformationToImage(tgtResultPath, srcPath, tgtPath, intervals, cxSourceToTarget,
+		    cySourceToTarget, new Dimension(sourceWidth, sourceHeight));
+	}
+
+	public double[][] getCxSourceToTarget() {
+		return cxSourceToTarget;
+	}
+
+	public double[][] getCySourceToTarget() {
+		return cySourceToTarget;
+	}
+
+	public double[][] getCxTargetToSource() {
+		return cxTargetToSource;
+	}
+
+	public double[][] getCyTargetToSource() {
+		return cyTargetToSource;
+	}
+
+	public int getIntervals() {
+		return intervals;
 	}
 
 }

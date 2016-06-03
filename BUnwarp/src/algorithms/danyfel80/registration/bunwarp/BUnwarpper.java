@@ -5,11 +5,19 @@ import java.util.List;
 import icy.image.IcyBufferedImage;
 import icy.sequence.Sequence;
 import icy.type.DataType;
-import plugins.adufour.ezplug.EzPlug;
 import plugins.danyfel80.registration.bunwarp.BUnwarp;
+//import plugins.danyfel80.registration.bunwarp.BUnwarpSimple;
 import plugins.kernel.roi.roi2d.ROI2DPoint;
 import plugins.kernel.roi.roi2d.ROI2DPolygon;
 
+/**
+ * @author Daniel Felipe Gonzalez Obando
+ *
+ */
+/**
+ * @author Daniel Felipe Gonzalez Obando
+ *
+ */
 /**
  * @author Daniel Felipe Gonzalez Obando
  *
@@ -72,7 +80,7 @@ public class BUnwarpper extends Thread {
 
 	// Ez Plugin
 	/** Ez Plugin reference */
-	private EzPlug plugin;
+	private BUnwarp plugin;
 
 	/*
 	 * List<ROI2DPoint> srcLandmarks, List<ROI2DPoint> tgtLandmarks, ROI2DPolygon
@@ -87,7 +95,7 @@ public class BUnwarpper extends Thread {
 	    final ROI2DPolygon targetMask, final int maxImageSubsamplingFactor, final int minScaleDeformation,
 	    final int maxScaleDeformation, final int minScaleImage, final double divWeight, final double curlWeight,
 	    final double landmarkWeight, final double imageWeight, final double consistencyWeight, final double stopThreshold,
-	    final int outputLevel, final boolean showMarquardtOptim, final int accurateMode, final EzPlug plugin) {
+	    final int outputLevel, final boolean showMarquardtOptim, final int accurateMode, final BUnwarp plugin) {
 		this.sourceSeq = sourceSequence;
 		this.targetSeq = targetSequence;
 		this.sourceLandmarks = sourceLandmarks;
@@ -109,6 +117,8 @@ public class BUnwarpper extends Thread {
 		this.accurateMode = accurateMode;
 		this.plugin = plugin;
 
+		ProgressBar.setPlugin(this.plugin);
+		
 		createSourceImage(this.accurateMode < RegistrationModeEnum.MONO.getNumber());
 		createTargetImage();
 	}
@@ -139,7 +149,8 @@ public class BUnwarpper extends Thread {
 		super.run();
 
 		// Start pyramids
-		System.out.println("Starting image pyramids...");
+		ProgressBar.setProgressBarMessage("Starting image pyramids...");
+		
 		if (targetModel.getWidth() > BSplineModel.MAX_OUTPUT_SIZE || targetModel.getHeight() > BSplineModel.MAX_OUTPUT_SIZE
 		    || sourceModel.getWidth() > BSplineModel.MAX_OUTPUT_SIZE
 		    || sourceModel.getHeight() > BSplineModel.MAX_OUTPUT_SIZE)
@@ -172,7 +183,7 @@ public class BUnwarpper extends Thread {
 		    outputSeqs[0], outputSeqs[1], plugin);
 
 		// Perform the registration
-		System.out.println("Registering...");
+		ProgressBar.setProgressBarMessage("Registering...");
 
 		long start = System.currentTimeMillis(); // start timing
 
@@ -197,12 +208,14 @@ public class BUnwarpper extends Thread {
 			}
 			warp.showInverseResults();
 		}
-
+		
+		System.out.println("Intervals: " + warp.getIntervals());
+		
 		long stop = System.currentTimeMillis(); // stop timing
 		if (outputLevel == 2)
 			System.out.println("\nRegistration time: " + (stop - start) + "ms"); // print
 
-		((BUnwarp) plugin).restoreAll();
+		plugin.restoreAll();
 	}
 
 	private Sequence[] initializeOutputSeqs() {
@@ -304,9 +317,51 @@ public class BUnwarpper extends Thread {
 	public void getRegisteredSource(Sequence srcTgtSeq) {
 		warp.getRegisteredSource(srcTgtSeq);
 	}
-
+	
 	public void getRegisteredTarget(Sequence tgtTgtSeq) {
 		warp.getRegisteredTarget(tgtTgtSeq);
 	}
+	
+	/**
+	 * Computes the registered image in the specified result file path using srcPath as the transformed image.
+	 * @param srcResultPath Path of the result image
+	 * @param srcPath Path of the image to be transformed
+	 * @param tgtPath Path of the base image
+	 * @return The resulting sequence
+	 */
+	public Sequence getRegisteredSource(String srcResultPath, String srcPath, String tgtPath) {
+		return warp.getRegisteredSource(srcResultPath, srcPath, tgtPath);
+	}
 
+	/**
+	 * Computes the registered image in the specified result file path using tgtPath as the transformed image.
+	 * @param tgtResultPath Path of the result image
+	 * @param srcPath Path of the image to be transformed
+	 * @param tgtPath Path of the base image
+	 * @return The resulting sequence
+	 */
+	public Sequence getRegisteredTarget(String tgtResultPath, String srcPath, String tgtPath) {
+		return warp.getRegisteredTarget(tgtResultPath, srcPath, tgtPath);
+	}
+	
+	public double[][] getCxSourceToTarget() {
+		return warp.getCxSourceToTarget();
+	}
+
+	public double[][] getCySourceToTarget() {
+		return warp.getCySourceToTarget();
+	}
+	
+	public double[][] getCxTargetToSource() {
+		return warp.getCxTargetToSource();
+	}
+	
+	public double[][] getCyTargetToSource() {
+		return warp.getCyTargetToSource();
+	}
+
+	public int getIntervals() {
+		return warp.getIntervals();
+	}
+	
 }

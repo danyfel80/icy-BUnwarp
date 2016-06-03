@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<protocol VERSION="4">
+<blocks>
+<block ID="1396314225" blockType="plugins.danyfel80.registration.bunwarp.BUnwarp" className="plugins.danyfel80.registration.bunwarp.BUnwarp" collapsed="false" definedName="B unwarp" height="546" keepsResults="true" width="319" xLocation="38" yLocation="12">
+<variables>
+<input>
+<variable ID="Source" name="Source" runtime="false" visible="true"/>
+<variable ID="Target" name="Target" runtime="false" visible="true"/>
+<variable ID="Transformation Source" name="Transformation Source" runtime="false" value="No Sequence" visible="true"/>
+<variable ID="Transformation Target" name="Transformation Target" runtime="false" value="No Sequence" visible="true"/>
+<variable ID="Mode" name="Mode" runtime="false" value="ACCURATE" visible="true"/>
+<variable ID="Image Subsampling Factor" name="Image Subsampling Factor" runtime="false" value="0" visible="true"/>
+<variable ID="Initial deformation" name="Initial deformation" runtime="false" value="VERY_COARSE" visible="true"/>
+<variable ID="Final Deformation" name="Final Deformation" runtime="false" value="VERY_FINE" visible="true"/>
+<variable ID="Divergence Weight" name="Divergence Weight" runtime="false" value="0.0" visible="true"/>
+<variable ID="Curl Weight" name="Curl Weight" runtime="false" value="0.0" visible="true"/>
+<variable ID="Landmark Weight" name="Landmark Weight" runtime="false" value="0.0" visible="true"/>
+<variable ID="Image Weight" name="Image Weight" runtime="false" value="1.0" visible="true"/>
+<variable ID="Consistency Weight" name="Consistency Weight" runtime="false" value="10.0" visible="true"/>
+<variable ID="Stop Threshold" name="Stop Threshold" runtime="false" value="0.01" visible="true"/>
+<variable ID="Show Process" name="Show Process" runtime="false" value="false" visible="true"/>
+</input>
+<output>
+<variable ID="Source Registered" name="Source Registered" runtime="false" visible="true"/>
+<variable ID="Target Registered" name="Target Registered" runtime="false" visible="true"/>
+<variable ID="Cx Source to Target" name="Cx Source to Target" runtime="false" visible="true"/>
+<variable ID="Cy Source to Target" name="Cy Source to Target" runtime="false" visible="true"/>
+<variable ID="Cx Target to Source" name="Cx Target to Source" runtime="false" visible="true"/>
+<variable ID="Cy Target to Source" name="Cy Target to Source" runtime="false" visible="true"/>
+<variable ID="Transform intervals" name="Transform intervals" runtime="false" visible="true"/>
+</output>
+</variables>
+</block>
+<block ID="122450874" blockType="plugins.adufour.blocks.tools.text.AppendText" className="plugins.adufour.blocks.Blocks" collapsed="false" definedName="Append text" height="130" keepsResults="true" width="170" xLocation="412" yLocation="306">
+<variables>
+<input>
+<variable ID="input" name="input" runtime="false" visible="true"/>
+<variable ID="Separator" name="Separator" runtime="false" value="_" visible="true"/>
+<variable ID="Suffix" name="Suffix" runtime="false" value="" visible="true"/>
+</input>
+<output>
+<variable ID="output" name="output" runtime="false" visible="true"/>
+</output>
+</variables>
+</block>
+<block ID="1608245855" blockType="plugins.adufour.blocks.tools.input.Text" className="plugins.adufour.blocks.tools.input.Text" collapsed="false" definedName="Text" height="64" keepsResults="true" width="127" xLocation="467" yLocation="138">
+<variables>
+<input>
+<variable ID="text" name="text" runtime="false" visible="true"/>
+</input>
+<output/>
+</variables>
+</block>
+</blocks>
+<links>
+<link dstBlockID="122450874" dstVarID="input" srcBlockID="1396314225" srcVarID="Transform intervals"/>
+<link dstBlockID="1608245855" dstVarID="text" srcBlockID="122450874" srcVarID="output"/>
+</links>
+</protocol>
