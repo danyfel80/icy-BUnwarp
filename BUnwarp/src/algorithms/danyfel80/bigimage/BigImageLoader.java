@@ -52,6 +52,7 @@ public class BigImageLoader {
 			DataType imgDataType = DataType.getDataTypeFromPixelType(imgProps.getPixelsType(0));
 			Runtime.getRuntime().gc();
 			long ram = Runtime.getRuntime().freeMemory();
+			System.out.println("Available memory: " + ram + " bytes");
 			ram /= imgSizeC;
 			double szMax = Math.sqrt(ram);
 			
