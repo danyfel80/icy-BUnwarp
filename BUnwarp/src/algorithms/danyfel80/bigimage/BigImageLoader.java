@@ -115,7 +115,7 @@ public class BigImageLoader {
 					points[currProc] = new Point(posTileX, posTileY);
 					threads[currProc++].start();
 
-					if (currProc >= nProc) {
+					if (currProc >= nProc || (posX == imgSizeX-1 && posY == imgSizeY-1)) {
 						for (int p = 0; p < nProc; p++) {
 							try {
 								threads[p].join();
