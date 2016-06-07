@@ -1,6 +1,3 @@
-/**
- * 
- */
 package plugins.danyfel80.registration.bunwarp;
 
 import java.awt.geom.Point2D;
@@ -13,7 +10,6 @@ import org.apache.commons.io.FilenameUtils;
 
 import algorithms.danyfel80.bigimage.BigImageLoader;
 import algorithms.danyfel80.registration.bunwarp.BUnwarpper;
-import algorithms.danyfel80.registration.bunwarp.BigImageTools;
 import algorithms.danyfel80.registration.bunwarp.MaximumScaleDeformationEnum;
 import algorithms.danyfel80.registration.bunwarp.MinimumScaleDeformationEnum;
 import algorithms.danyfel80.registration.bunwarp.ProgressBar;
