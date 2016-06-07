@@ -1,13 +1,9 @@
-/**
- * 
- */
 package algorithms.danyfel80.bigimage;
 
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.Dimension;
 import java.io.IOException;
-
-import javax.media.nativewindow.util.Dimension;
 
 import org.apache.commons.io.FilenameUtils;
 
@@ -187,7 +183,7 @@ public class BigImageLoader {
 			try {
 				importer.open(path, 0);
 				resultImage = importer.getImage(0, 1, rect, 0, 0);
-				resultImage = IcyBufferedImageUtil.scale(resultImage, dimension.getWidth(), dimension.getHeight());
+				resultImage = IcyBufferedImageUtil.scale(resultImage, (int)dimension.getWidth(), (int)dimension.getHeight());
 				importer.close();
 			} catch (UnsupportedFormatException | IOException e) {
 				e.printStackTrace();
