@@ -18,7 +18,7 @@ import loci.formats.ome.OMEXMLMetadataImpl;
 import plugins.kernel.importer.LociImporterPlugin;
 
 /**
- * This class allows easy big image loading and writing through downsampling or
+ * This class allows easy big image loading through downsampling and
  * tile loading.
  * 
  * @author Daniel Felipe Gonzalez Obando

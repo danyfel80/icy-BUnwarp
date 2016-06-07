@@ -4,18 +4,21 @@
 package plugins.danyfel80.registration.bunwarp;
 
 import java.awt.geom.Point2D;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
 import org.apache.commons.io.FilenameUtils;
 
+import algorithms.danyfel80.bigimage.BigImageLoader;
 import algorithms.danyfel80.registration.bunwarp.BUnwarpper;
 import algorithms.danyfel80.registration.bunwarp.BigImageTools;
 import algorithms.danyfel80.registration.bunwarp.MaximumScaleDeformationEnum;
 import algorithms.danyfel80.registration.bunwarp.MinimumScaleDeformationEnum;
 import algorithms.danyfel80.registration.bunwarp.ProgressBar;
 import algorithms.danyfel80.registration.bunwarp.RegistrationModeEnum;
+import icy.common.exception.UnsupportedFormatException;
 import icy.gui.dialog.MessageDialog;
 import icy.image.IcyBufferedImage;
 import icy.roi.ROI;
@@ -219,11 +222,20 @@ public class BigImageBUnwarp extends BUnwarp {
 		long startTime = System.nanoTime();
 		
 		ProgressBar.setProgressBarMessage("Loading source image...");
-		srcSeq = BigImageTools.loadSubsampledSequence(inSrcFile.getValue().getPath(), inSrcFile.getValue().getName());
-		Runtime.getRuntime().gc();
-		tgtSeq = BigImageTools.loadSubsampledSequence(inTgtFile.getValue().getPath(), inTgtFile.getValue().getName());
-		Runtime.getRuntime().gc();
-
+		
+//		srcSeq = BigImageTools.loadSubsampledSequence(inSrcFile.getValue().getPath(), inSrcFile.getValue().getName());
+//		Runtime.getRuntime().gc();
+//		tgtSeq = BigImageTools.loadSubsampledSequence(inTgtFile.getValue().getPath(), inTgtFile.getValue().getName());
+//		Runtime.getRuntime().gc();
+		
+		try {
+			srcSeq = BigImageLoader.loadDownsampledImage(inSrcFile.getValue().getPath(), 1000, 1000);
+			tgtSeq = BigImageLoader.loadDownsampledImage(inTgtFile.getValue().getPath(), 1000, 1000);
+		} catch (UnsupportedFormatException | IOException e1) {
+			e1.printStackTrace();
+			return;
+		}
+		
 		addSequence(srcSeq);
 		addSequence(tgtSeq);
 
@@ -287,7 +299,7 @@ public class BigImageBUnwarp extends BUnwarp {
 			Sequence result = bu.getRegisteredSource(srcResultPath, transformedSrcPath, tgtPath);
 			addSequence(result);
 			if (inMode.getValue() != RegistrationModeEnum.MONO) {
-				Sequence result1 = bu.getRegisteredTarget(tgtResultPath, srcPath, transformedTgtPath);
+				Sequence result1 = bu.getRegisteredTarget(tgtResultPath, transformedTgtPath, srcPath);
 				addSequence(result1);
 			}
 		}
