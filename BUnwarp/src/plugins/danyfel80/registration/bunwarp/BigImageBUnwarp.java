@@ -225,8 +225,8 @@ public class BigImageBUnwarp extends BUnwarp {
 //		Runtime.getRuntime().gc();
 		
 		try {
-			srcSeq = BigImageLoader.loadDownsampledImage(inSrcFile.getValue().getPath(), 1000, 1000);
-			tgtSeq = BigImageLoader.loadDownsampledImage(inTgtFile.getValue().getPath(), 1000, 1000);
+			srcSeq = BigImageLoader.loadDownsampledImage(inSrcFile.getValue().getPath(), null, 1000, 1000);
+			tgtSeq = BigImageLoader.loadDownsampledImage(inTgtFile.getValue().getPath(), null, 1000, 1000);
 		} catch (UnsupportedFormatException | IOException e1) {
 			e1.printStackTrace();
 			return;

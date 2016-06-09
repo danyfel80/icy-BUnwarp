@@ -29,34 +29,33 @@ import loci.formats.tiff.IFD;
  */
 public class BigImageSaver {
 
-	private final OMETiffWriter writer;
-	private final boolean littleEndian;
-	private final int sizeC;
-//	private final Dimension tgtDim;
-//	private final IcyColorModel tgtColorModel;
-//	private final OMEXMLMetadata tgtMetadata;
-	private final boolean separateChannel;
+	private OMETiffWriter writer;
+	private boolean littleEndian;
+	private int sizeC;
+	// private final Dimension tgtDim;
+	// private final IcyColorModel tgtColorModel;
+	// private final OMEXMLMetadata tgtMetadata;
+	private boolean separateChannel;
 
 	public BigImageSaver(File tgtFile, Dimension tgtDim, IcyColorModel tgtColorModel, OMEXMLMetadata tgtMetadata)
 	    throws FormatException, IOException {
 		writer = new OMETiffWriter();
-//		this.tgtDim = tgtDim;
-//		this.tgtColorModel = tgtColorModel;
-//		this.tgtMetadata = tgtMetadata;
-		try {
-			writer.setCompression("LZW");
-		} catch (FormatException e) {
-			/* no compression */}
-
+		
+		// this.tgtDim = tgtDim;
+		// this.tgtColorModel = tgtColorModel;
+		// this.tgtMetadata = tgtMetadata;
 		// first delete the file else LOCI won't save it correctly
-		if (tgtFile.exists())
+		
+		if (tgtFile.exists()) {
+//			System.out.println("deleting");
 			tgtFile.delete();
+		}
 		// ensure parent directory exist
 		FileUtil.ensureParentDirExist(tgtFile);
 
 		sizeC = tgtColorModel.getNumComponents();
-		this.separateChannel = getSeparateChannelFlag(writer, sizeC, tgtColorModel.getDataType_());
-
+		separateChannel = getSeparateChannelFlag(writer, sizeC, tgtColorModel.getDataType_());
+		
 		// set settings
 		writer.setFramesPerSecond(1);
 		// generate metadata
@@ -69,6 +68,13 @@ public class BigImageSaver {
 			e.printStackTrace();
 		}
 		writer.setMetadataRetrieve(writerMetadata);
+		try {
+			writer.setCompression(OMETiffWriter.COMPRESSION_LZW);
+		} catch (FormatException e) {
+			/* no compression */
+		}
+		// usually give better save performance
+		writer.setWriteSequentially(true);
 		// no interleave (XP default viewer want interleaved channel to correctly
 		// read image)
 		writer.setInterleaved(false);
@@ -76,11 +82,6 @@ public class BigImageSaver {
 		writer.setBigTiff(true);
 		// set id
 		writer.setId(tgtFile.getAbsolutePath());
-		// init
-		writer.setSeries(0);
-		// usually give better save performance
-		writer.setWriteSequentially(true);
-
 		// get endianess
 		littleEndian = !writer.getMetadataRetrieve().getPixelsBinDataBigEndian(0, 0).booleanValue();
 	}
@@ -88,39 +89,49 @@ public class BigImageSaver {
 	public void saveTile(Sequence seq, Rectangle srcRect, Point tgtPoint)
 	    throws ServiceException, IOException, FormatException {
 
+		// init
+		writer.setSeries(0);
+		
 		byte[] data = null;
 
-		int imageIndex = 0;
+		
 		if (srcRect == null)
 			srcRect = new Rectangle(0, 0, seq.getSizeX(), seq.getSizeY());
-		final IcyBufferedImage image = IcyBufferedImageUtil.getSubImage(seq.getFirstImage(), srcRect);
+		IcyBufferedImage image = IcyBufferedImageUtil.getSubImage(seq.getFirstImage(), srcRect);
+		//Icy.getMainInterface().addSequence(new Sequence(image));
 		
-		System.out.println(srcRect);
-		
-		IFD ifd = new IFD();
-		ifd.put(IFD.TILE_WIDTH, (long)srcRect.width);
-		ifd.put(IFD.TILE_LENGTH, (long)srcRect.height);
-
-		System.out.println(ifd.getTileWidth());
 		// separated channel data
 		if (separateChannel) {
 			for (int c = 0; c < sizeC; c++) {
 				if (image != null) {
+					IFD ifd = new IFD();
+					long[] rps = new long[1];
+					rps[0] = (long) image.getSizeY();
+					ifd.put(IFD.TILE_WIDTH, (long) image.getSizeX());
+					ifd.put(IFD.TILE_LENGTH, (long) image.getSizeY());
+					ifd.put(IFD.ROWS_PER_STRIP, rps); 
 					// avoid multiple allocation
 					data = image.getRawData(c, data, 0, littleEndian);
-					writer.saveBytes(imageIndex, data, ifd, tgtPoint.x, tgtPoint.y, image.getSizeX(), image.getSizeY());
+					
+					writer.saveBytes(c, data, ifd, tgtPoint.x, tgtPoint.y, image.getSizeX(), image.getSizeY());
 				}
 
-				imageIndex++;
 			}
 		} else {
 			if (image != null) {
+				IFD ifd = new IFD();
+				long[] rps = new long[1];
+				rps[0] = srcRect.height;
+				ifd.put(IFD.TILE_WIDTH, (long) srcRect.width);
+				ifd.put(IFD.TILE_LENGTH, (long) srcRect.height);
+				ifd.put(IFD.ROWS_PER_STRIP, rps); 
 				// avoid multiple allocation
 				data = image.getRawData(data, 0, littleEndian);
-				writer.saveBytes(imageIndex, data, ifd, tgtPoint.x, tgtPoint.y, image.getSizeX(), image.getSizeY());
+				//IcyBufferedImage seq1 = new IcyBufferedImage(srcRect.width, srcRect.height, data);
+				//Icy.getMainInterface().addSequence(new Sequence(seq1));
+				
+				writer.saveBytes(0, data, ifd, tgtPoint.x, tgtPoint.y, image.getSizeX(), image.getSizeY());
 			}
-
-			imageIndex++;
 		}
 	}
 
@@ -133,8 +144,8 @@ public class BigImageSaver {
 	 */
 	private static boolean getSeparateChannelFlag(IFormatWriter writer, int numChannel, DataType dataType) {
 		if (writer instanceof OMETiffWriter)
-			return (numChannel == 2) || (numChannel > 4) || (dataType.getSize() > 1);
-
+			//return (numChannel == 2) || (numChannel > 4) || (dataType.getSize() > 1);
+			return numChannel > 1;
 		return false;
 	}
 }

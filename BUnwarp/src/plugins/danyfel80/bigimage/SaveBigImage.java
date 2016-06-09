@@ -49,13 +49,17 @@ public class SaveBigImage extends EzPlug {
 				for (int j = 0; j < seq.getSizeY(); j += tileSize) {
 					if (j + tileSizeY > seq.getSizeY())
 						tileSizeY = seq.getSizeY() - j;
+					
 					try {
+						//addSequence(new Sequence(IcyBufferedImageUtil.getSubImage(seq.getFirstImage(), new Rectangle(i, j, tileSizeX, tileSizeY))));
 						saver.saveTile(seq, new Rectangle(i, j, tileSizeX, tileSizeY), new Point(i, j));
 					} catch (ServiceException | IOException | FormatException e) {
 						e.printStackTrace();
 					}
 				}
 			}
+			
+			saver.close();
 		} catch (FormatException | IOException e1) {
 			e1.printStackTrace();
 		}
