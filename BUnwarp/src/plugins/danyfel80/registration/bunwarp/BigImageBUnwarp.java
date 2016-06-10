@@ -222,6 +222,7 @@ public class BigImageBUnwarp extends BUnwarp {
 		
 		long startTime = System.nanoTime();
 		
+		// --> Begin BigUnwarp here
 		ProgressBar.setProgressBarMessage("Loading source image...");
 		
 //		srcSeq = BigImageTools.loadSubsampledSequence(inSrcFile.getValue().getPath(), inSrcFile.getValue().getName());
@@ -304,6 +305,7 @@ public class BigImageBUnwarp extends BUnwarp {
 				addSequence(result1);
 			}
 		}
+		// --> end registration
 		long endTime = System.nanoTime();
 		long totalTime = (endTime - startTime);
 		System.out.println(String.format("Done (%d millisecs)", totalTime / 1000000));
