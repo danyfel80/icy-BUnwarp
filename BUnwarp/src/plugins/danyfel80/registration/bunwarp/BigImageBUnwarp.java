@@ -24,6 +24,7 @@ import plugins.adufour.ezplug.EzGroup;
 import plugins.adufour.ezplug.EzVar;
 import plugins.adufour.ezplug.EzVarBoolean;
 import plugins.adufour.ezplug.EzVarDouble;
+import plugins.adufour.ezplug.EzVarDoubleArrayNative;
 import plugins.adufour.ezplug.EzVarEnum;
 import plugins.adufour.ezplug.EzVarFile;
 import plugins.adufour.ezplug.EzVarInteger;
@@ -53,6 +54,8 @@ public class BigImageBUnwarp extends BUnwarp {
 	// - Registration mode
 	EzVarEnum<RegistrationModeEnum> inMode = new EzVarEnum<>("Mode", RegistrationModeEnum.values(),
 	    RegistrationModeEnum.ACCURATE);
+	double[][] scales = {{1.0, 0.16}};
+	EzVarDoubleArrayNative inUsedScales = new EzVarDoubleArrayNative("Registration scales", scales, true);
 	// - Subsampling factor
 	EzVarInteger inSubsampleFactor = new EzVarInteger("Image Subsampling Factor", 0, 0, 7, 1);
 	// - Advanced Parameters
@@ -111,6 +114,7 @@ public class BigImageBUnwarp extends BUnwarp {
 		inputMap.add(inSrcResultFile.name, inSrcResultFile.getVariable());
 		inputMap.add(inTgtResultFile.name, inTgtResultFile.getVariable());
 		inputMap.add(inMode.name, inMode.getVariable());
+		inputMap.add(inUsedScales.name, inUsedScales.getVariable());
 		inputMap.add(inSubsampleFactor.name, inSubsampleFactor.getVariable());
 		inputMap.add(inIniDef.name, inIniDef.getVariable());
 		inputMap.add(inFnlDef.name, inFnlDef.getVariable());
@@ -153,6 +157,7 @@ public class BigImageBUnwarp extends BUnwarp {
 		addEzComponent(inSrcResultFile);
 		addEzComponent(inTgtResultFile);
 		addEzComponent(inMode);
+		addEzComponent(inUsedScales);
 		addEzComponent(inSubsampleFactor);
 		addEzComponent(advancedParamsGroup);
 
