@@ -1,8 +1,8 @@
 package algorithms.danyfel80.bigimage;
 
+import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.Rectangle;
-import java.awt.Dimension;
 import java.io.IOException;
 
 import org.apache.commons.io.FilenameUtils;
@@ -14,7 +14,7 @@ import icy.sequence.Sequence;
 import icy.type.DataType;
 import loci.formats.ome.OMEXMLMetadataImpl;
 import plugins.adufour.ezplug.EzGUI;
-import plugins.adufour.ezplug.EzPlug;
+import plugins.danyfel80.bigimage.LoadBigImage;
 import plugins.kernel.importer.LociImporterPlugin;
 
 /**
@@ -26,23 +26,28 @@ import plugins.kernel.importer.LociImporterPlugin;
 public class BigImageLoader {
 
 	private static EzGUI pluginGUI;
-	
+	private static LoadBigImage plugin;
+
+	public static void setPlugin(LoadBigImage plugin) {
+		BigImageLoader.plugin = plugin;
+	}
+
 	public static void setPluginGUI(EzGUI pluginGUI) {
 		BigImageLoader.pluginGUI = pluginGUI;
 	}
-	
+
 	private static void setProgress(double progress) {
 		if (pluginGUI != null) {
 			pluginGUI.setProgressBarValue(progress);
 		}
 	}
-	
+
 	private static void setStatusMessage(String message) {
 		if (pluginGUI != null) {
 			pluginGUI.setProgressBarMessage(message);
 		}
 	}
-	
+
 	/**
 	 * Loads an image from a file and downsamples it according to the desired
 	 * resulting size. This method is performed using tiles to manage memory
@@ -61,10 +66,10 @@ public class BigImageLoader {
 	 */
 	public static Sequence loadDownsampledImage(String path, Rectangle tile, int resultMaxWidth, int resultMaxHeight)
 	    throws UnsupportedFormatException, IOException {
-		
+
 		double progress = 0;
 		setProgress(progress);
-		setStatusMessage(String.format("Loading image: %d", (int)(progress*100)));
+		setStatusMessage(String.format("Loading image: %d", (int) (progress * 100)));
 		LociImporterPlugin importer = new LociImporterPlugin();
 		try {
 			importer.open(path, 0);
@@ -77,6 +82,14 @@ public class BigImageLoader {
 			if (tile == null) {
 				tile = new Rectangle(0, 0, imgSizeX, imgSizeY);
 			} else {
+				if (tile.x < 0) {
+					tile.width += tile.x;
+					tile.x = 0;
+				}
+				if (tile.y < 0) {
+					tile.height += tile.y;
+					tile.y = 0;
+				}
 				if (tile.x > imgSizeX || tile.y > imgSizeY)
 					return null;
 				if (tile.x + tile.width > imgSizeX)
@@ -93,7 +106,7 @@ public class BigImageLoader {
 				resultMaxHeight = tile.height;
 			}
 
-			Runtime.getRuntime().gc();
+			System.gc();
 			long ram = Runtime.getRuntime().freeMemory();
 			int nProc = Runtime.getRuntime().availableProcessors();
 			System.out.println("Available memory: " + ram + " bytes, Available processors: " + nProc);
@@ -101,15 +114,15 @@ public class BigImageLoader {
 			double szMax = Math.sqrt(ram);
 
 			int tileSize = (int) Math.ceil(szMax / nProc);
-			
+
 			while (tile.width / resultMaxWidth > 2 * tileSize)
 				tileSize *= 2;
 			while (tile.height / resultMaxHeight > 2 * tileSize)
 				tileSize *= 2;
 			System.out.println("Image size: " + imgSizeX + "px*" + imgSizeY + "px. Tile size: " + tileSize);
 
-			double imgScaledSizeX = imgSizeX;
-			double imgScaledSizeY = imgSizeY;
+			//double imgScaledSizeX = imgSizeX;
+			//double imgScaledSizeY = imgSizeY;
 			double tmpSizeX = tile.getWidth();
 			double tmpSizeY = tile.getHeight();
 			double tileTmpSizeX = tileSize;
@@ -117,8 +130,8 @@ public class BigImageLoader {
 			int resolution = 1;
 			double scaleFactor = 1d;
 			while (tmpSizeX > resultMaxWidth || tmpSizeY > resultMaxHeight) {
-				imgScaledSizeX /= 2d;
-				imgScaledSizeY /= 2d;
+				//imgScaledSizeX /= 2d;
+				//imgScaledSizeY /= 2d;
 				tmpSizeX /= 2d;
 				tmpSizeY /= 2d;
 				tileTmpSizeX /= 2d;
@@ -148,12 +161,12 @@ public class BigImageLoader {
 			TileLoaderThread[] threads = new TileLoaderThread[nProc];
 			Point[] points = new Point[nProc];
 			int currProc = 0;
-			
-			int totalTilesX = (tile.width / tileSize) + (tile.width % tileSize > 0? 1: 0);
-			int totalTilesY = (tile.height / tileSize) + (tile.height % tileSize > 0? 1: 0);
+
+			int totalTilesX = (tile.width / tileSize) + (tile.width % tileSize > 0 ? 1 : 0);
+			int totalTilesY = (tile.height / tileSize) + (tile.height % tileSize > 0 ? 1 : 0);
 			int totalTiles = totalTilesX * totalTilesY;
 			int treatedTiles = 0;
-			
+
 			for (int posX = tile.x, posTileX = 0; posX < tile.x + tile.width && posX < imgSizeX;) {
 				int tileSizeX = (posX + tileSize) <= imgSizeX ? tileSize : imgSizeX - posX;
 				tileSizeX = (posX + tileSizeX) <= tile.x + tile.width ? tileSizeX : tile.x + tile.width - posX;
@@ -161,7 +174,9 @@ public class BigImageLoader {
 
 				for (int posY = tile.y, posTileY = 0; posY < tile.y + tile.height && posY < imgSizeY;) {
 					// System.out.println("Processing: (" + posX + ", " + posY + ")");
-
+					if (plugin != null && plugin.isStopped()) {
+						break;
+					}
 					int tileSizeY = (posY + tileSize) <= imgSizeY ? tileSize : imgSizeY - posY;
 					tileSizeY = (posY + tileSizeY) <= tile.y + tile.height ? tileSizeY : tile.y + tile.height - posY;
 					int outCurrTileSizeY = (posTileY + outTileSizeY) <= outSizeY ? outTileSizeY : outSizeY - posTileY;
@@ -180,18 +195,21 @@ public class BigImageLoader {
 								threads[p] = null;
 								points[p] = null;
 								treatedTiles++;
-								progress = (double)treatedTiles/(double)totalTiles;
+								progress = (double) treatedTiles / (double) totalTiles;
 								setProgress(progress);
-								setStatusMessage(String.format("Loading image: %d, tile: %d / %d", (int)(progress*100), treatedTiles, totalTiles));
+								setStatusMessage(String.format("Loading image: %d%%, tile: %d / %d", (int) (progress * 100),
+								    treatedTiles, totalTiles));
 							} catch (InterruptedException e) {
 								e.printStackTrace();
 							}
 						}
 						currProc = 0;
 					}
-
 					posY += tileSizeY;
 					posTileY += outCurrTileSizeY;
+				}
+				if (plugin != null && plugin.isStopped()) {
+					break;
 				}
 				posX += tileSizeX;
 				posTileX += outCurrTileSizeX;

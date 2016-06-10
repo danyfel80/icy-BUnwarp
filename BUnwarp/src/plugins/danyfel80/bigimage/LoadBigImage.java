@@ -13,18 +13,18 @@ import plugins.adufour.blocks.lang.Block;
 import plugins.adufour.blocks.util.VarList;
 import plugins.adufour.ezplug.EzGroup;
 import plugins.adufour.ezplug.EzPlug;
+import plugins.adufour.ezplug.EzStoppable;
 import plugins.adufour.ezplug.EzVar;
 import plugins.adufour.ezplug.EzVarBoolean;
 import plugins.adufour.ezplug.EzVarFile;
 import plugins.adufour.ezplug.EzVarInteger;
 import plugins.adufour.ezplug.EzVarListener;
-import plugins.adufour.vars.lang.VarBoolean;
 
 /**
  * @author Daniel Felipe Gonzalez Obando
  *
  */
-public class LoadBigImage extends EzPlug implements Block {
+public class LoadBigImage extends EzPlug implements Block, EzStoppable {
 
 	private EzVarFile inFile = new EzVarFile("Image path", "");
 	// Downsampling
@@ -38,6 +38,8 @@ public class LoadBigImage extends EzPlug implements Block {
 	private EzVarInteger inTileW = new EzVarInteger("Tile width");
 	private EzVarInteger inTileH = new EzVarInteger("Tile height");
 
+	private boolean isStopped;
+	
 	/*
 	 * (non-Javadoc)
 	 * 
@@ -85,6 +87,7 @@ public class LoadBigImage extends EzPlug implements Block {
 	 */
 	@Override
 	protected void execute() {
+		isStopped = false;
 		String path = inFile.getValue().getAbsolutePath();
 		int maxWidth = inMaxWidth.getValue();
 		int maxHeight = inMaxHeight.getValue();
@@ -98,6 +101,7 @@ public class LoadBigImage extends EzPlug implements Block {
 		try {
 			long startTime = System.nanoTime();
 			BigImageLoader.setPluginGUI(this.getUI());
+			BigImageLoader.setPlugin(this);
 			s = BigImageLoader.loadDownsampledImage(path, isTiled? new Rectangle(tileX, tileY, tileW, tileH): null, maxWidth, maxHeight);
 			long endTime = System.nanoTime();
 			addSequence(s);
@@ -135,5 +139,19 @@ public class LoadBigImage extends EzPlug implements Block {
 		addEzComponent(tileGroup);
 		inIsTiled.setValue(false);
 	}
+
+	/* (non-Javadoc)
+	 * @see plugins.adufour.ezplug.EzPlug#stopExecution()
+	 */
+	@Override
+	public void stopExecution() {
+		isStopped = true;
+	}
+	
+	public boolean isStopped() {
+		return isStopped;
+	}
+	
+	
 
 }

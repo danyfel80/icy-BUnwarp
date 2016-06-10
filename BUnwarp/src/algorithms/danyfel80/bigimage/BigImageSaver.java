@@ -109,7 +109,7 @@ public class BigImageSaver {
 					rps[0] = (long) image.getSizeY();
 					ifd.put(IFD.TILE_WIDTH, (long) image.getSizeX());
 					ifd.put(IFD.TILE_LENGTH, (long) image.getSizeY());
-					ifd.put(IFD.ROWS_PER_STRIP, rps); 
+					ifd.put(IFD.ROWS_PER_STRIP, rps);
 					// avoid multiple allocation
 					data = image.getRawData(c, data, 0, littleEndian);
 					
