@@ -127,7 +127,6 @@ public class BigImageLoader {
 			double tmpSizeY = tile.getHeight();
 			double tileTmpSizeX = tileSize;
 			double tileTmpSizeY = tileSize;
-			int resolution = 1;
 			double scaleFactor = 1d;
 			while (tmpSizeX > resultMaxWidth || tmpSizeY > resultMaxHeight) {
 				//imgScaledSizeX /= 2d;
@@ -136,11 +135,10 @@ public class BigImageLoader {
 				tmpSizeY /= 2d;
 				tileTmpSizeX /= 2d;
 				tileTmpSizeY /= 2d;
-				resolution *= 2;
 				scaleFactor /= 2d;
 			}
 
-			System.out.println("resolution scale: " + resolution);
+			System.out.println("output resolution: " + scaleFactor);
 
 			int outTileSizeX = (int) Math.round(tileTmpSizeX);
 			int outTileSizeY = (int) Math.round(tileTmpSizeY);
@@ -269,8 +267,10 @@ public class BigImageLoader {
 			LociImporterPlugin importer = new LociImporterPlugin();
 			try {
 				importer.open(path, 0);
-				resultImage = importer.getImage(0, 1, rect, 0, 0);
-				resultImage = IcyBufferedImageUtil.scale(resultImage, (int) dimension.getWidth(), (int) dimension.getHeight());
+				resultImage = importer.getImage(0, 0, rect, 0, 0);
+				if (resultImage.getWidth() != dimension.getWidth() || resultImage.getHeight() != dimension.height) {
+					resultImage = IcyBufferedImageUtil.scale(resultImage, (int) dimension.getWidth(), (int) dimension.getHeight());
+				}
 				importer.close();
 			} catch (UnsupportedFormatException | IOException e) {
 				e.printStackTrace();

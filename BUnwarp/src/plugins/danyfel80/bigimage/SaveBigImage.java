@@ -7,7 +7,8 @@ import java.io.File;
 import java.io.IOException;
 
 import algorithms.danyfel80.bigimage.BigImageSaver;
-import icy.sequence.Sequence;
+import icy.image.IcyBufferedImage;
+import icy.image.IcyBufferedImageUtil;
 import loci.common.services.ServiceException;
 import loci.formats.FormatException;
 import plugins.adufour.ezplug.EzPlug;
@@ -30,7 +31,8 @@ public class SaveBigImage extends EzPlug {
 
 	@Override
 	protected void execute() {
-		Sequence seq = inSeq.getValue();
+		IcyBufferedImage ibi = inSeq.getValue().getFirstImage();
+		
 		File file = inFile.getValue();
 		int tileSize = inTileSize.getValue();
 		int tileSizeX = tileSize;
@@ -38,31 +40,80 @@ public class SaveBigImage extends EzPlug {
 
 		this.getUI().setProgressBarMessage("Saving");
 
-		BigImageSaver saver;
-		try {
-			saver = new BigImageSaver(file, new Dimension(seq.getWidth(), seq.getHeight()), seq.getColorModel(),
-			    seq.getMetadata());
+		int x, y;
+		int w, h;
+		int sizeX, sizeY;
+		int n, m;
+		int diffWidth, diffHeight;
 
-			for (int i = 0; i < seq.getSizeX(); i += tileSize) {
-				if (i + tileSizeX > seq.getSizeX())
-					tileSizeX = seq.getSizeX() - i;
-				for (int j = 0; j < seq.getSizeY(); j += tileSize) {
-					if (j + tileSizeY > seq.getSizeY())
-						tileSizeY = seq.getSizeY() - j;
-					
-					try {
-						//addSequence(new Sequence(IcyBufferedImageUtil.getSubImage(seq.getFirstImage(), new Rectangle(i, j, tileSizeX, tileSizeY))));
-						saver.saveTile(seq, new Rectangle(i, j, tileSizeX, tileSizeY), new Point(i, j));
-					} catch (ServiceException | IOException | FormatException e) {
-						e.printStackTrace();
+		sizeX = ibi.getWidth();
+		sizeY = ibi.getHeight();
+		if (tileSizeX <= 0)
+			tileSizeX = sizeX;
+		if (tileSizeY <= 0)
+			tileSizeY = sizeY;
+		n = sizeX / tileSizeX;
+		m = sizeY / tileSizeY;
+		if (n == 0) {
+			tileSizeX = sizeX;
+			n = 1;
+		}
+		if (m == 0) {
+			tileSizeY = sizeY;
+			m = 1;
+		}
+		diffWidth = sizeX - n * tileSizeX;
+		diffHeight = sizeY - m * tileSizeY;
+		if (diffWidth > 0)
+			n++;
+		if (diffHeight > 0)
+			m++;
+
+		BigImageSaver saver = null;
+		try {
+			saver = new BigImageSaver(file, new Dimension(ibi.getWidth(), ibi.getHeight()), ibi.getSizeC(),
+					ibi.getDataType_(), new Dimension(tileSizeX, tileSizeY));
+		} catch (ServiceException | FormatException | IOException e1) {
+			e1.printStackTrace();
+			return;
+		}
+		
+		try {
+			for (int i = 0; i < m; i++) {
+				if (diffHeight > 0 && i == (m - 1)) {
+					y = sizeY - diffHeight;
+					h = diffHeight;
+				} else {
+					y = tileSizeY * i;
+					h = tileSizeY;
+				}
+				for (int j = 0; j < n; j++) {
+					if (diffWidth > 0 && j == (n - 1)) {
+						x = sizeX - diffWidth;
+						w = diffWidth;
+					} else {
+						x = tileSizeX * j;
+						w = tileSizeX;
 					}
+					
+					Rectangle rect = new Rectangle(x, y, w, h);
+					Point point = new Point(x, y);
+//					System.out.println("Saving tile " + rect + " at " + point);
+					saver.saveTile(IcyBufferedImageUtil.getSubImage(ibi, rect), point);
+
 				}
 			}
-			
-			saver.close();
-		} catch (FormatException | IOException e1) {
-			e1.printStackTrace();
+
+		} catch (ServiceException | FormatException | IOException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				saver.closeWriter();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
+
 		this.getUI().setProgressBarMessage("Done");
 	}
 
