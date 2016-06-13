@@ -5,6 +5,7 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -15,6 +16,8 @@ import icy.roi.ROI2D;
 import icy.sequence.Sequence;
 import icy.type.DataType;
 import icy.type.collection.array.Array2DUtil;
+import loci.common.services.ServiceException;
+import loci.formats.FormatException;
 import plugins.danyfel80.registration.bunwarp.BUnwarp;
 import plugins.kernel.roi.roi2d.ROI2DPoint;
 
@@ -4752,6 +4755,16 @@ public class Transformation {
 
 	public int getIntervals() {
 		return intervals;
+	}
+
+	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcPath, String tgtPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
+		BigImageTools.applyAndSaveTransformationToBigImage(srcResultPath, transformedSrcPath, tgtPath, intervals, cxTargetToSource,
+		    cyTargetToSource, new Dimension(targetWidth, targetHeight));
+	}
+
+	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtPath, String srcPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
+		BigImageTools.applyAndSaveTransformationToBigImage(tgtResultPath, transformedTgtPath, srcPath, intervals, cxSourceToTarget,
+		    cySourceToTarget, new Dimension(targetWidth, targetHeight));
 	}
 
 }

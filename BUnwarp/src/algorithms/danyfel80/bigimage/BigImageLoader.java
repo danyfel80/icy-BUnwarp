@@ -25,8 +25,8 @@ import plugins.kernel.importer.LociImporterPlugin;
  */
 public class BigImageLoader {
 
-	private static EzGUI pluginGUI;
-	private static LoadBigImage plugin;
+	private static EzGUI pluginGUI = null;
+	private static LoadBigImage plugin = null;
 
 	public static void setPlugin(LoadBigImage plugin) {
 		BigImageLoader.plugin = plugin;
@@ -42,6 +42,7 @@ public class BigImageLoader {
 		}
 	}
 
+	@SuppressWarnings("unused")
 	private static void setStatusMessage(String message) {
 		if (pluginGUI != null) {
 			pluginGUI.setProgressBarMessage(message);
@@ -69,7 +70,7 @@ public class BigImageLoader {
 
 		double progress = 0;
 		setProgress(progress);
-		setStatusMessage(String.format("Loading image: %d", (int) (progress * 100)));
+		//setStatusMessage(String.format("Loading image: %d", (int) (progress * 100)));
 		LociImporterPlugin importer = new LociImporterPlugin();
 		try {
 			importer.open(path, 0);
@@ -111,9 +112,10 @@ public class BigImageLoader {
 			int nProc = Runtime.getRuntime().availableProcessors();
 			System.out.println("Available memory: " + ram + " bytes, Available processors: " + nProc);
 			ram /= imgSizeC;
+			ram /= nProc;
 			double szMax = Math.sqrt(ram);
 
-			int tileSize = (int) Math.ceil(szMax / nProc);
+			int tileSize = (int) Math.ceil(szMax);
 
 			while (tile.width / resultMaxWidth > 2 * tileSize)
 				tileSize *= 2;
@@ -195,8 +197,8 @@ public class BigImageLoader {
 								treatedTiles++;
 								progress = (double) treatedTiles / (double) totalTiles;
 								setProgress(progress);
-								setStatusMessage(String.format("Loading image: %d%%, tile: %d / %d", (int) (progress * 100),
-								    treatedTiles, totalTiles));
+								//setStatusMessage(String.format("Loading image: %d%%, tile: %d / %d", (int) (progress * 100),
+								//    treatedTiles, totalTiles));
 							} catch (InterruptedException e) {
 								e.printStackTrace();
 							}

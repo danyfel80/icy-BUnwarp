@@ -1,5 +1,6 @@
 package plugins.danyfel80.registration.bunwarp;
 
+import java.io.File;
 import java.util.List;
 
 import org.apache.commons.io.FilenameUtils;
@@ -144,6 +145,31 @@ public class BigImageBUnwarp extends BUnwarp {
 		addEzComponent(inSubsampleFactor);
 		addEzComponent(advancedParamsGroup);
 
+//		EzVarListener<File> fileChangeListener = new EzVarListener<File>() {
+//			@Override
+//			public void variableChanged(EzVar<File> source, File newValue) {
+//				if (newValue != null) {
+//					System.out.println(inSrcFile.getValue());
+//					System.out.println(inTgtFile.getValue());
+//					System.out.println(inSrcResultFile.getValue());
+//					System.out.println(inTgtResultFile.getValue());
+//					if (inSrcFile.getValue() == null)
+//						inSrcFile.setValue(newValue);
+//					if (inTgtFile.getValue() == null)
+//						inTgtFile.setValue(newValue);
+//					if (inSrcResultFile.getValue() == null)
+//						inSrcResultFile.setValue(newValue);
+//					if (inTgtResultFile.getValue() == null)
+//						inTgtResultFile.setValue(newValue);
+//				}
+//			}
+//		};
+//
+//		inSrcFile.addVarChangeListener(fileChangeListener);
+//		inSrcFile.addVarChangeListener(fileChangeListener);
+//		inSrcFile.addVarChangeListener(fileChangeListener);
+//		inSrcFile.addVarChangeListener(fileChangeListener);
+
 		inDivWeight.setValue(0d);
 		inCurlWeight.setValue(0d);
 		inLandmarkWeight.setValue(0d);
@@ -233,7 +259,7 @@ public class BigImageBUnwarp extends BUnwarp {
 		} catch (InterruptedException e) {
 			System.err.println("Thread interrupted: " + e.getMessage());
 		}
-		
+
 		long endTime = System.nanoTime();
 		long totalTime = (endTime - startTime);
 		System.out.println(String.format("Done (%d millisecs)", totalTime / 1000000));
@@ -297,6 +323,5 @@ public class BigImageBUnwarp extends BUnwarp {
 		}
 		Runtime.getRuntime().gc();
 	}
-
 
 }

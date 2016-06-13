@@ -1,11 +1,15 @@
 package algorithms.danyfel80.registration.bunwarp;
 
+import java.awt.Rectangle;
+import java.io.IOException;
 import java.util.List;
 
 import icy.image.IcyBufferedImage;
 import icy.roi.ROI2D;
 import icy.sequence.Sequence;
 import icy.type.DataType;
+import loci.common.services.ServiceException;
+import loci.formats.FormatException;
 import plugins.danyfel80.registration.bunwarp.BUnwarp;
 //import plugins.danyfel80.registration.bunwarp.BUnwarpSimple;
 import plugins.kernel.roi.roi2d.ROI2DPoint;
@@ -374,6 +378,14 @@ public class BUnwarpper extends Thread {
 
 	public int getIntervals() {
 		return warp.getIntervals();
+	}
+
+	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcPath, String tgtPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
+		warp.saveBigRegisteredSource(srcResultPath, transformedSrcPath, tgtPath, tile);
+	}
+
+	public void saveBigRegister1edTarget(String tgtResultPath, String transformedTgtPath, String srcPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
+		warp.saveBigRegisteredTarget(tgtResultPath, transformedTgtPath, srcPath, tile);
 	}
 
 }
