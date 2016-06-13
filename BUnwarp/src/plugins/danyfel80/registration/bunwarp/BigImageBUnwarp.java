@@ -1,6 +1,5 @@
 package plugins.danyfel80.registration.bunwarp;
 
-import java.io.File;
 import java.util.List;
 
 import org.apache.commons.io.FilenameUtils;
@@ -200,7 +199,7 @@ public class BigImageBUnwarp extends BUnwarp {
 
 		String srcPath = inSrcFile.getValue().getPath();
 		String tgtPath = inTgtFile.getValue().getPath();
-		System.out.println(srcPath);
+		//System.out.println(srcPath);
 
 		String transformedSrcPath;
 		String transformedTgtPath;

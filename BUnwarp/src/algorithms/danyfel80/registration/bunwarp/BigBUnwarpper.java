@@ -138,7 +138,6 @@ public class BigBUnwarpper extends Thread {
 	@Override
 	public void run() {
 		ProgressBar.setPlugin(plugin);
-		ProgressBar.setProgressBarMessage("Loading source image...");
 
 		Sequence srcSeq;
 		Sequence tgtSeq;

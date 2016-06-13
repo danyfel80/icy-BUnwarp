@@ -70,7 +70,8 @@ public class BigImageLoader {
 
 		double progress = 0;
 		setProgress(progress);
-		//setStatusMessage(String.format("Loading image: %d", (int) (progress * 100)));
+		// setStatusMessage(String.format("Loading image: %d", (int) (progress *
+		// 100)));
 		LociImporterPlugin importer = new LociImporterPlugin();
 		try {
 			importer.open(path, 0);
@@ -112,10 +113,10 @@ public class BigImageLoader {
 			int nProc = Runtime.getRuntime().availableProcessors();
 			System.out.println("Available memory: " + ram + " bytes, Available processors: " + nProc);
 			ram /= imgSizeC;
-			ram /= nProc;
 			double szMax = Math.sqrt(ram);
+			//szMax /= 2;
 
-			int tileSize = (int) Math.ceil(szMax);
+			int tileSize = (int) Math.ceil(szMax / nProc);
 
 			while (tile.width / resultMaxWidth > 2 * tileSize)
 				tileSize *= 2;
@@ -123,16 +124,16 @@ public class BigImageLoader {
 				tileSize *= 2;
 			System.out.println("Image size: " + imgSizeX + "px*" + imgSizeY + "px. Tile size: " + tileSize);
 
-			//double imgScaledSizeX = imgSizeX;
-			//double imgScaledSizeY = imgSizeY;
+			// double imgScaledSizeX = imgSizeX;
+			// double imgScaledSizeY = imgSizeY;
 			double tmpSizeX = tile.getWidth();
 			double tmpSizeY = tile.getHeight();
 			double tileTmpSizeX = tileSize;
 			double tileTmpSizeY = tileSize;
 			double scaleFactor = 1d;
 			while (tmpSizeX > resultMaxWidth || tmpSizeY > resultMaxHeight) {
-				//imgScaledSizeX /= 2d;
-				//imgScaledSizeY /= 2d;
+				// imgScaledSizeX /= 2d;
+				// imgScaledSizeY /= 2d;
 				tmpSizeX /= 2d;
 				tmpSizeY /= 2d;
 				tileTmpSizeX /= 2d;
@@ -190,15 +191,17 @@ public class BigImageLoader {
 					    || ((posX + tileSizeX) >= tile.x + tile.width && (posY + tileSizeY) >= tile.y + tile.height)) {
 						for (int p = 0; p < currProc; p++) {
 							try {
+								progress = (double) treatedTiles / (double) totalTiles;
+								setProgress(progress);
+								// setStatusMessage(String.format("Loading image: %d%%, tile: %d
+								// / %d", (int) (progress * 100),
+								// treatedTiles, totalTiles));
 								threads[p].join();
 								resultImg.copyData(threads[p].resultImage, null, new Point(points[p].x, points[p].y));
 								threads[p] = null;
 								points[p] = null;
 								treatedTiles++;
-								progress = (double) treatedTiles / (double) totalTiles;
-								setProgress(progress);
-								//setStatusMessage(String.format("Loading image: %d%%, tile: %d / %d", (int) (progress * 100),
-								//    treatedTiles, totalTiles));
+
 							} catch (InterruptedException e) {
 								e.printStackTrace();
 							}
@@ -214,7 +217,7 @@ public class BigImageLoader {
 				posX += tileSizeX;
 				posTileX += outCurrTileSizeX;
 			}
-			System.out.println(treatedTiles);
+			System.out.println("Treated Tiles" + treatedTiles);
 			result.setImage(0, 0, resultImg);
 			result.dataChanged();
 			result.endUpdate();
@@ -271,7 +274,8 @@ public class BigImageLoader {
 				importer.open(path, 0);
 				resultImage = importer.getImage(0, 0, rect, 0, 0);
 				if (resultImage.getWidth() != dimension.getWidth() || resultImage.getHeight() != dimension.height) {
-					resultImage = IcyBufferedImageUtil.scale(resultImage, (int) dimension.getWidth(), (int) dimension.getHeight());
+					resultImage = IcyBufferedImageUtil.scale(resultImage, (int) dimension.getWidth(),
+					    (int) dimension.getHeight());
 				}
 				importer.close();
 			} catch (UnsupportedFormatException | IOException e) {
