@@ -151,9 +151,9 @@ public class BigBUnwarpper extends Thread {
 		try {
 			BigImageLoader.setPluginGUI(plugin.getUI());
 			ProgressBar.setProgressBarMessage("Loading source image");
-			srcSeq = BigImageLoader.loadDownsampledImage(srcPath, null, 1000, 1000);
+			srcSeq = BigImageLoader.loadDownsampledImage(srcPath, null, 1000, 1000, true);
 			ProgressBar.setProgressBarMessage("Loading target image");
-			tgtSeq = BigImageLoader.loadDownsampledImage(tgtPath, null, 1000, 1000);
+			tgtSeq = BigImageLoader.loadDownsampledImage(tgtPath, null, 1000, 1000, true);
 			
 //			srcTgtSeq = SequenceUtil.getCopy(srcSeq);
 //			tgtTgtSeq = SequenceUtil.getCopy(tgtSeq);

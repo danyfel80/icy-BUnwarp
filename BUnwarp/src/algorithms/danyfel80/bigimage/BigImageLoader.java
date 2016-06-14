@@ -8,6 +8,7 @@ import java.io.IOException;
 import org.apache.commons.io.FilenameUtils;
 
 import icy.common.exception.UnsupportedFormatException;
+import icy.gui.frame.progress.ProgressFrame;
 import icy.image.IcyBufferedImage;
 import icy.image.IcyBufferedImageUtil;
 import icy.sequence.Sequence;
@@ -27,6 +28,7 @@ public class BigImageLoader {
 
 	private static EzGUI pluginGUI = null;
 	private static LoadBigImage plugin = null;
+	private static ProgressFrame progressFrame = null;
 
 	public static void setPlugin(LoadBigImage plugin) {
 		BigImageLoader.plugin = plugin;
@@ -65,11 +67,14 @@ public class BigImageLoader {
 	 * @throws IOException
 	 * @throws UnsupportedFormatException
 	 */
-	public static Sequence loadDownsampledImage(String path, Rectangle tile, int resultMaxWidth, int resultMaxHeight)
-	    throws UnsupportedFormatException, IOException {
+	public static Sequence loadDownsampledImage(String path, Rectangle tile, int resultMaxWidth, int resultMaxHeight,
+	    boolean showProgressBar) throws UnsupportedFormatException, IOException {
 
 		double progress = 0;
 		setProgress(progress);
+		if (showProgressBar) {
+			progressFrame = new ProgressFrame("Loading image...");
+		}
 		// setStatusMessage(String.format("Loading image: %d", (int) (progress *
 		// 100)));
 		LociImporterPlugin importer = new LociImporterPlugin();
@@ -114,7 +119,7 @@ public class BigImageLoader {
 			System.out.println("Available memory: " + ram + " bytes, Available processors: " + nProc);
 			ram /= imgSizeC;
 			double szMax = Math.sqrt(ram);
-			//szMax /= 2;
+			// szMax /= 2;
 
 			int tileSize = (int) Math.ceil(szMax / nProc);
 
@@ -193,6 +198,11 @@ public class BigImageLoader {
 							try {
 								progress = (double) treatedTiles / (double) totalTiles;
 								setProgress(progress);
+								if (showProgressBar) {
+									progressFrame.setPosition(progress * 100);
+									progressFrame.setMessage(String.format("Loading image: %d%%, tile: %d/%d", (int) (progress * 100),
+									    treatedTiles, totalTiles));
+								}
 								// setStatusMessage(String.format("Loading image: %d%%, tile: %d
 								// / %d", (int) (progress * 100),
 								// treatedTiles, totalTiles));
@@ -216,6 +226,9 @@ public class BigImageLoader {
 				}
 				posX += tileSizeX;
 				posTileX += outCurrTileSizeX;
+			}
+			if (showProgressBar) {
+				progressFrame.dispose();
 			}
 			System.out.println("Treated Tiles" + treatedTiles);
 			result.setImage(0, 0, resultImg);

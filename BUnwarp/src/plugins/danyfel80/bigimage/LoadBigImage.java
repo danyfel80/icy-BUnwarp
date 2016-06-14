@@ -102,7 +102,7 @@ public class LoadBigImage extends EzPlug implements Block, EzStoppable {
 			long startTime = System.nanoTime();
 			BigImageLoader.setPluginGUI(this.getUI());
 			BigImageLoader.setPlugin(this);
-			s = BigImageLoader.loadDownsampledImage(path, isTiled? new Rectangle(tileX, tileY, tileW, tileH): null, maxWidth, maxHeight);
+			s = BigImageLoader.loadDownsampledImage(path, isTiled? new Rectangle(tileX, tileY, tileW, tileH): null, maxWidth, maxHeight, true);
 			long endTime = System.nanoTime();
 			addSequence(s);
 			System.out.println("Loaded in " + ((endTime - startTime) / 1000000) + "msecs.");
