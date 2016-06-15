@@ -23,6 +23,7 @@ import icy.type.collection.array.Array2DUtil;
 import loci.common.services.ServiceException;
 import loci.formats.FormatException;
 import loci.formats.ome.OMEXMLMetadataImpl;
+import plugins.danyfel80.registration.bunwarp.BUnwarp;
 import plugins.kernel.importer.LociImporterPlugin;
 
 /**
@@ -693,7 +694,7 @@ public class BigImageTools {
 	}
 
 	public static void applyAndSaveTransformationToBigImage(String srcResultPath, String transformedSrcPath,
-	    String tgtPath, int intervals, double[][] cx, double[][] cy, Dimension registeredTgtDimension) throws ServiceException, IOException, FormatException, InterruptedException {
+	    String tgtPath, int intervals, double[][] cx, double[][] cy, Dimension registeredTgtDimension, BUnwarp plugin) throws ServiceException, IOException, FormatException, InterruptedException {
 		ProgressBar.setProgressBarMessage("Transforming original image...");
 		ProgressBar.setProgressBarValue(0);
 		Dimension srcDimension = getSequenceSize(transformedSrcPath);
@@ -755,11 +756,11 @@ public class BigImageTools {
 		
 		// until all tiles have been treated
 		int tileNo = 0;
-		while (tileNo < totalTgtTileCount) {
+		while (tileNo < totalTgtTileCount && !plugin.isPluginInterrumped()) {
 
 			int thr;
 			// treat as many tiles as the amount of available processors.
-			for (thr = 0; thr < numThreads && tileNo < totalTgtTileCount; thr++, tileNo++) {
+			for (thr = 0; thr < numThreads && tileNo < totalTgtTileCount && !plugin.isPluginInterrumped(); thr++, tileNo++) {
 				ProgressBar.setProgressBarMessage("Processing tile " + (tileNo+1) + " of " + totalTgtTileCount);
 				ProgressBar.setProgressBarValue((double)tileNo/(double)totalTgtTileCount);
 				

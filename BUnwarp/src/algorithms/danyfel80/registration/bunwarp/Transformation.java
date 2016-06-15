@@ -4759,12 +4759,12 @@ public class Transformation {
 
 	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcPath, String tgtPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
 		BigImageTools.applyAndSaveTransformationToBigImage(srcResultPath, transformedSrcPath, tgtPath, intervals, cxTargetToSource,
-		    cyTargetToSource, new Dimension(targetWidth, targetHeight));
+		    cyTargetToSource, new Dimension(targetWidth, targetHeight), plugin);
 	}
 
 	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtPath, String srcPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
 		BigImageTools.applyAndSaveTransformationToBigImage(tgtResultPath, transformedTgtPath, srcPath, intervals, cxSourceToTarget,
-		    cySourceToTarget, new Dimension(targetWidth, targetHeight));
+		    cySourceToTarget, new Dimension(targetWidth, targetHeight), plugin);
 	}
 
 }

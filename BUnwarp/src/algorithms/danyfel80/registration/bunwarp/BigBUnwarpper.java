@@ -141,9 +141,9 @@ public class BigBUnwarpper extends Thread {
 
 		Sequence srcSeq;
 		Sequence tgtSeq;
-//		Sequence srcTgtSeq;
-//		Sequence tgtTgtSeq;
-//		Dimension srcDim = BigImageTools.getSequenceSize(srcPath);
+		// Sequence srcTgtSeq;
+		// Sequence tgtTgtSeq;
+		// Dimension srcDim = BigImageTools.getSequenceSize(srcPath);
 		// Dimension tgtDim = BigImageTools.getSequenceSize(tgtPath);
 
 		// ---- First Scale Registration
@@ -154,9 +154,9 @@ public class BigBUnwarpper extends Thread {
 			srcSeq = BigImageLoader.loadDownsampledImage(srcPath, null, 1000, 1000, true);
 			ProgressBar.setProgressBarMessage("Loading target image");
 			tgtSeq = BigImageLoader.loadDownsampledImage(tgtPath, null, 1000, 1000, true);
-			
-//			srcTgtSeq = SequenceUtil.getCopy(srcSeq);
-//			tgtTgtSeq = SequenceUtil.getCopy(tgtSeq);
+
+			// srcTgtSeq = SequenceUtil.getCopy(srcSeq);
+			// tgtTgtSeq = SequenceUtil.getCopy(tgtSeq);
 		} catch (UnsupportedFormatException | IOException e1) {
 			e1.printStackTrace();
 			return;
@@ -175,9 +175,10 @@ public class BigBUnwarpper extends Thread {
 		}
 
 		// Show results
-
-//		bu.getRegisteredSource(srcTgtSeq);
-//		Icy.getMainInterface().addSequence(srcTgtSeq);
+		if (plugin.isPluginInterrumped())
+			return;
+		// bu.getRegisteredSource(srcTgtSeq);
+		// Icy.getMainInterface().addSequence(srcTgtSeq);
 		try {
 			System.out.println("saving to " + srcResultPath + ", based on " + transformedSrcPath);
 			bu.saveBigRegisteredSource(srcResultPath, transformedSrcPath, tgtPath, null);
@@ -186,13 +187,15 @@ public class BigBUnwarpper extends Thread {
 			return;
 		}
 
+		if (plugin.isPluginInterrumped())
+			return;
+
 		if (mode != RegistrationModeEnum.MONO.getNumber()) {
-//			bu.getRegisteredTarget(tgtTgtSeq);
-//			Icy.getMainInterface().addSequence(tgtTgtSeq);
+			// bu.getRegisteredTarget(tgtTgtSeq);
+			// Icy.getMainInterface().addSequence(tgtTgtSeq);
 			try {
-				bu.saveBigRegister1edTarget(tgtResultPath, transformedTgtPath, srcPath, null);
+				bu.saveBigRegisteredTarget(tgtResultPath, transformedTgtPath, srcPath, null);
 			} catch (ServiceException | IOException | FormatException | InterruptedException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
@@ -209,62 +212,74 @@ public class BigBUnwarpper extends Thread {
 		bu = null;
 		System.gc();
 		return;
-//		// Next Scales Registration
-//		for (int si = 0; si < usedScales.length; si++) {
-//			double scale = usedScales[si];
-//			int tileAmount = (int) Math.round(1.0 / scale);
-//			Dimension tileDim = new Dimension(srcDim.width / tileAmount, srcDim.height / tileAmount);
-//			Dimension tileSize = new Dimension(tileAmount + (srcDim.width % tileAmount > 0 ? 1 : 0),
-//			    tileAmount + (srcDim.height % tileAmount > 0 ? 1 : 0));
-//			int tileBorderSize = Math.max(tileDim.width, tileDim.height) / 8;
-//			int nProc = Runtime.getRuntime().availableProcessors();
-//			BUnwarpper[] bus = new BUnwarpper[nProc];
-//			Rectangle[] rects = new Rectangle[nProc];
-//
-//			int usedThreads = 0;
-//			int processedTiles = 0;
-//			for (int i = 0; i < tileSize.width && !plugin.isPluginInterrumped(); i++) {
-//				for (int j = 0; j < tileSize.height && !plugin.isPluginInterrumped(); j++) {
-//					try {
-//						rects[usedThreads] = new Rectangle(i * tileDim.width - tileBorderSize, j * tileDim.height - tileBorderSize,
-//						    tileSize.width + tileBorderSize, tileSize.height + tileBorderSize);
-//						srcSeq = BigImageLoader.loadDownsampledImage(srcResultPath, rects[usedThreads], 1023, 1023);
-//						tgtSeq = BigImageLoader.loadDownsampledImage(tgtPath, rects[usedThreads], 1023, 1023);
-//						srcTgtSeq = SequenceUtil.getCopy(srcSeq);
-//						tgtTgtSeq = SequenceUtil.getCopy(tgtSeq);
-//					} catch (UnsupportedFormatException | IOException e1) {
-//						e1.printStackTrace();
-//						return;
-//					}
-//
-//					// Register images
-//
-//					bus[usedThreads] = new BUnwarpper(srcSeq, tgtSeq, srcLandmarks, tgtLandmarks, srcMask, tgtMask,
-//					    subsampleFactor, initialDeformation, finalDeformation, 0, divWeight, curlWeight, landmarkWeight,
-//					    imageWeight, consistencyWeight, stopThreshold, showProcess ? 2 : 1, showProcess,
-//					    RegistrationModeEnum.MONO.getNumber(), plugin);
-//					bus[usedThreads++].start();
-//
-//					if (usedThreads >= nProc || processedTiles == tileSize.width * tileSize.height) {
-//						for (int t = 0; t < usedThreads; t++) {
-//							try {
-//								bus[t].join();
-//							} catch (InterruptedException e) {
-//								System.err.println("Thread interrupted: " + e.getMessage());
-//								return;
-//							}
-//							// TODO Save registered tile
-//							//bus[t].saveRegisteredSource(srcResultPath, transformedSrcPath, tgtPath, rects[t]);
-//							bus[t].getRegisteredSource(srcTgtSeq);
-//							Icy.getMainInterface().addSequence(srcTgtSeq);
-//						}
-//						usedThreads = 0;
-//					}
-//				}
-//			}
-//
-//			// TODO inverse registration
-//		}
+		// // Next Scales Registration
+		// for (int si = 0; si < usedScales.length; si++) {
+		// double scale = usedScales[si];
+		// int tileAmount = (int) Math.round(1.0 / scale);
+		// Dimension tileDim = new Dimension(srcDim.width / tileAmount,
+		// srcDim.height / tileAmount);
+		// Dimension tileSize = new Dimension(tileAmount + (srcDim.width %
+		// tileAmount > 0 ? 1 : 0),
+		// tileAmount + (srcDim.height % tileAmount > 0 ? 1 : 0));
+		// int tileBorderSize = Math.max(tileDim.width, tileDim.height) / 8;
+		// int nProc = Runtime.getRuntime().availableProcessors();
+		// BUnwarpper[] bus = new BUnwarpper[nProc];
+		// Rectangle[] rects = new Rectangle[nProc];
+		//
+		// int usedThreads = 0;
+		// int processedTiles = 0;
+		// for (int i = 0; i < tileSize.width && !plugin.isPluginInterrumped(); i++)
+		// {
+		// for (int j = 0; j < tileSize.height && !plugin.isPluginInterrumped();
+		// j++) {
+		// try {
+		// rects[usedThreads] = new Rectangle(i * tileDim.width - tileBorderSize, j
+		// * tileDim.height - tileBorderSize,
+		// tileSize.width + tileBorderSize, tileSize.height + tileBorderSize);
+		// srcSeq = BigImageLoader.loadDownsampledImage(srcResultPath,
+		// rects[usedThreads], 1023, 1023);
+		// tgtSeq = BigImageLoader.loadDownsampledImage(tgtPath, rects[usedThreads],
+		// 1023, 1023);
+		// srcTgtSeq = SequenceUtil.getCopy(srcSeq);
+		// tgtTgtSeq = SequenceUtil.getCopy(tgtSeq);
+		// } catch (UnsupportedFormatException | IOException e1) {
+		// e1.printStackTrace();
+		// return;
+		// }
+		//
+		// // Register images
+		//
+		// bus[usedThreads] = new BUnwarpper(srcSeq, tgtSeq, srcLandmarks,
+		// tgtLandmarks, srcMask, tgtMask,
+		// subsampleFactor, initialDeformation, finalDeformation, 0, divWeight,
+		// curlWeight, landmarkWeight,
+		// imageWeight, consistencyWeight, stopThreshold, showProcess ? 2 : 1,
+		// showProcess,
+		// RegistrationModeEnum.MONO.getNumber(), plugin);
+		// bus[usedThreads++].start();
+		//
+		// if (usedThreads >= nProc || processedTiles == tileSize.width *
+		// tileSize.height) {
+		// for (int t = 0; t < usedThreads; t++) {
+		// try {
+		// bus[t].join();
+		// } catch (InterruptedException e) {
+		// System.err.println("Thread interrupted: " + e.getMessage());
+		// return;
+		// }
+		// // TODO Save registered tile
+		// //bus[t].saveRegisteredSource(srcResultPath, transformedSrcPath, tgtPath,
+		// rects[t]);
+		// bus[t].getRegisteredSource(srcTgtSeq);
+		// Icy.getMainInterface().addSequence(srcTgtSeq);
+		// }
+		// usedThreads = 0;
+		// }
+		// }
+		// }
+		//
+		// // TODO inverse registration
+		// }
 
 	}
 

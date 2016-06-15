@@ -384,7 +384,7 @@ public class BUnwarpper extends Thread {
 		warp.saveBigRegisteredSource(srcResultPath, transformedSrcPath, tgtPath, tile);
 	}
 
-	public void saveBigRegister1edTarget(String tgtResultPath, String transformedTgtPath, String srcPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
+	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtPath, String srcPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
 		warp.saveBigRegisteredTarget(tgtResultPath, transformedTgtPath, srcPath, tile);
 	}
 
