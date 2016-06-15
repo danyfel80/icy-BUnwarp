@@ -99,7 +99,7 @@ public class BigImageSaver {
 		this.writer.close();
 	}
 	
-	public void saveTile(IcyBufferedImage srcIBI, Point tgtPoint)
+	public synchronized void saveTile(IcyBufferedImage srcIBI, Point tgtPoint)
 	    throws ServiceException, IOException, FormatException {
 
 		byte[] data = null;

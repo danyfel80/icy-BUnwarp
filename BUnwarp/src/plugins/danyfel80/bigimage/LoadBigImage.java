@@ -111,7 +111,9 @@ public class LoadBigImage extends EzPlug implements Block, EzStoppable {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
+		if (this.getUI() != null) {
+		  this.getUI().setProgressBarValue(0);
+		}
 	}
 
 	/*
