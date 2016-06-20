@@ -81,7 +81,8 @@ public class BigImageThresholder {
     long tileSideSize = ram / (imgSizeC + 1);
     tileSideSize /= numProc;
     tileSideSize = (long) Math.ceil(Math.sqrt(tileSideSize));
-    tileSideSize = 2000;
+    tileSideSize /= 2;
+    //tileSideSize = 2000;
 
     Dimension tileCount = new Dimension(imgSize.width / (int) tileSideSize,
         imgSize.height / (int) tileSideSize);
@@ -101,7 +102,9 @@ public class BigImageThresholder {
     Dimension residualTileSize = new Dimension(
         imgSize.width % (int) tileSideSize,
         imgSize.height % (int) tileSideSize);
-
+    
+    System.out.println(String.format("Thresholder reading tile size: (%d px, %d px)", tileSize.width, tileSize.height));
+    
     // Open saver
     BigImageSaver saver = null;
     try {
@@ -209,7 +212,8 @@ public class BigImageThresholder {
       }
       Sequence tile = null;
       try {
-        tile = BigImageLoader.loadDownsampledImage(inputFile.getAbsolutePath(),
+      	BigImageLoader loader = new BigImageLoader();
+        tile = loader.loadDownsampledImage(inputFile.getAbsolutePath(),
             currTileRect, currTileRect.width, currTileRect.height, false);
       }
       catch (UnsupportedFormatException | IOException e) {

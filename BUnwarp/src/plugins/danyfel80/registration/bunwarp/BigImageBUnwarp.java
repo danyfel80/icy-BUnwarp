@@ -144,30 +144,30 @@ public class BigImageBUnwarp extends BUnwarp {
 		addEzComponent(inSubsampleFactor);
 		addEzComponent(advancedParamsGroup);
 
-//		EzVarListener<File> fileChangeListener = new EzVarListener<File>() {
-//			@Override
-//			public void variableChanged(EzVar<File> source, File newValue) {
-//				if (newValue != null) {
-//					System.out.println(inSrcFile.getValue());
-//					System.out.println(inTgtFile.getValue());
-//					System.out.println(inSrcResultFile.getValue());
-//					System.out.println(inTgtResultFile.getValue());
-//					if (inSrcFile.getValue() == null)
-//						inSrcFile.setValue(newValue);
-//					if (inTgtFile.getValue() == null)
-//						inTgtFile.setValue(newValue);
-//					if (inSrcResultFile.getValue() == null)
-//						inSrcResultFile.setValue(newValue);
-//					if (inTgtResultFile.getValue() == null)
-//						inTgtResultFile.setValue(newValue);
-//				}
-//			}
-//		};
-//
-//		inSrcFile.addVarChangeListener(fileChangeListener);
-//		inSrcFile.addVarChangeListener(fileChangeListener);
-//		inSrcFile.addVarChangeListener(fileChangeListener);
-//		inSrcFile.addVarChangeListener(fileChangeListener);
+		// EzVarListener<File> fileChangeListener = new EzVarListener<File>() {
+		// @Override
+		// public void variableChanged(EzVar<File> source, File newValue) {
+		// if (newValue != null) {
+		// System.out.println(inSrcFile.getValue());
+		// System.out.println(inTgtFile.getValue());
+		// System.out.println(inSrcResultFile.getValue());
+		// System.out.println(inTgtResultFile.getValue());
+		// if (inSrcFile.getValue() == null)
+		// inSrcFile.setValue(newValue);
+		// if (inTgtFile.getValue() == null)
+		// inTgtFile.setValue(newValue);
+		// if (inSrcResultFile.getValue() == null)
+		// inSrcResultFile.setValue(newValue);
+		// if (inTgtResultFile.getValue() == null)
+		// inTgtResultFile.setValue(newValue);
+		// }
+		// }
+		// };
+		//
+		// inSrcFile.addVarChangeListener(fileChangeListener);
+		// inSrcFile.addVarChangeListener(fileChangeListener);
+		// inSrcFile.addVarChangeListener(fileChangeListener);
+		// inSrcFile.addVarChangeListener(fileChangeListener);
 
 		inDivWeight.setValue(0d);
 		inCurlWeight.setValue(0d);
@@ -199,7 +199,7 @@ public class BigImageBUnwarp extends BUnwarp {
 
 		String srcPath = inSrcFile.getValue().getPath();
 		String tgtPath = inTgtFile.getValue().getPath();
-		//System.out.println(srcPath);
+		// System.out.println(srcPath);
 
 		String transformedSrcPath;
 		String transformedTgtPath;
@@ -217,6 +217,8 @@ public class BigImageBUnwarp extends BUnwarp {
 
 		String srcResultPath;
 		String tgtResultPath;
+		String transformedSrcResultPath;
+		String transformedTgtResultPath;
 
 		srcResultPath = FilenameUtils.getFullPath(srcPath);
 		srcResultPath += FilenameUtils.getBaseName(srcPath);
@@ -227,6 +229,16 @@ public class BigImageBUnwarp extends BUnwarp {
 		tgtResultPath += FilenameUtils.getBaseName(tgtPath);
 		tgtResultPath += "_BUnwarp.";
 		tgtResultPath += FilenameUtils.getExtension(tgtPath);
+
+		transformedSrcResultPath = FilenameUtils.getFullPath(transformedSrcPath);
+		transformedSrcResultPath += FilenameUtils.getBaseName(transformedSrcPath);
+		transformedSrcResultPath += "_BUnwarp.";
+		transformedSrcResultPath += FilenameUtils.getExtension(transformedSrcPath);
+
+		transformedTgtResultPath = FilenameUtils.getFullPath(transformedTgtPath);
+		transformedTgtResultPath += FilenameUtils.getBaseName(transformedTgtPath);
+		transformedTgtResultPath += "_BUnwarp.";
+		transformedTgtResultPath += FilenameUtils.getExtension(transformedTgtPath);
 
 		long startTime = System.nanoTime();
 
@@ -247,10 +259,10 @@ public class BigImageBUnwarp extends BUnwarp {
 		ROI2DPolygon tgtMask = null;
 
 		BigBUnwarpper bu = new BigBUnwarpper(srcPath, tgtPath, transformedSrcPath, transformedTgtPath, srcResultPath,
-		    tgtResultPath, srcLandmarks, tgtLandmarks, srcMask, tgtMask, inSubsampleFactor.getValue(),
-		    inUsedScales.getValue(), inIniDef.getValue().getNumber(), inFnlDef.getValue().getNumber(),
-		    inDivWeight.getValue(), inCurlWeight.getValue(), inLandmarkWeight.getValue(), inImageWeight.getValue(),
-		    inConsistencyWeight.getValue(), inStopThreshold.getValue(), inShowProcess.getValue(),
+		    tgtResultPath, transformedSrcResultPath, transformedTgtResultPath, srcLandmarks, tgtLandmarks, srcMask, tgtMask,
+		    inSubsampleFactor.getValue(), inUsedScales.getValue(), inIniDef.getValue().getNumber(),
+		    inFnlDef.getValue().getNumber(), inDivWeight.getValue(), inCurlWeight.getValue(), inLandmarkWeight.getValue(),
+		    inImageWeight.getValue(), inConsistencyWeight.getValue(), inStopThreshold.getValue(), inShowProcess.getValue(),
 		    inMode.getValue().getNumber(), this);
 		bu.start();
 		try {

@@ -22,8 +22,11 @@ public class BigBUnwarpper extends Thread {
 	private String tgtPath;
 	private String transformedSrcPath;
 	private String transformedTgtPath;
+
 	private String srcResultPath;
 	private String tgtResultPath;
+	private String transformedSrcResultPath;
+	private String transformedTgtResultPath;
 
 	private List<ROI2DPoint> srcLandmarks;
 	private List<ROI2DPoint> tgtLandmarks;
@@ -59,9 +62,9 @@ public class BigBUnwarpper extends Thread {
 	 *          Transformed source image path. Used to get final results.
 	 * @param transformedTgtPath
 	 *          Transformed target image path. Used to get final results.
-	 * @param srcResultPath
+	 * @param transformedSrcResultPath
 	 *          Final result source image path.
-	 * @param tgtResultPath
+	 * @param transformedTgtResultPath
 	 *          Final result target image path.
 	 * @param srcLandmarks
 	 *          Source image landmarks.
@@ -101,16 +104,19 @@ public class BigBUnwarpper extends Thread {
 	 *          Reference to the BUnwarp plugin
 	 */
 	public BigBUnwarpper(String srcPath, String tgtPath, String transformedSrcPath, String transformedTgtPath,
-	    String srcResultPath, String tgtResultPath, List<ROI2DPoint> srcLandmarks, List<ROI2DPoint> tgtLandmarks,
-	    ROI2D srcMask, ROI2D tgtMask, int subsampleFactor, double[] usedScales, int initialDeformation,
-	    int finalDeformation, double divWeight, double curlWeight, double landmarkWeight, double imageWeight,
-	    double consistencyWeight, double stopThreshold, boolean showProcess, int mode, BUnwarp plugin) {
+	    String srcResultPath, String tgtResultPath, String transformedSrcResultPath, String transformedTgtResultPath,
+	    List<ROI2DPoint> srcLandmarks, List<ROI2DPoint> tgtLandmarks, ROI2D srcMask, ROI2D tgtMask, int subsampleFactor,
+	    double[] usedScales, int initialDeformation, int finalDeformation, double divWeight, double curlWeight,
+	    double landmarkWeight, double imageWeight, double consistencyWeight, double stopThreshold, boolean showProcess,
+	    int mode, BUnwarp plugin) {
 		this.srcPath = srcPath;
 		this.tgtPath = tgtPath;
 		this.transformedSrcPath = transformedSrcPath;
 		this.transformedTgtPath = transformedTgtPath;
 		this.srcResultPath = srcResultPath;
 		this.tgtResultPath = tgtResultPath;
+		this.transformedSrcResultPath = transformedSrcResultPath;
+		this.transformedTgtResultPath = transformedTgtResultPath;
 		this.srcLandmarks = srcLandmarks;
 		this.tgtLandmarks = tgtLandmarks;
 		this.srcMask = srcMask;
@@ -149,11 +155,12 @@ public class BigBUnwarpper extends Thread {
 		// ---- First Scale Registration
 		// Get sequences
 		try {
-			BigImageLoader.setPluginGUI(plugin.getUI());
+			BigImageLoader loader = new BigImageLoader();
+			loader.setPluginGUI(plugin.getUI());
 			ProgressBar.setProgressBarMessage("Loading source image");
-			srcSeq = BigImageLoader.loadDownsampledImage(srcPath, null, 1000, 1000, true);
+			srcSeq = loader.loadDownsampledImage(srcPath, null, 1000, 1000, true);
 			ProgressBar.setProgressBarMessage("Loading target image");
-			tgtSeq = BigImageLoader.loadDownsampledImage(tgtPath, null, 1000, 1000, true);
+			tgtSeq = loader.loadDownsampledImage(tgtPath, null, 1000, 1000, true);
 
 			// srcTgtSeq = SequenceUtil.getCopy(srcSeq);
 			// tgtTgtSeq = SequenceUtil.getCopy(tgtSeq);
@@ -180,8 +187,8 @@ public class BigBUnwarpper extends Thread {
 		// bu.getRegisteredSource(srcTgtSeq);
 		// Icy.getMainInterface().addSequence(srcTgtSeq);
 		try {
-			System.out.println("saving to " + srcResultPath + ", based on " + transformedSrcPath);
-			bu.saveBigRegisteredSource(srcResultPath, transformedSrcPath, tgtPath, null);
+			System.out.println("saving to " + transformedSrcResultPath + ", based on " + transformedSrcPath);
+			bu.saveBigRegisteredSource(srcResultPath, transformedSrcResultPath, srcPath, transformedSrcPath, tgtPath, null);
 		} catch (ServiceException | IOException | FormatException | InterruptedException e) {
 			e.printStackTrace();
 			return;
@@ -194,7 +201,7 @@ public class BigBUnwarpper extends Thread {
 			// bu.getRegisteredTarget(tgtTgtSeq);
 			// Icy.getMainInterface().addSequence(tgtTgtSeq);
 			try {
-				bu.saveBigRegisteredTarget(tgtResultPath, transformedTgtPath, srcPath, null);
+				bu.saveBigRegisteredTarget(tgtResultPath, transformedTgtResultPath, tgtPath, transformedTgtPath, srcPath, null);
 			} catch (ServiceException | IOException | FormatException | InterruptedException e) {
 				e.printStackTrace();
 			}

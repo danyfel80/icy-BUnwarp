@@ -340,8 +340,8 @@ public class BUnwarpper extends Thread {
 	 *          Path of the base image
 	 * @return The resulting sequence
 	 */
-	public Sequence getRegisteredSource(String srcResultPath, String srcPath, String tgtPath) {
-		return warp.getRegisteredSource(srcResultPath, srcPath, tgtPath);
+	public Sequence getRegisteredSource(String srcResultPath, String srcPath, String transformedSrcPath, String tgtPath) {
+		return warp.getRegisteredSource(srcResultPath, srcPath, transformedSrcPath, tgtPath);
 	}
 
 	/**
@@ -356,8 +356,8 @@ public class BUnwarpper extends Thread {
 	 *          Path of the base image
 	 * @return The resulting sequence
 	 */
-	public Sequence getRegisteredTarget(String tgtResultPath, String srcPath, String tgtPath) {
-		return warp.getRegisteredTarget(tgtResultPath, srcPath, tgtPath);
+	public Sequence getRegisteredTarget(String tgtResultPath, String srcPath, String tgtPath, String transformedTgtPath) {
+		return warp.getRegisteredTarget(tgtResultPath, srcPath, tgtPath, transformedTgtPath);
 	}
 
 	public double[][] getCxSourceToTarget() {
@@ -380,12 +380,12 @@ public class BUnwarpper extends Thread {
 		return warp.getIntervals();
 	}
 
-	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcPath, String tgtPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
-		warp.saveBigRegisteredSource(srcResultPath, transformedSrcPath, tgtPath, tile);
+	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcResultPath, String srcPath, String transformedSrcPath, String tgtPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
+		warp.saveBigRegisteredSource(srcResultPath, transformedSrcResultPath, srcPath, transformedSrcPath, tgtPath, tile);
 	}
 
-	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtPath, String srcPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
-		warp.saveBigRegisteredTarget(tgtResultPath, transformedTgtPath, srcPath, tile);
+	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtResultPath, String tgtPath, String transformedTgtPath, String srcPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
+		warp.saveBigRegisteredTarget(tgtResultPath, transformedTgtResultPath, tgtPath, transformedTgtPath, srcPath, tile);
 	}
 
 }
