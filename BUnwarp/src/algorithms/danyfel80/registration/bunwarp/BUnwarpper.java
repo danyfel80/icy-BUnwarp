@@ -18,15 +18,7 @@ import plugins.kernel.roi.roi2d.ROI2DPoint;
  * @author Daniel Felipe Gonzalez Obando
  *
  */
-/**
- * @author Daniel Felipe Gonzalez Obando
- *
- */
-/**
- * @author Daniel Felipe Gonzalez Obando
- *
- */
-public class BUnwarpper extends Thread {
+public class BUnwarpper implements Runnable {
 	// Images
 	/** image representation for the source */
 	private Sequence sourceSeq;
@@ -150,7 +142,6 @@ public class BUnwarpper extends Thread {
 	 */
 	@Override
 	public void run() {
-		super.run();
 
 		// Start pyramids
 		ProgressBar.setProgressBarMessage("Starting image pyramids...");

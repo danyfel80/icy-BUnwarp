@@ -4728,13 +4728,13 @@ public class Transformation {
 	}
 
 	public Sequence getRegisteredSource(String srcResultPath, String srcPath, String transformedSrcPath, String tgtPath) {
-		return BigImageTools.applyTransformationToImage(srcResultPath, srcPath, transformedSrcPath, tgtPath, intervals, cxTargetToSource,
-		    cyTargetToSource, new Dimension(targetWidth, targetHeight));
+		return BigImageTools.applyTransformationToImage(srcResultPath, srcPath, transformedSrcPath, tgtPath, intervals,
+		    cxTargetToSource, cyTargetToSource, new Dimension(targetWidth, targetHeight));
 	}
 
 	public Sequence getRegisteredTarget(String tgtResultPath, String srcPath, String tgtPath, String transformedTgtPath) {
-		return BigImageTools.applyTransformationToImage(tgtResultPath, tgtPath, transformedTgtPath, srcPath, intervals, cxSourceToTarget,
-		    cySourceToTarget, new Dimension(sourceWidth, sourceHeight));
+		return BigImageTools.applyTransformationToImage(tgtResultPath, tgtPath, transformedTgtPath, srcPath, intervals,
+		    cxSourceToTarget, cySourceToTarget, new Dimension(sourceWidth, sourceHeight));
 	}
 
 	public double[][] getCxSourceToTarget() {
@@ -4757,14 +4757,21 @@ public class Transformation {
 		return intervals;
 	}
 
-	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcResultPath, String srcPath, String transformedSrcPath, String tgtPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
-		BigImageTools.applyAndSaveTransformationToBigImage(srcResultPath, transformedSrcResultPath, srcPath, transformedSrcPath, tgtPath, intervals, cxTargetToSource,
-		    cyTargetToSource, new Dimension(targetWidth, targetHeight), plugin);
+	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcResultPath, String srcPath,
+	    String transformedSrcPath, String tgtPath, Rectangle tile)
+	    throws ServiceException, IOException, FormatException, InterruptedException {
+		BigImageTools.applyAndSaveTransformationToBigImage(srcResultPath, transformedSrcResultPath, srcPath,
+		    transformedSrcPath, tgtPath, intervals, cxTargetToSource, cyTargetToSource,
+		    new Dimension(targetWidth, targetHeight), plugin, null);
 	}
 
-	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtResultPath, String tgtPath, String transformedTgtPath, String srcPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
-		BigImageTools.applyAndSaveTransformationToBigImage(tgtResultPath, transformedTgtResultPath, tgtPath, transformedTgtPath, srcPath, intervals, cxSourceToTarget,
-		    cySourceToTarget, new Dimension(targetWidth, targetHeight), plugin);
+	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtResultPath, String tgtPath,
+	    String transformedTgtPath, String srcPath, Rectangle tile)
+	    throws ServiceException, IOException, FormatException, InterruptedException {
+		BigImageTools.applyAndSaveTransformationToBigImage(tgtResultPath, transformedTgtResultPath, tgtPath,
+		    transformedTgtPath, srcPath, intervals, cxSourceToTarget, cySourceToTarget,
+		    new Dimension(targetWidth, targetHeight), plugin, null);
 	}
+
 
 }

@@ -3,6 +3,7 @@ package algorithms.danyfel80.bigimage;
 import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.io.File;
 import java.io.IOException;
 
 import org.apache.commons.io.FilenameUtils;
@@ -11,11 +12,15 @@ import icy.common.exception.UnsupportedFormatException;
 import icy.gui.frame.progress.ProgressFrame;
 import icy.image.IcyBufferedImage;
 import icy.image.IcyBufferedImageUtil;
+import icy.roi.BooleanMask2D;
+import icy.roi.ROI2D;
 import icy.sequence.Sequence;
 import icy.type.DataType;
+import icy.type.collection.array.Array1DUtil;
 import loci.formats.ome.OMEXMLMetadataImpl;
 import plugins.adufour.ezplug.EzGUI;
 import plugins.kernel.importer.LociImporterPlugin;
+import plugins.kernel.roi.roi2d.ROI2DArea;
 
 /**
  * This class allows easy big image loading through downsampling and tile
@@ -236,7 +241,9 @@ public class BigImageLoader {
 			importer.close();
 			setStatusMessage("Done loading");
 			setProgress(1);
-			if (showProgressBar) { this.progressFrame.dispose(); }
+			if (showProgressBar) {
+				this.progressFrame.dispose();
+			}
 		}
 	}
 
@@ -291,5 +298,29 @@ public class BigImageLoader {
 				e.printStackTrace();
 			}
 		}
+	}
+
+	public ROI2D loadDownsampledMask(String srcPath, Rectangle tile, int resultMaxWidth, int resultMaxHeight,
+	    boolean showProgressBar) throws UnsupportedFormatException, IOException {
+
+		String maskPath = FilenameUtils.getFullPath(srcPath);
+		maskPath += FilenameUtils.getBaseName(srcPath) + "_mask.";
+		maskPath += FilenameUtils.getExtension(srcPath);
+
+		if (new File(maskPath).exists()) {
+			Sequence maskSeq = loadDownsampledImage(maskPath, tile, resultMaxWidth, resultMaxHeight, showProgressBar);
+			double[] maskData = Array1DUtil.arrayToDoubleArray(maskSeq.getDataXY(0, 0, 0), maskSeq.isSignedDataType());
+
+			BooleanMask2D boolMask = new BooleanMask2D();
+			boolMask.mask = new boolean[maskData.length];
+
+			for (int i = 0; i < maskData.length; i++) {
+				boolMask.mask[i] = maskData[i] > 0 ? true : false;
+			}
+			boolMask.bounds = new Rectangle(maskSeq.getBounds2D());
+
+			return new ROI2DArea(boolMask);
+		}
+		return null;
 	}
 }

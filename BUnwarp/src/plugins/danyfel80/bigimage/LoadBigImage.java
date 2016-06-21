@@ -128,6 +128,9 @@ public class LoadBigImage extends EzPlug implements Block, EzStoppable {
 		EzGroup downsamplingGroup = new EzGroup("Downsampling", inMaxWidth, inMaxHeight);
 		addEzComponent(downsamplingGroup);
 
+		inMaxWidth.setValue(2000);
+		inMaxHeight.setValue(2000);
+		
 		inIsTiled.addVarChangeListener(new EzVarListener<Boolean>() {
 			@Override
 			public void variableChanged(EzVar<Boolean> source, Boolean newValue) {

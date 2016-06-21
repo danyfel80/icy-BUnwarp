@@ -81,6 +81,7 @@ public class BigImageBUnwarp extends BUnwarp {
 	    inShowProcess);
 
 	// Internal variables
+	Thread but;
 	BUnwarpper bu;
 
 	/*
@@ -264,9 +265,11 @@ public class BigImageBUnwarp extends BUnwarp {
 		    inFnlDef.getValue().getNumber(), inDivWeight.getValue(), inCurlWeight.getValue(), inLandmarkWeight.getValue(),
 		    inImageWeight.getValue(), inConsistencyWeight.getValue(), inStopThreshold.getValue(), inShowProcess.getValue(),
 		    inMode.getValue().getNumber(), this);
-		bu.start();
+		but = new Thread(bu);
+		but.start();
 		try {
-			bu.join();
+			but.join();
+			but = null;
 		} catch (InterruptedException e) {
 			System.err.println("Thread interrupted: " + e.getMessage());
 		}
@@ -303,9 +306,10 @@ public class BigImageBUnwarp extends BUnwarp {
 	@Override
 	public void stopExecution() {
 		isPluginInterrupted = true;
-		if (bu != null && bu.isAlive()) {
+		if (but != null && but.isAlive()) {
 			try {
-				bu.join();
+				but.join();
+				but = null;
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
