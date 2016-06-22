@@ -1,17 +1,13 @@
 package algorithms.danyfel80.registration.bunwarp;
 
-import java.awt.Dimension;
 import java.awt.Rectangle;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import org.apache.commons.io.FilenameUtils;
 
 import algorithms.danyfel80.bigimage.BigImageLoader;
 import icy.common.exception.UnsupportedFormatException;
+import icy.main.Icy;
 import icy.roi.ROI2D;
 import icy.sequence.Sequence;
 import loci.common.services.ServiceException;
@@ -42,6 +38,7 @@ public class BigBUnwarpper implements Runnable {
 	private ROI2D tgtMask;
 
 	private int subsampleFactor;
+	@SuppressWarnings("unused")
 	private double[] usedScales;
 	private int initialDeformation;
 	private int finalDeformation;
@@ -156,7 +153,7 @@ public class BigBUnwarpper implements Runnable {
 		Sequence tgtSeq;
 		// Sequence srcTgtSeq;
 		// Sequence tgtTgtSeq;
-		Dimension srcDim = BigImageTools.getSequenceSize(srcPath);
+//		Dimension srcDim = BigImageTools.getSequenceSize(srcPath);
 		// Dimension tgtDim = BigImageTools.getSequenceSize(tgtPath);
 
 		// ---- First Scale Registration
@@ -167,11 +164,11 @@ public class BigBUnwarpper implements Runnable {
 			ProgressBar.setProgressBarMessage("Loading source image");
 			srcSeq = loader.loadDownsampledImage(srcPath, null, 1000, 1000, true);
 			ProgressBar.setProgressBarMessage("Loading source mask");
-			srcMask = loader.loadDownsampledMask(srcPath, null, 1000, 1000, true);
+			srcMask = loader.loadDownsampledMask(srcSeq, srcPath, null, 1000, 1000, true);
 			ProgressBar.setProgressBarMessage("Loading target image");
 			tgtSeq = loader.loadDownsampledImage(tgtPath, null, 1000, 1000, true);
 			ProgressBar.setProgressBarMessage("Loading target mask");
-			tgtMask = loader.loadDownsampledMask(tgtPath, null, 1000, 1000, true);
+			tgtMask = loader.loadDownsampledMask(tgtSeq, tgtPath, null, 1000, 1000, true);
 
 			// srcTgtSeq = SequenceUtil.getCopy(srcSeq);
 			// tgtTgtSeq = SequenceUtil.getCopy(tgtSeq);
@@ -237,6 +234,11 @@ public class BigBUnwarpper implements Runnable {
 //		// Next Scales Registration
 //		for (int si = 0; si < usedScales.length; si++) {
 //			double scale = usedScales[si];
+//			if (plugin != null && plugin.getUI() != null) {
+//				plugin.getUI().setProgressBarMessage("Registering at scale " + scale);
+//				plugin.getUI().setProgressBarValue(0);
+//			}
+//			
 //			int tileAmount = (int) Math.ceil(1d / scale);
 //			Dimension tileDim = new Dimension(srcDim.width / tileAmount, srcDim.height / tileAmount);
 //			Dimension residualTileDim = new Dimension(srcDim.width % tileDim.width, srcDim.height % tileDim.height);
@@ -255,24 +257,7 @@ public class BigBUnwarpper implements Runnable {
 //					usedTileDim.height = (j + 1) * tileDim.height <= srcDim.height ? tileDim.height : residualTileDim.height;
 //
 //					Rectangle rect = new Rectangle(i * tileDim.width - tileBorderSize, j * tileDim.height - tileBorderSize,
-//					    tileSize.width + tileBorderSize, tileSize.height + tileBorderSize);
-//
-//					try {
-//						BigImageLoader loader = new BigImageLoader();
-//						ProgressBar.setProgressBarMessage("Loading source tile image");
-//						srcSeq = loader.loadDownsampledImage(srcResultPath, rect, 1023, 1023, true);
-//						ProgressBar.setProgressBarMessage("Loading source mask");
-//						srcMask = loader.loadDownsampledMask(srcResultPath, rect, 1023, 1023, true);
-//						ProgressBar.setProgressBarMessage("Loading target tile image");
-//						tgtSeq = loader.loadDownsampledImage(tgtPath, rect, 1023, 1023, true);
-//						ProgressBar.setProgressBarMessage("Loading source mask");
-//						srcMask = loader.loadDownsampledMask(tgtPath, rect, 1000, 1000, true);
-//						// srcTgtSeq = SequenceUtil.getCopy(srcSeq);
-//						// tgtTgtSeq = SequenceUtil.getCopy(tgtSeq);
-//					} catch (UnsupportedFormatException | IOException e1) {
-//						e1.printStackTrace();
-//						return;
-//					}
+//					    usedTileDim.width + tileBorderSize, usedTileDim.height + tileBorderSize);
 //
 //					// Register images
 //
@@ -289,11 +274,11 @@ public class BigBUnwarpper implements Runnable {
 //					String transformedSourcePath = transformedSrcResultPath;
 //					String targetPath = tgtPath;
 //
-//					threadPool.submit(new BUnwarpperTask(srcSeq, tgtSeq, srcLandmarks, tgtLandmarks, srcMask, tgtMask,
-//					    subsampleFactor, initialDeformation, finalDeformation, 0, divWeight, curlWeight, landmarkWeight,
+//					threadPool.submit(new BUnwarpperTask(subsampleFactor, initialDeformation, finalDeformation, 0, divWeight, curlWeight, landmarkWeight,
 //					    imageWeight, consistencyWeight, stopThreshold, showProcess ? 2 : 1, showProcess,
 //					    RegistrationModeEnum.MONO.getNumber(), plugin, sourceResultPath, transformedSourceResultPath, sourcePath,
-//					    transformedSourcePath, targetPath, rect));
+//					    transformedSourcePath, transformedSrcResultPath, targetPath, rect));
+//					tileNum++;
 //				}
 //			}
 //			threadPool.shutdown();
@@ -307,44 +292,110 @@ public class BigBUnwarpper implements Runnable {
 
 	}
 
+	@SuppressWarnings("unused")
 	private static class BUnwarpperTask implements Runnable {
 
+		final int maxImageSubsamplingFactor;
+		final int minScaleDeformation;
+		final int maxScaleDeformation;
+		final int minScaleImage;
+		final double divWeight;
+		final double curlWeight;
+    final double landmarkWeight;
+    final double imageWeight;
+    final double consistencyWeight;
+    final double stopThreshold;
+    final int outputLevel;
+    final boolean showMarquardtOptim;
+    final int accurateMode;
+    final BUnwarp plugin;
+		
 		BUnwarpper unwarp;
 		String sourceResultPath;
 		String transformedSourceResultPath;
 		String sourcePath;
 		String transformedSourcePath;
 		String targetPath;
+		String srcPath;
 		Rectangle tile;
 
-		public BUnwarpperTask(final Sequence sourceSequence, final Sequence targetSequence,
-		    final List<ROI2DPoint> sourceLandmarks, final List<ROI2DPoint> targetLandmarks, final ROI2D sourceMask,
-		    final ROI2D targetMask, final int maxImageSubsamplingFactor, final int minScaleDeformation,
+		public BUnwarpperTask(final int maxImageSubsamplingFactor, final int minScaleDeformation,
 		    final int maxScaleDeformation, final int minScaleImage, final double divWeight, final double curlWeight,
 		    final double landmarkWeight, final double imageWeight, final double consistencyWeight,
 		    final double stopThreshold, final int outputLevel, final boolean showMarquardtOptim, final int accurateMode,
 		    final BUnwarp plugin, String sourceResultPath, String transformedSourceResultPath, String sourcePath,
-		    String transformedSourcePath, String targetPath, Rectangle tile) {
+		    String transformedSourcePath, String srcPath, String targetPath, Rectangle tile) {
 
+			this.maxImageSubsamplingFactor = maxImageSubsamplingFactor;
+			this.minScaleDeformation = minScaleDeformation;
+			this.maxScaleDeformation = maxScaleDeformation;
+			this.minScaleImage = minScaleImage;
+			this.divWeight = divWeight;
+			this.curlWeight = curlWeight;
+	    this.landmarkWeight = landmarkWeight;
+	    this.imageWeight = imageWeight;
+	    this.consistencyWeight = consistencyWeight;
+	    this.stopThreshold = stopThreshold;
+	    this.outputLevel = outputLevel;
+	    this.showMarquardtOptim = showMarquardtOptim;
+	    this.accurateMode = accurateMode;
+	    this.plugin = plugin;
+			
 			this.sourceResultPath = sourceResultPath;
 			this.transformedSourceResultPath = transformedSourceResultPath;
 			this.sourcePath = sourcePath;
 			this.transformedSourcePath = transformedSourcePath;
 			this.targetPath = targetPath;
+			this.srcPath = srcPath;
 			this.tile = tile;
 
-			unwarp = new BUnwarpper(sourceSequence, targetSequence, sourceLandmarks, targetLandmarks, sourceMask, targetMask,
-			    maxImageSubsamplingFactor, minScaleDeformation, maxScaleDeformation, 0, divWeight, curlWeight, landmarkWeight,
-			    imageWeight, consistencyWeight, stopThreshold, outputLevel, showMarquardtOptim, accurateMode, plugin);
+			
 		}
 
 		@Override
 		public void run() {
+			
+			BigImageLoader loader = new BigImageLoader();
+			Sequence srcSeq = null;
+			ROI2D srcMask = null;
+			Sequence tgtSeq = null;
+			ROI2D tgtMask = null;
+			try {
+				ProgressBar.setProgressBarMessage("Loading source tile image");
+				srcSeq = loader.loadDownsampledImage(sourcePath, tile, 1023, 1023, true);
+				ProgressBar.setProgressBarMessage("Loading source mask");
+				srcMask = loader.loadDownsampledMask(srcSeq, srcPath, tile, 1023, 1023, true);
+				ProgressBar.setProgressBarMessage("Loading target tile image");
+				tgtSeq = loader.loadDownsampledImage(targetPath, tile, 1023, 1023, true);
+				ProgressBar.setProgressBarMessage("Loading source mask");
+				tgtMask = loader.loadDownsampledMask(tgtSeq, targetPath, tile, 1000, 1000, true);
+			} catch (UnsupportedFormatException | IOException e1) {
+				e1.printStackTrace();
+			}
+			
+			if (srcSeq != null) {
+				if(srcMask != null)
+					srcSeq.addROI(srcMask);
+				Icy.getMainInterface().addSequence(srcSeq);
+			}
+			if (tgtSeq != null) {
+				if(tgtMask != null)
+					tgtSeq.addROI(tgtMask);
+				Icy.getMainInterface().addSequence(tgtSeq);
+			}
+			// srcTgtSeq = SequenceUtil.getCopy(srcSeq);
+			// tgtTgtSeq = SequenceUtil.getCopy(tgtSeq);
+			
+			unwarp = new BUnwarpper(srcSeq, tgtSeq, new ArrayList<ROI2DPoint>(), new ArrayList<ROI2DPoint>(), srcMask, tgtMask,
+			    maxImageSubsamplingFactor, minScaleDeformation, maxScaleDeformation, minScaleImage, divWeight, curlWeight, landmarkWeight,
+			    imageWeight, consistencyWeight, stopThreshold, outputLevel, showMarquardtOptim, accurateMode, plugin);
+			
 			Thread thr = new Thread(unwarp);
 			thr.start();
 			try {
 				thr.join();
 				thr = null;
+				System.out.println("saving " + tile);
 				unwarp.saveBigRegisteredSource(sourceResultPath, transformedSourceResultPath, sourcePath, transformedSourcePath,
 				    targetPath, tile);
 			} catch (InterruptedException | ServiceException | IOException | FormatException e) {

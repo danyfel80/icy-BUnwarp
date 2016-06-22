@@ -4762,7 +4762,7 @@ public class Transformation {
 	    throws ServiceException, IOException, FormatException, InterruptedException {
 		BigImageTools.applyAndSaveTransformationToBigImage(srcResultPath, transformedSrcResultPath, srcPath,
 		    transformedSrcPath, tgtPath, intervals, cxTargetToSource, cyTargetToSource,
-		    new Dimension(targetWidth, targetHeight), plugin, null);
+		    new Dimension(targetWidth, targetHeight), plugin, tile);
 	}
 
 	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtResultPath, String tgtPath,
@@ -4770,7 +4770,7 @@ public class Transformation {
 	    throws ServiceException, IOException, FormatException, InterruptedException {
 		BigImageTools.applyAndSaveTransformationToBigImage(tgtResultPath, transformedTgtResultPath, tgtPath,
 		    transformedTgtPath, srcPath, intervals, cxSourceToTarget, cySourceToTarget,
-		    new Dimension(targetWidth, targetHeight), plugin, null);
+		    new Dimension(targetWidth, targetHeight), plugin, tile);
 	}
 
 

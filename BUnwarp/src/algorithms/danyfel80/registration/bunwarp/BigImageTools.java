@@ -625,8 +625,11 @@ public class BigImageTools {
 			}
 			srcRect.x -= fullSizePosition.x;
 			srcRect.y -= fullSizePosition.y;
+			
+			double[][] srcTileData = Array2DUtil.arrayToDoubleArray(srcTile.getDataXYC(), srcTile.isSignedDataType());
+			double[][] transformedSrcTileData = Array2DUtil.arrayToDoubleArray(transformedSrcTile.getDataXYC(), transformedSrcTile.isSignedDataType());
 			// compute color mode for interpolation in transformed source image
-			BSplineModel[] transformedSrcModels = new BSplineModel[transformedSrcTile.getSizeC()];
+			/*BSplineModel[] transformedSrcModels = new BSplineModel[transformedSrcTile.getSizeC()];
 			for (int c = 0; c < transformedSrcModels.length; c++) {
 				transformedSrcModels[c] = new BSplineModel(IcyBufferedImageUtil.extractChannel(transformedSrcTile, c), false,
 				    1);
@@ -642,6 +645,7 @@ public class BigImageTools {
 			} catch (InterruptedException e) {
 				System.out.println("Unexpected interruption exception " + e);
 			}
+			
 
 			// compute color mode for interpolation in source image
 			BSplineModel[] srcModels = new BSplineModel[srcTile.getSizeC()];
@@ -659,7 +663,7 @@ public class BigImageTools {
 			} catch (InterruptedException e) {
 				System.out.println("Unexpected interruption exception " + e);
 			}
-
+*/
 			double factorX = (double) tgtFullDim.width / (double) tgtRegisteredDim.width;
 			double factorY = (double) tgtFullDim.height / (double) tgtRegisteredDim.height;
 
@@ -693,6 +697,10 @@ public class BigImageTools {
 
 					double srcTileX = x - srcRect.x;
 					double srcTileY = y - srcRect.y;
+					
+					srcTileX = Math.round(srcTileX);
+					srcTileY = Math.round(srcTileY);
+					
 					if (firstLim) {
 						firstLim = false;
 						srcLimits.x = (int) srcTileX;
@@ -710,12 +718,14 @@ public class BigImageTools {
 					if (srcTileX >= 0 && srcTileX < srcRect.width && srcTileY >= 0 && srcTileY < srcRect.height) {
 						maskData[u_rect + v_offset] = (byte) DataType.UBYTE.getMaxValue();
 						for (int c = 0; c < transformedResultTile.getSizeC(); c++) {
-							transformedResultData[c][u_rect + v_offset] = transformedSrcModels[c]
-							    .prepareForInterpolationAndInterpolateI(srcTileX, srcTileY, false, false);
+							transformedResultData[c][u_rect + v_offset] = transformedSrcTileData[c][(int)(srcTileX + (srcTileY * transformedSrcTile.getSizeX()))];
+//							transformedResultData[c][u_rect + v_offset] = transformedSrcModels[c]
+//							    .prepareForInterpolationAndInterpolateI(srcTileX, srcTileY, false, false);
 						}
 						for (int c = 0; c < resultTile.getSizeC(); c++) {
-							resultData[c][u_rect + v_offset] = srcModels[c].prepareForInterpolationAndInterpolateI(srcTileX, srcTileY,
-							    false, false);
+							resultData[c][u_rect + v_offset] = srcTileData[c][(int)(srcTileX + (srcTileY * srcTile.getSizeX()))];
+//							resultData[c][u_rect + v_offset] = srcModels[c].prepareForInterpolationAndInterpolateI(srcTileX, srcTileY,
+//							    false, false);
 						}
 					} else {
 						maskData[u_rect + v_offset] = (byte) 0;

@@ -300,27 +300,38 @@ public class BigImageLoader {
 		}
 	}
 
-	public ROI2D loadDownsampledMask(String srcPath, Rectangle tile, int resultMaxWidth, int resultMaxHeight,
-	    boolean showProgressBar) throws UnsupportedFormatException, IOException {
+	public ROI2D loadDownsampledMask(Sequence srcSeq, String srcPath, Rectangle tile, int resultMaxWidth,
+	    int resultMaxHeight, boolean showProgressBar) throws UnsupportedFormatException, IOException {
 
 		String maskPath = FilenameUtils.getFullPath(srcPath);
 		maskPath += FilenameUtils.getBaseName(srcPath) + "_mask.";
 		maskPath += FilenameUtils.getExtension(srcPath);
 
+		BooleanMask2D boolMask = new BooleanMask2D();
+		
 		if (new File(maskPath).exists()) {
 			Sequence maskSeq = loadDownsampledImage(maskPath, tile, resultMaxWidth, resultMaxHeight, showProgressBar);
 			double[] maskData = Array1DUtil.arrayToDoubleArray(maskSeq.getDataXY(0, 0, 0), maskSeq.isSignedDataType());
-
-			BooleanMask2D boolMask = new BooleanMask2D();
 			boolMask.mask = new boolean[maskData.length];
 
 			for (int i = 0; i < maskData.length; i++) {
 				boolMask.mask[i] = maskData[i] > 0 ? true : false;
 			}
-			boolMask.bounds = new Rectangle(maskSeq.getBounds2D());
 
-			return new ROI2DArea(boolMask);
+			boolMask.bounds = new Rectangle(maskSeq.getBounds2D());
+		} else {
+			boolMask.mask = new boolean[srcSeq.getSizeX() * srcSeq.getSizeY()];
+
+			for (int i = 0; i < boolMask.mask.length; i++) {
+				boolMask.mask[i] = true;
+			}
+
+			boolMask.bounds = new Rectangle(srcSeq.getBounds2D());
 		}
-		return null;
+
+		
+		
+
+		return new ROI2DArea(boolMask);
 	}
 }
