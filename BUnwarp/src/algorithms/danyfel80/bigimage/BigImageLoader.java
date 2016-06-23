@@ -3,7 +3,6 @@ package algorithms.danyfel80.bigimage;
 import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.Rectangle;
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 
@@ -265,7 +264,6 @@ public class BigImageLoader {
 		private IcyBufferedImage resultImage;
 		private final double scaleX;
 		private final double scaleY;
-		
 
 		/**
 		 * Constructor
@@ -314,15 +312,18 @@ public class BigImageLoader {
 				if (rect.y + rect.height + 3 < fullDimension.height) {
 					bigRect.height += 3;
 				}
-				
-				Dimension scaledExtractedDim = new Dimension((int) (bigRect.getWidth() / scaleX), (int) (bigRect.getHeight() / scaleY));
-				Point scaledPosition = new Point((int)((double)(rect.x - bigRect.x) / scaleX), (int)((double)(rect.y - bigRect.y) / scaleY));
+
+				Dimension scaledExtractedDim = new Dimension((int) (bigRect.getWidth() / scaleX),
+				    (int) (bigRect.getHeight() / scaleY));
+				Point scaledPosition = new Point((int) ((double) (rect.x - bigRect.x) / scaleX),
+				    (int) ((double) (rect.y - bigRect.y) / scaleY));
 
 				resultImage = importer.getImage(0, 0, bigRect, 0, 0);
 				if (resultImage.getWidth() != outDimension.getWidth() || resultImage.getHeight() != outDimension.height) {
 					resultImage = IcyBufferedImageUtil.scale(resultImage, scaledExtractedDim.width, scaledExtractedDim.height);
 				}
-				IcyBufferedImageUtil.getSubImage(resultImage, scaledPosition.x, scaledPosition.y, outDimension.width, outDimension.height);
+				IcyBufferedImageUtil.getSubImage(resultImage, scaledPosition.x, scaledPosition.y, outDimension.width,
+				    outDimension.height);
 				importer.close();
 			} catch (UnsupportedFormatException | IOException e) {
 				e.printStackTrace();
