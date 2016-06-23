@@ -25,7 +25,7 @@ import plugins.kernel.roi.roi2d.ROI2DShape;
  *
  */
 public class BigImageUtil {
-	
+
 	/**
 	 * Gets the size of the image specified by the given path.
 	 * 
@@ -55,7 +55,7 @@ public class BigImageUtil {
 
 		return null;
 	}
-	
+
 	/**
 	 * Gets the channel count of the image specified by the given path.
 	 * 
@@ -109,7 +109,7 @@ public class BigImageUtil {
 
 		return null;
 	}
-	
+
 	public static List<ROI> getROIsInTile(List<ROI> rois, Rectangle tile) {
 		List<ROI> result = new ArrayList<>();
 		ROI2DRectangle rectROI = new ROI2DRectangle(tile);
@@ -124,9 +124,9 @@ public class BigImageUtil {
 
 	public static void scaleROI(ROI roi, double scale) {
 		if (roi instanceof ROI2DShape) {
-			scaleROI2DShape((ROI2DShape)roi, scale);
+			scaleROI2DShape((ROI2DShape) roi, scale);
 		} else if (roi instanceof ROI2DArea) {
-			scaleROI2DArea((ROI2DArea)roi, scale);
+			scaleROI2DArea((ROI2DArea) roi, scale);
 		} else {
 			throw new IllegalArgumentException("the specified element cannot be scaled");
 		}
@@ -143,11 +143,25 @@ public class BigImageUtil {
 			pt.moveTo(posX + pos.getX(), posY + pos.getY());
 			roi.controlPointPositionChanged(pt);
 		}
-		pos.setLocation(pos.getX()*scale, pos.getY()*scale);
+		pos.setLocation(pos.getX() * scale, pos.getY() * scale);
 		roi.setPosition2D(pos);
 	}
-	
+
 	private static void scaleROI2DArea(ROI2DArea roi, double scale) {
-		throw new NotImplementedException("area roi scaling not yet implemented");
+		Rectangle bounds = roi.getBounds();
+		boolean[] mask = roi.getBooleanMask(bounds, true);
+
+		Rectangle scaledBounds = new Rectangle((int) (bounds.x * scale), (int) (bounds.y * scale),
+		    (int) (bounds.width * scale), (int) (bounds.height * scale));
+		boolean[] scaledMask = new boolean[scaledBounds.width*scaledBounds.height];
+		for (int y = 0; y < scaledBounds.height; y++) {
+			int yOff = y*scaledBounds.width;
+			int scaledYOff = (int)((y/scale)*bounds.width);
+			for (int x = 0; x < scaledBounds.width; x++) {
+				scaledMask[x+yOff] = mask[(int)(x/scale) + scaledYOff];
+			}
+		}
+		
+		roi.setAsBooleanMask(scaledBounds, scaledMask);
 	}
 }

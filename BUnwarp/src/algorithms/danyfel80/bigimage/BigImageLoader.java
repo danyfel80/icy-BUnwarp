@@ -244,6 +244,7 @@ public class BigImageLoader {
 				System.out.println("Treated Tiles" + treatedTiles);
 			}
 			result.setImage(0, 0, resultImg);
+			// Load ROIs
 			result.addROIs(loadROIs(xmlPath, tile, scaleFactor), false);
 			result.dataChanged();
 			result.endUpdate();
