@@ -49,6 +49,10 @@ public class BigImageLoader {
 			this.pluginGUI.setProgressBarMessage(message);
 		}
 	}
+	
+	public void interrupt() {
+		this.isInterrupted = true;
+	}
 
 	/**
 	 * Loads an image from a file and downsamples it according to the desired
@@ -299,27 +303,30 @@ public class BigImageLoader {
 				importer.open(path, 0);
 
 				// get bigger tile to avoid interpolation issues
+				Dimension scaledExtractedDim = new Dimension(outDimension);
+				Point scaledPosition = new Point(0,0);
 				Rectangle bigRect = new Rectangle(rect);
 				if (rect.x - 3 >= 0) {
 					bigRect.x -= 3;
+					scaledExtractedDim.width += (int)(3/scaleX);
+					scaledPosition.x += (int)(3/scaleX);
 				}
 				if (rect.y - 3 >= 0) {
 					bigRect.y -= 3;
+					scaledExtractedDim.height += (int)(3/scaleY);
+					scaledPosition.y += (int)(3/scaleY);
 				}
 				if (rect.x + rect.width + 3 < fullDimension.width) {
 					bigRect.width += 3;
+					scaledExtractedDim.width += (int)(3/scaleX);
 				}
 				if (rect.y + rect.height + 3 < fullDimension.height) {
 					bigRect.height += 3;
+					scaledExtractedDim.height += (int)(3/scaleY);
 				}
 
-				Dimension scaledExtractedDim = new Dimension((int) (bigRect.getWidth() / scaleX),
-				    (int) (bigRect.getHeight() / scaleY));
-				Point scaledPosition = new Point((int) ((double) (rect.x - bigRect.x) / scaleX),
-				    (int) ((double) (rect.y - bigRect.y) / scaleY));
-
 				resultImage = importer.getImage(0, 0, bigRect, 0, 0);
-				if (resultImage.getWidth() != outDimension.getWidth() || resultImage.getHeight() != outDimension.height) {
+				if (resultImage.getWidth() != scaledExtractedDim.getWidth() || resultImage.getHeight() != scaledExtractedDim.height) {
 					resultImage = IcyBufferedImageUtil.scale(resultImage, scaledExtractedDim.width, scaledExtractedDim.height);
 				}
 				IcyBufferedImageUtil.getSubImage(resultImage, scaledPosition.x, scaledPosition.y, outDimension.width,

@@ -40,6 +40,8 @@ public class LoadBigImage extends EzPlug implements Block, EzStoppable {
 
 	private boolean isStopped;
 	
+	BigImageLoader loader;
+	
 	/*
 	 * (non-Javadoc)
 	 * 
@@ -100,7 +102,7 @@ public class LoadBigImage extends EzPlug implements Block, EzStoppable {
 		Sequence s;
 		try {
 			long startTime = System.nanoTime();
-			BigImageLoader loader = new BigImageLoader();
+			this.loader = new BigImageLoader();
 			loader.setPluginGUI(this.getUI());
 			s = loader.loadDownsampledImage(path, isTiled? new Rectangle(tileX, tileY, tileW, tileH): null, maxWidth, maxHeight, true);
 			long endTime = System.nanoTime();
@@ -151,6 +153,7 @@ public class LoadBigImage extends EzPlug implements Block, EzStoppable {
 	@Override
 	public void stopExecution() {
 		isStopped = true;
+		this.loader.interrupt();
 	}
 	
 	public boolean isStopped() {
