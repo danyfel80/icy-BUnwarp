@@ -3,6 +3,7 @@ package algorithms.danyfel80.bigimage;
 import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 
@@ -82,6 +83,7 @@ public class BigImageLoader {
 			String imgName = FilenameUtils.getBaseName(path);
 			int imgSizeX = imgProps.getPixelsSizeX(0).getValue();
 			int imgSizeY = imgProps.getPixelsSizeY(0).getValue();
+			Dimension imgSize = new Dimension(imgSizeX, imgSizeY);
 			int imgSizeC = imgProps.getPixelsSizeC(0).getValue();
 			DataType imgDataType = DataType.getDataTypeFromPixelType(imgProps.getPixelsType(0));
 			if (tile == null) {
@@ -183,12 +185,13 @@ public class BigImageLoader {
 					if (isInterrupted) {
 						break;
 					}
+
 					int tileSizeY = (posY + tileSize) <= imgSizeY ? tileSize : imgSizeY - posY;
 					tileSizeY = (posY + tileSizeY) <= tile.y + tile.height ? tileSizeY : tile.y + tile.height - posY;
 					int outCurrTileSizeY = (posTileY + outTileSizeY) <= outSizeY ? outTileSizeY : outSizeY - posTileY;
 
 					threads[currProc] = new TileLoaderThread(path, new Rectangle(posX, posY, tileSizeX, tileSizeY),
-					    new Dimension(outCurrTileSizeX, outCurrTileSizeY));
+					    new Dimension(outCurrTileSizeX, outCurrTileSizeY), imgSize);
 					points[currProc] = new Point(posTileX, posTileY);
 					threads[currProc++].start();
 
@@ -256,8 +259,13 @@ public class BigImageLoader {
 
 		private final String path;
 		private final Rectangle rect;
-		private final Dimension dimension;
+		private final Dimension outDimension;
+		private final Dimension fullDimension;
+
 		private IcyBufferedImage resultImage;
+		private final double scaleX;
+		private final double scaleY;
+		
 
 		/**
 		 * Constructor
@@ -270,12 +278,15 @@ public class BigImageLoader {
 		 *          final scaled dimensions of the result image. Used for
 		 *          down/up-sampling.
 		 */
-		public TileLoaderThread(String path, Rectangle rect, Dimension dimension) {
+		public TileLoaderThread(String path, Rectangle rect, Dimension outDimension, Dimension fullDimension) {
 			super();
 			this.path = path;
 			this.rect = rect;
-			this.dimension = dimension;
+			this.outDimension = outDimension;
+			this.fullDimension = fullDimension;
 			this.resultImage = null;
+			this.scaleX = rect.width / outDimension.width;
+			this.scaleY = rect.height / outDimension.height;
 		}
 
 		/*
@@ -288,11 +299,30 @@ public class BigImageLoader {
 			LociImporterPlugin importer = new LociImporterPlugin();
 			try {
 				importer.open(path, 0);
-				resultImage = importer.getImage(0, 0, rect, 0, 0);
-				if (resultImage.getWidth() != dimension.getWidth() || resultImage.getHeight() != dimension.height) {
-					resultImage = IcyBufferedImageUtil.scale(resultImage, (int) dimension.getWidth(),
-					    (int) dimension.getHeight());
+
+				// get bigger tile to avoid interpolation issues
+				Rectangle bigRect = new Rectangle(rect);
+				if (rect.x - 3 >= 0) {
+					bigRect.x -= 3;
 				}
+				if (rect.y - 3 >= 0) {
+					bigRect.y -= 3;
+				}
+				if (rect.x + rect.width + 3 < fullDimension.width) {
+					bigRect.width += 3;
+				}
+				if (rect.y + rect.height + 3 < fullDimension.height) {
+					bigRect.height += 3;
+				}
+				
+				Dimension scaledExtractedDim = new Dimension((int) (bigRect.getWidth() / scaleX), (int) (bigRect.getHeight() / scaleY));
+				Point scaledPosition = new Point((int)((double)(rect.x - bigRect.x) / scaleX), (int)((double)(rect.y - bigRect.y) / scaleY));
+
+				resultImage = importer.getImage(0, 0, bigRect, 0, 0);
+				if (resultImage.getWidth() != outDimension.getWidth() || resultImage.getHeight() != outDimension.height) {
+					resultImage = IcyBufferedImageUtil.scale(resultImage, scaledExtractedDim.width, scaledExtractedDim.height);
+				}
+				IcyBufferedImageUtil.getSubImage(resultImage, scaledPosition.x, scaledPosition.y, outDimension.width, outDimension.height);
 				importer.close();
 			} catch (UnsupportedFormatException | IOException e) {
 				e.printStackTrace();
@@ -308,7 +338,7 @@ public class BigImageLoader {
 		maskPath += FilenameUtils.getExtension(srcPath);
 
 		BooleanMask2D boolMask = new BooleanMask2D();
-		
+
 		if (new File(maskPath).exists()) {
 			Sequence maskSeq = loadDownsampledImage(maskPath, tile, resultMaxWidth, resultMaxHeight, showProgressBar);
 			double[] maskData = Array1DUtil.arrayToDoubleArray(maskSeq.getDataXY(0, 0, 0), maskSeq.isSignedDataType());
@@ -328,9 +358,6 @@ public class BigImageLoader {
 
 			boolMask.bounds = new Rectangle(srcSeq.getBounds2D());
 		}
-
-		
-		
 
 		return new ROI2DArea(boolMask);
 	}
