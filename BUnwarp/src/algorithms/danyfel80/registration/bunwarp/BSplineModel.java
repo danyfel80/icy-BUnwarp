@@ -553,10 +553,15 @@ public class BSplineModel extends Thread {
 				this.ibi = MiscTools.scale(ibi, scaleFactor);
 				this.width = ibi.getWidth();
 				this.height = ibi.getHeight();
+				
+				this.image = new double[width * height];
+				MiscTools.extractImage(ibi, this.image);
+			} else {
+				this.image = this.originalImage;
 			}
-			this.image = new double[width * height];
-			MiscTools.extractImage(ibi, this.image);
-
+			
+			
+			
 			// update sub-sampled output version information if necessary
 			if (this.width <= this.subWidth) {
 				this.subWidth = this.width;

@@ -1,28 +1,24 @@
 package algorithms.danyfel80.registration.bunwarp;
 
+import java.awt.Rectangle;
+import java.io.IOException;
 import java.util.List;
 
 import icy.image.IcyBufferedImage;
+import icy.roi.ROI2D;
 import icy.sequence.Sequence;
 import icy.type.DataType;
+import loci.common.services.ServiceException;
+import loci.formats.FormatException;
 import plugins.danyfel80.registration.bunwarp.BUnwarp;
 //import plugins.danyfel80.registration.bunwarp.BUnwarpSimple;
 import plugins.kernel.roi.roi2d.ROI2DPoint;
-import plugins.kernel.roi.roi2d.ROI2DPolygon;
 
 /**
  * @author Daniel Felipe Gonzalez Obando
  *
  */
-/**
- * @author Daniel Felipe Gonzalez Obando
- *
- */
-/**
- * @author Daniel Felipe Gonzalez Obando
- *
- */
-public class BUnwarpper extends Thread {
+public class BUnwarpper implements Runnable {
 	// Images
 	/** image representation for the source */
 	private Sequence sourceSeq;
@@ -41,9 +37,9 @@ public class BUnwarpper extends Thread {
 
 	// Masks for the images
 	/** source image mask */
-	private ROI2DPolygon sourceMask;
+	private ROI2D sourceMask;
 	/** target image mask */
-	private ROI2DPolygon targetMask;
+	private ROI2D targetMask;
 
 	// Transformation parameters
 	/** maximum image subsampling factor */
@@ -91,8 +87,8 @@ public class BUnwarpper extends Thread {
 	 * imageWeight, Double stopThreshold, Boolean showProcess, EzPlug plugin
 	 */
 	public BUnwarpper(final Sequence sourceSequence, final Sequence targetSequence,
-	    final List<ROI2DPoint> sourceLandmarks, final List<ROI2DPoint> targetLandmarks, final ROI2DPolygon sourceMask,
-	    final ROI2DPolygon targetMask, final int maxImageSubsamplingFactor, final int minScaleDeformation,
+	    final List<ROI2DPoint> sourceLandmarks, final List<ROI2DPoint> targetLandmarks, final ROI2D sourceMask,
+	    final ROI2D targetMask, final int maxImageSubsamplingFactor, final int minScaleDeformation,
 	    final int maxScaleDeformation, final int minScaleImage, final double divWeight, final double curlWeight,
 	    final double landmarkWeight, final double imageWeight, final double consistencyWeight, final double stopThreshold,
 	    final int outputLevel, final boolean showMarquardtOptim, final int accurateMode, final BUnwarp plugin) {
@@ -118,7 +114,7 @@ public class BUnwarpper extends Thread {
 		this.plugin = plugin;
 
 		ProgressBar.setPlugin(this.plugin);
-		
+
 		createSourceImage(this.accurateMode < RegistrationModeEnum.MONO.getNumber());
 		createTargetImage();
 	}
@@ -146,11 +142,10 @@ public class BUnwarpper extends Thread {
 	 */
 	@Override
 	public void run() {
-		super.run();
 
 		// Start pyramids
 		ProgressBar.setProgressBarMessage("Starting image pyramids...");
-		
+
 		if (targetModel.getWidth() > BSplineModel.MAX_OUTPUT_SIZE || targetModel.getHeight() > BSplineModel.MAX_OUTPUT_SIZE
 		    || sourceModel.getWidth() > BSplineModel.MAX_OUTPUT_SIZE
 		    || sourceModel.getHeight() > BSplineModel.MAX_OUTPUT_SIZE)
@@ -208,9 +203,9 @@ public class BUnwarpper extends Thread {
 			}
 			warp.showInverseResults();
 		}
-		
+
 		System.out.println("Intervals: " + warp.getIntervals());
-		
+
 		long stop = System.currentTimeMillis(); // stop timing
 		if (outputLevel == 2)
 			System.out.println("\nRegistration time: " + (stop - start) + "ms"); // print
@@ -267,8 +262,9 @@ public class BUnwarpper extends Thread {
 
 			for (int j = 0; j < Xdimt; j++) {
 
-				if (sourceMask.contains(j * sSubFactorX, i_s_sub) && targetMask.contains(j * tSubFactorX, i_t_sub) && j < Xdims
-				    && i < Ydims)
+				if ((sourceMask == null || targetMask == null
+				    || (sourceMask.contains(j * sSubFactorX, i_s_sub) && targetMask.contains(j * tSubFactorX, i_t_sub)))
+				    && j < Xdims && i < Ydims)
 					ibiData[j + i_offset_t] = (float) (tImage[i_offset_t + j] - sImage[i_offset_s + j]);
 				else {
 					ibiData[j + i_offset_t] = 0;
@@ -296,7 +292,8 @@ public class BUnwarpper extends Thread {
 				int i_t_sub = i * tSubFactorY;
 
 				for (int j = 0; j < Xdims; j++)
-					if (targetMask.contains(j * tSubFactorX, i_t_sub) && sourceMask.contains(j * sSubFactorX, i_s_sub)
+					if ((targetMask == null || sourceMask != null
+					    || (targetMask.contains(j * tSubFactorX, i_t_sub) && sourceMask.contains(j * sSubFactorX, i_s_sub)))
 					    && i < Ydimt && j < Xdimt)
 						ibi2Data[j + i_offset_s] = (float) (sImage[i_offset_s + j] - tImage[i_offset_t + j]);
 					else
@@ -317,33 +314,43 @@ public class BUnwarpper extends Thread {
 	public void getRegisteredSource(Sequence srcTgtSeq) {
 		warp.getRegisteredSource(srcTgtSeq);
 	}
-	
+
 	public void getRegisteredTarget(Sequence tgtTgtSeq) {
 		warp.getRegisteredTarget(tgtTgtSeq);
 	}
-	
+
 	/**
-	 * Computes the registered image in the specified result file path using srcPath as the transformed image.
-	 * @param srcResultPath Path of the result image
-	 * @param srcPath Path of the image to be transformed
-	 * @param tgtPath Path of the base image
+	 * Computes the registered image in the specified result file path using
+	 * srcPath as the transformed image.
+	 * 
+	 * @param srcResultPath
+	 *          Path of the result image
+	 * @param srcPath
+	 *          Path of the image to be transformed
+	 * @param tgtPath
+	 *          Path of the base image
 	 * @return The resulting sequence
 	 */
-	public Sequence getRegisteredSource(String srcResultPath, String srcPath, String tgtPath) {
-		return warp.getRegisteredSource(srcResultPath, srcPath, tgtPath);
+	public Sequence getRegisteredSource(String srcResultPath, String srcPath, String transformedSrcPath, String tgtPath) {
+		return warp.getRegisteredSource(srcResultPath, srcPath, transformedSrcPath, tgtPath);
 	}
 
 	/**
-	 * Computes the registered image in the specified result file path using tgtPath as the transformed image.
-	 * @param tgtResultPath Path of the result image
-	 * @param srcPath Path of the image to be transformed
-	 * @param tgtPath Path of the base image
+	 * Computes the registered image in the specified result file path using
+	 * tgtPath as the transformed image.
+	 * 
+	 * @param tgtResultPath
+	 *          Path of the result image
+	 * @param srcPath
+	 *          Path of the image to be transformed
+	 * @param tgtPath
+	 *          Path of the base image
 	 * @return The resulting sequence
 	 */
-	public Sequence getRegisteredTarget(String tgtResultPath, String srcPath, String tgtPath) {
-		return warp.getRegisteredTarget(tgtResultPath, srcPath, tgtPath);
+	public Sequence getRegisteredTarget(String tgtResultPath, String srcPath, String tgtPath, String transformedTgtPath) {
+		return warp.getRegisteredTarget(tgtResultPath, srcPath, tgtPath, transformedTgtPath);
 	}
-	
+
 	public double[][] getCxSourceToTarget() {
 		return warp.getCxSourceToTarget();
 	}
@@ -351,11 +358,11 @@ public class BUnwarpper extends Thread {
 	public double[][] getCySourceToTarget() {
 		return warp.getCySourceToTarget();
 	}
-	
+
 	public double[][] getCxTargetToSource() {
 		return warp.getCxTargetToSource();
 	}
-	
+
 	public double[][] getCyTargetToSource() {
 		return warp.getCyTargetToSource();
 	}
@@ -363,5 +370,13 @@ public class BUnwarpper extends Thread {
 	public int getIntervals() {
 		return warp.getIntervals();
 	}
-	
+
+	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcResultPath, String srcPath, String transformedSrcPath, String tgtPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
+		warp.saveBigRegisteredSource(srcResultPath, transformedSrcResultPath, srcPath, transformedSrcPath, tgtPath, tile);
+	}
+
+	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtResultPath, String tgtPath, String transformedTgtPath, String srcPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
+		warp.saveBigRegisteredTarget(tgtResultPath, transformedTgtResultPath, tgtPath, transformedTgtPath, srcPath, tile);
+	}
+
 }

@@ -3,19 +3,24 @@ package algorithms.danyfel80.bigimage;
 import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.io.File;
 import java.io.IOException;
 
 import org.apache.commons.io.FilenameUtils;
 
 import icy.common.exception.UnsupportedFormatException;
+import icy.gui.frame.progress.ProgressFrame;
 import icy.image.IcyBufferedImage;
 import icy.image.IcyBufferedImageUtil;
+import icy.roi.BooleanMask2D;
+import icy.roi.ROI2D;
 import icy.sequence.Sequence;
 import icy.type.DataType;
+import icy.type.collection.array.Array1DUtil;
 import loci.formats.ome.OMEXMLMetadataImpl;
 import plugins.adufour.ezplug.EzGUI;
-import plugins.danyfel80.bigimage.LoadBigImage;
 import plugins.kernel.importer.LociImporterPlugin;
+import plugins.kernel.roi.roi2d.ROI2DArea;
 
 /**
  * This class allows easy big image loading through downsampling and tile
@@ -25,26 +30,23 @@ import plugins.kernel.importer.LociImporterPlugin;
  */
 public class BigImageLoader {
 
-	private static EzGUI pluginGUI;
-	private static LoadBigImage plugin;
+	private EzGUI pluginGUI = null;
+	private ProgressFrame progressFrame = null;
+	private boolean isInterrupted;
 
-	public static void setPlugin(LoadBigImage plugin) {
-		BigImageLoader.plugin = plugin;
+	public void setPluginGUI(EzGUI pluginGUI) {
+		this.pluginGUI = pluginGUI;
 	}
 
-	public static void setPluginGUI(EzGUI pluginGUI) {
-		BigImageLoader.pluginGUI = pluginGUI;
-	}
-
-	private static void setProgress(double progress) {
+	private void setProgress(double progress) {
 		if (pluginGUI != null) {
-			pluginGUI.setProgressBarValue(progress);
+			this.pluginGUI.setProgressBarValue(progress);
 		}
 	}
 
-	private static void setStatusMessage(String message) {
+	private void setStatusMessage(String message) {
 		if (pluginGUI != null) {
-			pluginGUI.setProgressBarMessage(message);
+			this.pluginGUI.setProgressBarMessage(message);
 		}
 	}
 
@@ -64,12 +66,15 @@ public class BigImageLoader {
 	 * @throws IOException
 	 * @throws UnsupportedFormatException
 	 */
-	public static Sequence loadDownsampledImage(String path, Rectangle tile, int resultMaxWidth, int resultMaxHeight)
-	    throws UnsupportedFormatException, IOException {
-
+	public Sequence loadDownsampledImage(String path, Rectangle tile, int resultMaxWidth, int resultMaxHeight,
+	    boolean showProgressBar) throws UnsupportedFormatException, IOException {
+		this.isInterrupted = false;
 		double progress = 0;
 		setProgress(progress);
-		setStatusMessage(String.format("Loading image: %d", (int) (progress * 100)));
+		if (showProgressBar) {
+			this.progressFrame = new ProgressFrame("Loading image...");
+		}
+
 		LociImporterPlugin importer = new LociImporterPlugin();
 		try {
 			importer.open(path, 0);
@@ -77,6 +82,7 @@ public class BigImageLoader {
 			String imgName = FilenameUtils.getBaseName(path);
 			int imgSizeX = imgProps.getPixelsSizeX(0).getValue();
 			int imgSizeY = imgProps.getPixelsSizeY(0).getValue();
+			Dimension imgSize = new Dimension(imgSizeX, imgSizeY);
 			int imgSizeC = imgProps.getPixelsSizeC(0).getValue();
 			DataType imgDataType = DataType.getDataTypeFromPixelType(imgProps.getPixelsType(0));
 			if (tile == null) {
@@ -109,9 +115,12 @@ public class BigImageLoader {
 			System.gc();
 			long ram = Runtime.getRuntime().freeMemory();
 			int nProc = Runtime.getRuntime().availableProcessors();
-			System.out.println("Available memory: " + ram + " bytes, Available processors: " + nProc);
+			if (showProgressBar) {
+				System.out.println("Available memory: " + ram + " bytes, Available processors: " + nProc);
+			}
 			ram /= imgSizeC;
 			double szMax = Math.sqrt(ram);
+			// szMax /= 2;
 
 			int tileSize = (int) Math.ceil(szMax / nProc);
 
@@ -119,29 +128,27 @@ public class BigImageLoader {
 				tileSize *= 2;
 			while (tile.height / resultMaxHeight > 2 * tileSize)
 				tileSize *= 2;
-			System.out.println("Image size: " + imgSizeX + "px*" + imgSizeY + "px. Tile size: " + tileSize);
+			System.out.println("Tile size: " + tileSize);
 
-			//double imgScaledSizeX = imgSizeX;
-			//double imgScaledSizeY = imgSizeY;
+			// double imgScaledSizeX = imgSizeX;
+			// double imgScaledSizeY = imgSizeY;
 			double tmpSizeX = tile.getWidth();
 			double tmpSizeY = tile.getHeight();
 			double tileTmpSizeX = tileSize;
 			double tileTmpSizeY = tileSize;
-			int resolution = 1;
 			double scaleFactor = 1d;
 			while (tmpSizeX > resultMaxWidth || tmpSizeY > resultMaxHeight) {
-				//imgScaledSizeX /= 2d;
-				//imgScaledSizeY /= 2d;
+				// imgScaledSizeX /= 2d;
+				// imgScaledSizeY /= 2d;
 				tmpSizeX /= 2d;
 				tmpSizeY /= 2d;
 				tileTmpSizeX /= 2d;
 				tileTmpSizeY /= 2d;
-				resolution *= 2;
 				scaleFactor /= 2d;
 			}
-
-			System.out.println("resolution scale: " + resolution);
-
+			if (showProgressBar) {
+				System.out.println("output resolution: " + scaleFactor);
+			}
 			int outTileSizeX = (int) Math.round(tileTmpSizeX);
 			int outTileSizeY = (int) Math.round(tileTmpSizeY);
 			int outSizeX = ((int) (tile.width / tileSize)) * outTileSizeX;
@@ -150,10 +157,10 @@ public class BigImageLoader {
 				outSizeX += (int) Math.round((double) (tile.width % tileSize) * scaleFactor);
 			if (tile.height % tileSize > 0)
 				outSizeY += (int) Math.round((double) (tile.height % tileSize) * scaleFactor);
-
-			System.out.println("Result image size: " + outSizeX + "px*" + outSizeY + "px. Tile size: " + outTileSizeX + "px*"
-			    + outTileSizeY + "px");
-
+			if (showProgressBar) {
+				System.out.println("Result image size: " + outSizeX + "px*" + outSizeY + "px. Tile size: " + outTileSizeX
+				    + "px*" + outTileSizeY + "px");
+			}
 			Sequence result = new Sequence(new IcyBufferedImage(outSizeX, outSizeY, imgSizeC, imgDataType));
 			result.beginUpdate();
 			IcyBufferedImage resultImg = result.getFirstImage();
@@ -174,15 +181,16 @@ public class BigImageLoader {
 
 				for (int posY = tile.y, posTileY = 0; posY < tile.y + tile.height && posY < imgSizeY;) {
 					// System.out.println("Processing: (" + posX + ", " + posY + ")");
-					if (plugin != null && plugin.isStopped()) {
+					if (isInterrupted) {
 						break;
 					}
+
 					int tileSizeY = (posY + tileSize) <= imgSizeY ? tileSize : imgSizeY - posY;
 					tileSizeY = (posY + tileSizeY) <= tile.y + tile.height ? tileSizeY : tile.y + tile.height - posY;
 					int outCurrTileSizeY = (posTileY + outTileSizeY) <= outSizeY ? outTileSizeY : outSizeY - posTileY;
 
 					threads[currProc] = new TileLoaderThread(path, new Rectangle(posX, posY, tileSizeX, tileSizeY),
-					    new Dimension(outCurrTileSizeX, outCurrTileSizeY));
+					    new Dimension(outCurrTileSizeX, outCurrTileSizeY), imgSize);
 					points[currProc] = new Point(posTileX, posTileY);
 					threads[currProc++].start();
 
@@ -190,15 +198,21 @@ public class BigImageLoader {
 					    || ((posX + tileSizeX) >= tile.x + tile.width && (posY + tileSizeY) >= tile.y + tile.height)) {
 						for (int p = 0; p < currProc; p++) {
 							try {
+								progress = (double) treatedTiles / (double) totalTiles;
+								setProgress(progress);
+								if (showProgressBar) {
+									this.progressFrame.setPosition(progress * 100);
+									this.progressFrame.setMessage(String.format("Loading image: %d%%, tile: %d/%d",
+									    (int) (progress * 100), treatedTiles, totalTiles));
+								}
+								setStatusMessage(String.format("Loading image: %d%%, tile: %d/%d", (int) (progress * 100), treatedTiles,
+								    totalTiles));
 								threads[p].join();
 								resultImg.copyData(threads[p].resultImage, null, new Point(points[p].x, points[p].y));
 								threads[p] = null;
 								points[p] = null;
 								treatedTiles++;
-								progress = (double) treatedTiles / (double) totalTiles;
-								setProgress(progress);
-								setStatusMessage(String.format("Loading image: %d%%, tile: %d / %d", (int) (progress * 100),
-								    treatedTiles, totalTiles));
+
 							} catch (InterruptedException e) {
 								e.printStackTrace();
 							}
@@ -208,13 +222,15 @@ public class BigImageLoader {
 					posY += tileSizeY;
 					posTileY += outCurrTileSizeY;
 				}
-				if (plugin != null && plugin.isStopped()) {
+				if (isInterrupted) {
 					break;
 				}
 				posX += tileSizeX;
 				posTileX += outCurrTileSizeX;
 			}
-			System.out.println(treatedTiles);
+			if (showProgressBar) {
+				System.out.println("Treated Tiles" + treatedTiles);
+			}
 			result.setImage(0, 0, resultImg);
 			result.dataChanged();
 			result.endUpdate();
@@ -225,6 +241,11 @@ public class BigImageLoader {
 			throw e;
 		} finally {
 			importer.close();
+			setStatusMessage("Done loading");
+			setProgress(1);
+			if (showProgressBar) {
+				this.progressFrame.dispose();
+			}
 		}
 	}
 
@@ -237,8 +258,12 @@ public class BigImageLoader {
 
 		private final String path;
 		private final Rectangle rect;
-		private final Dimension dimension;
+		private final Dimension outDimension;
+		private final Dimension fullDimension;
+
 		private IcyBufferedImage resultImage;
+		private final double scaleX;
+		private final double scaleY;
 
 		/**
 		 * Constructor
@@ -251,12 +276,15 @@ public class BigImageLoader {
 		 *          final scaled dimensions of the result image. Used for
 		 *          down/up-sampling.
 		 */
-		public TileLoaderThread(String path, Rectangle rect, Dimension dimension) {
+		public TileLoaderThread(String path, Rectangle rect, Dimension outDimension, Dimension fullDimension) {
 			super();
 			this.path = path;
 			this.rect = rect;
-			this.dimension = dimension;
+			this.outDimension = outDimension;
+			this.fullDimension = fullDimension;
 			this.resultImage = null;
+			this.scaleX = rect.width / outDimension.width;
+			this.scaleY = rect.height / outDimension.height;
 		}
 
 		/*
@@ -269,12 +297,69 @@ public class BigImageLoader {
 			LociImporterPlugin importer = new LociImporterPlugin();
 			try {
 				importer.open(path, 0);
-				resultImage = importer.getImage(0, 1, rect, 0, 0);
-				resultImage = IcyBufferedImageUtil.scale(resultImage, (int) dimension.getWidth(), (int) dimension.getHeight());
+
+				// get bigger tile to avoid interpolation issues
+				Rectangle bigRect = new Rectangle(rect);
+				if (rect.x - 3 >= 0) {
+					bigRect.x -= 3;
+				}
+				if (rect.y - 3 >= 0) {
+					bigRect.y -= 3;
+				}
+				if (rect.x + rect.width + 3 < fullDimension.width) {
+					bigRect.width += 3;
+				}
+				if (rect.y + rect.height + 3 < fullDimension.height) {
+					bigRect.height += 3;
+				}
+
+				Dimension scaledExtractedDim = new Dimension((int) (bigRect.getWidth() / scaleX),
+				    (int) (bigRect.getHeight() / scaleY));
+				Point scaledPosition = new Point((int) ((double) (rect.x - bigRect.x) / scaleX),
+				    (int) ((double) (rect.y - bigRect.y) / scaleY));
+
+				resultImage = importer.getImage(0, 0, bigRect, 0, 0);
+				if (resultImage.getWidth() != outDimension.getWidth() || resultImage.getHeight() != outDimension.height) {
+					resultImage = IcyBufferedImageUtil.scale(resultImage, scaledExtractedDim.width, scaledExtractedDim.height);
+				}
+				IcyBufferedImageUtil.getSubImage(resultImage, scaledPosition.x, scaledPosition.y, outDimension.width,
+				    outDimension.height);
 				importer.close();
 			} catch (UnsupportedFormatException | IOException e) {
 				e.printStackTrace();
 			}
 		}
+	}
+
+	public ROI2D loadDownsampledMask(Sequence srcSeq, String srcPath, Rectangle tile, int resultMaxWidth,
+	    int resultMaxHeight, boolean showProgressBar) throws UnsupportedFormatException, IOException {
+
+		String maskPath = FilenameUtils.getFullPath(srcPath);
+		maskPath += FilenameUtils.getBaseName(srcPath) + "_mask.";
+		maskPath += FilenameUtils.getExtension(srcPath);
+
+		BooleanMask2D boolMask = new BooleanMask2D();
+
+		if (new File(maskPath).exists()) {
+			Sequence maskSeq = loadDownsampledImage(maskPath, tile, resultMaxWidth, resultMaxHeight, showProgressBar);
+			double[] maskData = Array1DUtil.arrayToDoubleArray(maskSeq.getDataXY(0, 0, 0), maskSeq.isSignedDataType());
+			boolMask.mask = new boolean[maskData.length];
+
+			for (int i = 0; i < maskData.length; i++) {
+				boolMask.mask[i] = maskData[i] > 0 ? true : false;
+			}
+
+			boolMask.bounds = new Rectangle(maskSeq.getBounds2D());
+		} else {
+			boolMask.mask = new boolean[srcSeq.getSizeX() * srcSeq.getSizeY()];
+
+			for (int i = 0; i < boolMask.mask.length; i++) {
+				boolMask.mask[i] = true;
+			}
+
+			boolMask.bounds = new Rectangle(srcSeq.getBounds2D());
+		}
+
+		return new ROI2DArea(boolMask);
 	}
 }

@@ -107,6 +107,7 @@ public class BUnwarpSimple extends BUnwarp {
 	IcyBufferedImage originalTgtIBI;
 	
 	BUnwarpper bu;
+	Thread but;
 
 	/*
 	 * (non-Javadoc)
@@ -261,9 +262,11 @@ public class BUnwarpSimple extends BUnwarp {
 		    inStopThreshold.getValue(), inShowProcess.getValue() ? 2 : 1, inShowProcess.getValue(),
 		    inMode.getValue().getNumber(), this);
 		bu = buLocal;
-		bu.start();
+		but = new Thread(bu);
+		but.start();
 		try {
-			bu.join();
+			but.join();
+			but = null;
 		} catch (InterruptedException e) {
 			System.err.println("Thread interrupted: " + e.getMessage());
 		}
@@ -316,9 +319,10 @@ public class BUnwarpSimple extends BUnwarp {
 	@Override
 	public void stopExecution() {
 		isPluginInterrupted = true;
-		if (bu != null && bu.isAlive()) {
+		if (but != null && but.isAlive()) {
 			try {
-				bu.join();
+				but.join();
+				but = null;
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}

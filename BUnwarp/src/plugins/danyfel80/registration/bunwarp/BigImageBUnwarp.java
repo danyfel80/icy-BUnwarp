@@ -1,29 +1,21 @@
 package plugins.danyfel80.registration.bunwarp;
 
-import java.awt.geom.Point2D;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 import org.apache.commons.io.FilenameUtils;
 
-import algorithms.danyfel80.bigimage.BigImageLoader;
 import algorithms.danyfel80.registration.bunwarp.BUnwarpper;
+import algorithms.danyfel80.registration.bunwarp.BigBUnwarpper;
 import algorithms.danyfel80.registration.bunwarp.MaximumScaleDeformationEnum;
 import algorithms.danyfel80.registration.bunwarp.MinimumScaleDeformationEnum;
-import algorithms.danyfel80.registration.bunwarp.ProgressBar;
 import algorithms.danyfel80.registration.bunwarp.RegistrationModeEnum;
-import icy.common.exception.UnsupportedFormatException;
 import icy.gui.dialog.MessageDialog;
-import icy.image.IcyBufferedImage;
-import icy.roi.ROI;
-import icy.sequence.Sequence;
 import plugins.adufour.blocks.util.VarList;
 import plugins.adufour.ezplug.EzGroup;
 import plugins.adufour.ezplug.EzVar;
 import plugins.adufour.ezplug.EzVarBoolean;
 import plugins.adufour.ezplug.EzVarDouble;
+import plugins.adufour.ezplug.EzVarDoubleArrayNative;
 import plugins.adufour.ezplug.EzVarEnum;
 import plugins.adufour.ezplug.EzVarFile;
 import plugins.adufour.ezplug.EzVarInteger;
@@ -53,6 +45,8 @@ public class BigImageBUnwarp extends BUnwarp {
 	// - Registration mode
 	EzVarEnum<RegistrationModeEnum> inMode = new EzVarEnum<>("Mode", RegistrationModeEnum.values(),
 	    RegistrationModeEnum.ACCURATE);
+	double[][] scales = { { 0.16 } };
+	EzVarDoubleArrayNative inUsedScales = new EzVarDoubleArrayNative("Registration scales", scales, true);
 	// - Subsampling factor
 	EzVarInteger inSubsampleFactor = new EzVarInteger("Image Subsampling Factor", 0, 0, 7, 1);
 	// - Advanced Parameters
@@ -87,15 +81,8 @@ public class BigImageBUnwarp extends BUnwarp {
 	    inShowProcess);
 
 	// Internal variables
+	Thread but;
 	BUnwarpper bu;
-
-	Sequence srcSeq;
-	Sequence tgtSeq;
-	Sequence srcDefSeq;
-	Sequence tgtDefSeq;
-
-	IcyBufferedImage originalSrcIBI;
-	IcyBufferedImage originalTgtIBI;
 
 	/*
 	 * (non-Javadoc)
@@ -111,6 +98,7 @@ public class BigImageBUnwarp extends BUnwarp {
 		inputMap.add(inSrcResultFile.name, inSrcResultFile.getVariable());
 		inputMap.add(inTgtResultFile.name, inTgtResultFile.getVariable());
 		inputMap.add(inMode.name, inMode.getVariable());
+		inputMap.add(inUsedScales.name, inUsedScales.getVariable());
 		inputMap.add(inSubsampleFactor.name, inSubsampleFactor.getVariable());
 		inputMap.add(inIniDef.name, inIniDef.getVariable());
 		inputMap.add(inFnlDef.name, inFnlDef.getVariable());
@@ -153,8 +141,34 @@ public class BigImageBUnwarp extends BUnwarp {
 		addEzComponent(inSrcResultFile);
 		addEzComponent(inTgtResultFile);
 		addEzComponent(inMode);
+		addEzComponent(inUsedScales);
 		addEzComponent(inSubsampleFactor);
 		addEzComponent(advancedParamsGroup);
+
+		// EzVarListener<File> fileChangeListener = new EzVarListener<File>() {
+		// @Override
+		// public void variableChanged(EzVar<File> source, File newValue) {
+		// if (newValue != null) {
+		// System.out.println(inSrcFile.getValue());
+		// System.out.println(inTgtFile.getValue());
+		// System.out.println(inSrcResultFile.getValue());
+		// System.out.println(inTgtResultFile.getValue());
+		// if (inSrcFile.getValue() == null)
+		// inSrcFile.setValue(newValue);
+		// if (inTgtFile.getValue() == null)
+		// inTgtFile.setValue(newValue);
+		// if (inSrcResultFile.getValue() == null)
+		// inSrcResultFile.setValue(newValue);
+		// if (inTgtResultFile.getValue() == null)
+		// inTgtResultFile.setValue(newValue);
+		// }
+		// }
+		// };
+		//
+		// inSrcFile.addVarChangeListener(fileChangeListener);
+		// inSrcFile.addVarChangeListener(fileChangeListener);
+		// inSrcFile.addVarChangeListener(fileChangeListener);
+		// inSrcFile.addVarChangeListener(fileChangeListener);
 
 		inDivWeight.setValue(0d);
 		inCurlWeight.setValue(0d);
@@ -186,7 +200,7 @@ public class BigImageBUnwarp extends BUnwarp {
 
 		String srcPath = inSrcFile.getValue().getPath();
 		String tgtPath = inTgtFile.getValue().getPath();
-		System.out.println(srcPath);
+		// System.out.println(srcPath);
 
 		String transformedSrcPath;
 		String transformedTgtPath;
@@ -195,110 +209,71 @@ public class BigImageBUnwarp extends BUnwarp {
 		} else {
 			transformedSrcPath = inSrcResultFile.getValue().getPath();
 		}
-		
+
 		if (inTgtResultFile.getValue() == null) {
 			transformedTgtPath = inTgtFile.getValue().getPath();
 		} else {
 			transformedTgtPath = inTgtResultFile.getValue().getPath();
 		}
-		
+
 		String srcResultPath;
 		String tgtResultPath;
+		String transformedSrcResultPath;
+		String transformedTgtResultPath;
 
 		srcResultPath = FilenameUtils.getFullPath(srcPath);
 		srcResultPath += FilenameUtils.getBaseName(srcPath);
 		srcResultPath += "_BUnwarp.";
 		srcResultPath += FilenameUtils.getExtension(srcPath);
-		
+
 		tgtResultPath = FilenameUtils.getFullPath(tgtPath);
 		tgtResultPath += FilenameUtils.getBaseName(tgtPath);
 		tgtResultPath += "_BUnwarp.";
 		tgtResultPath += FilenameUtils.getExtension(tgtPath);
-		
+
+		transformedSrcResultPath = FilenameUtils.getFullPath(transformedSrcPath);
+		transformedSrcResultPath += FilenameUtils.getBaseName(transformedSrcPath);
+		transformedSrcResultPath += "_BUnwarp.";
+		transformedSrcResultPath += FilenameUtils.getExtension(transformedSrcPath);
+
+		transformedTgtResultPath = FilenameUtils.getFullPath(transformedTgtPath);
+		transformedTgtResultPath += FilenameUtils.getBaseName(transformedTgtPath);
+		transformedTgtResultPath += "_BUnwarp.";
+		transformedTgtResultPath += FilenameUtils.getExtension(transformedTgtPath);
+
 		long startTime = System.nanoTime();
-		
-		ProgressBar.setProgressBarMessage("Loading source image...");
-		
-//		srcSeq = BigImageTools.loadSubsampledSequence(inSrcFile.getValue().getPath(), inSrcFile.getValue().getName());
-//		Runtime.getRuntime().gc();
-//		tgtSeq = BigImageTools.loadSubsampledSequence(inTgtFile.getValue().getPath(), inTgtFile.getValue().getName());
-//		Runtime.getRuntime().gc();
-		
-		try {
-			srcSeq = BigImageLoader.loadDownsampledImage(inSrcFile.getValue().getPath(), null, 1000, 1000);
-			tgtSeq = BigImageLoader.loadDownsampledImage(inTgtFile.getValue().getPath(), null, 1000, 1000);
-		} catch (UnsupportedFormatException | IOException e1) {
-			e1.printStackTrace();
-			return;
-		}
-		
-		addSequence(srcSeq);
-		addSequence(tgtSeq);
 
-		originalSrcIBI = srcSeq.getFirstImage();
-		originalTgtIBI = tgtSeq.getFirstImage();
-		
-		List<? extends ROI> srcLandmarks = srcSeq.getROIs(ROI2DPoint.class);
-		List<? extends ROI> tgtLandmarks = tgtSeq.getROIs(ROI2DPoint.class);
-
-		Comparator<ROI> comp = new Comparator<ROI>() {
-			@Override
-			public int compare(ROI o1, ROI o2) {
-				return o1.getName().compareTo(o2.getName());
-			}
-		};
-
-		srcLandmarks.sort(comp);
-		tgtLandmarks.sort(comp);
+		List<ROI2DPoint> srcLandmarks = null;
+		List<ROI2DPoint> tgtLandmarks = null;
+		//
+		// Comparator<ROI> comp = new Comparator<ROI>() {
+		// @Override
+		// public int compare(ROI o1, ROI o2) {
+		// return o1.getName().compareTo(o2.getName());
+		// }
+		// };
+		//
+		// srcLandmarks.sort(comp);
+		// tgtLandmarks.sort(comp);
 
 		ROI2DPolygon srcMask = null;
 		ROI2DPolygon tgtMask = null;
-		if (srcSeq.getROICount(ROI2DPolygon.class) > 0) {
-			srcMask = (ROI2DPolygon) srcSeq.getROIs(ROI2DPolygon.class).get(0);
-		}
-		if (tgtSeq.getROICount(ROI2DPolygon.class) > 0) {
-			tgtMask = (ROI2DPolygon) tgtSeq.getROIs(ROI2DPolygon.class).get(0);
-		}
-		if (srcMask == null) {
-			List<Point2D> pts = new ArrayList<>();
-			pts.add(new Point2D.Double(0, 0));
-			pts.add(new Point2D.Double(0, srcSeq.getHeight()));
-			pts.add(new Point2D.Double(srcSeq.getWidth(), srcSeq.getHeight()));
-			pts.add(new Point2D.Double(srcSeq.getWidth(), 0));
-			srcMask = new ROI2DPolygon(pts);
-		}
 
-		if (tgtMask == null) {
-			List<Point2D> pts = new ArrayList<>();
-			pts.add(new Point2D.Double(0, 0));
-			pts.add(new Point2D.Double(0, tgtSeq.getHeight()));
-			pts.add(new Point2D.Double(tgtSeq.getWidth(), tgtSeq.getHeight()));
-			pts.add(new Point2D.Double(tgtSeq.getWidth(), 0));
-			tgtMask = new ROI2DPolygon(pts);
-		}
-
-		@SuppressWarnings("unchecked")
-		BUnwarpper buLocal = new BUnwarpper(srcSeq, tgtSeq, (List<ROI2DPoint>) srcLandmarks,
-		    (List<ROI2DPoint>) tgtLandmarks, srcMask, tgtMask, inSubsampleFactor.getValue(),
-		    inIniDef.getValue().getNumber(), inFnlDef.getValue().getNumber(), 0, inDivWeight.getValue(),
-		    inCurlWeight.getValue(), inLandmarkWeight.getValue(), inImageWeight.getValue(), inConsistencyWeight.getValue(),
-		    inStopThreshold.getValue(), inShowProcess.getValue() ? 2 : 1, inShowProcess.getValue(),
+		BigBUnwarpper bu = new BigBUnwarpper(srcPath, tgtPath, transformedSrcPath, transformedTgtPath, srcResultPath,
+		    tgtResultPath, transformedSrcResultPath, transformedTgtResultPath, srcLandmarks, tgtLandmarks, srcMask, tgtMask,
+		    inSubsampleFactor.getValue(), inUsedScales.getValue(), inIniDef.getValue().getNumber(),
+		    inFnlDef.getValue().getNumber(), inDivWeight.getValue(), inCurlWeight.getValue(), inLandmarkWeight.getValue(),
+		    inImageWeight.getValue(), inConsistencyWeight.getValue(), inStopThreshold.getValue(), inShowProcess.getValue(),
 		    inMode.getValue().getNumber(), this);
-		bu = buLocal;
-		bu.start();
+		but = new Thread(bu);
+		but.start();
 		try {
-			bu.join();
+			but.join();
+			but = null;
 		} catch (InterruptedException e) {
 			System.err.println("Thread interrupted: " + e.getMessage());
 		}
-		if (!this.isPluginInterrupted) {
-			Sequence result = bu.getRegisteredSource(srcResultPath, transformedSrcPath, tgtPath);
-			addSequence(result);
-			if (inMode.getValue() != RegistrationModeEnum.MONO) {
-				Sequence result1 = bu.getRegisteredTarget(tgtResultPath, transformedTgtPath, srcPath);
-				addSequence(result1);
-			}
-		}
+
 		long endTime = System.nanoTime();
 		long totalTime = (endTime - startTime);
 		System.out.println(String.format("Done (%d millisecs)", totalTime / 1000000));
@@ -331,9 +306,10 @@ public class BigImageBUnwarp extends BUnwarp {
 	@Override
 	public void stopExecution() {
 		isPluginInterrupted = true;
-		if (bu != null && bu.isAlive()) {
+		if (but != null && but.isAlive()) {
 			try {
-				bu.join();
+				but.join();
+				but = null;
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
@@ -356,20 +332,11 @@ public class BigImageBUnwarp extends BUnwarp {
 	 */
 	@Override
 	public void restoreAll() {
-		ungrayInputImages();
 		if (getUI() != null) {
 			getUI().setProgressBarMessage("");
 			getUI().setProgressBarValue(0);
 		}
 		Runtime.getRuntime().gc();
 	}
-
-	/**
-	 * Restore original input sequences.
-	 */
-	private void ungrayInputImages() {
-		srcSeq.setImage(0, 0, originalSrcIBI);
-		tgtSeq.setImage(0, 0, originalTgtIBI);
-	};
 
 }

@@ -5,18 +5,21 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import icy.image.IcyBufferedImage;
 import icy.image.IcyBufferedImageUtil;
+import icy.roi.ROI2D;
 import icy.sequence.Sequence;
 import icy.type.DataType;
 import icy.type.collection.array.Array2DUtil;
+import loci.common.services.ServiceException;
+import loci.formats.FormatException;
 import plugins.danyfel80.registration.bunwarp.BUnwarp;
 import plugins.kernel.roi.roi2d.ROI2DPoint;
-import plugins.kernel.roi.roi2d.ROI2DPolygon;
 
 /**
  * @author Daniel Felipe Gonzalez Obando
@@ -75,9 +78,9 @@ public class Transformation {
 
 	// Masks for the images
 	/** pointer to the source mask */
-	private ROI2DPolygon sourceMask;
+	private ROI2D sourceMask;
 	/** pointer to the target mask */
-	private ROI2DPolygon targetMask;
+	private ROI2D targetMask;
 
 	// Initial affine matrix pre-process
 	/** percentage of shear correction in initial matrix */
@@ -271,10 +274,10 @@ public class Transformation {
 	 *          Pointer to the BUnwarp EzPlug
 	 */
 	public Transformation(Sequence sourceSeq, Sequence targetSeq, BSplineModel sourceModel, BSplineModel targetModel,
-	    List<ROI2DPoint> sourceLandmarks, List<ROI2DPoint> targetLandmarks, ROI2DPolygon sourceMask,
-	    ROI2DPolygon targetMask, int minScaleDeformation, int maxScaleDeformation, int minScaleImage, double divWeight,
-	    double curlWeight, double landmarkWeight, double imageWeight, double consistencyWeight, double stopThreshold,
-	    int outputLevel, boolean showMarquardtOptim, int accurateMode, Sequence outputSequence1, Sequence outputSequence2,
+	    List<ROI2DPoint> sourceLandmarks, List<ROI2DPoint> targetLandmarks, ROI2D sourceMask, ROI2D targetMask,
+	    int minScaleDeformation, int maxScaleDeformation, int minScaleImage, double divWeight, double curlWeight,
+	    double landmarkWeight, double imageWeight, double consistencyWeight, double stopThreshold, int outputLevel,
+	    boolean showMarquardtOptim, int accurateMode, Sequence outputSequence1, Sequence outputSequence2,
 	    BUnwarp plugin) {
 		this.sourceSeq = sourceSeq;
 		this.targetSeq = targetSeq;
@@ -2135,8 +2138,8 @@ public class Transformation {
 		final BSplineModel auxTarget = (!bIsReverse) ? targetModel : sourceModel;
 		final BSplineModel auxSource = (!bIsReverse) ? sourceModel : targetModel;
 
-		final ROI2DPolygon auxTargetMsk = (!bIsReverse) ? targetMask : sourceMask;
-		final ROI2DPolygon auxSourceMsk = (!bIsReverse) ? sourceMask : targetMask;
+		final ROI2D auxTargetMsk = (!bIsReverse) ? targetMask : sourceMask;
+		final ROI2D auxSourceMsk = (!bIsReverse) ? sourceMask : targetMask;
 
 		final List<ROI2DPoint> auxTargetPh = (!bIsReverse) ? targetLandmarks : sourceLandmarks;
 		final List<ROI2DPoint> auxSourcePh = (!bIsReverse) ? sourceLandmarks : targetLandmarks;
@@ -2383,9 +2386,9 @@ public class Transformation {
 		/** current source image */
 		final BSplineModel auxSource;
 		/** target mask */
-		final ROI2DPolygon auxTargetMsk;
+		final ROI2D auxTargetMsk;
 		/** source mask */
-		final ROI2DPolygon auxSourceMsk;
+		final ROI2D auxSourceMsk;
 		/** B-spline deformation in x */
 		final BSplineModel swx;
 		/** B-spline deformation in y */
@@ -2435,8 +2438,8 @@ public class Transformation {
 		 * @param rect
 		 *          rectangle containing the area of the image to be evaluated
 		 */
-		EvaluateSimilarityTile(final BSplineModel auxTarget, final BSplineModel auxSource, final ROI2DPolygon auxTargetMsk,
-		    final ROI2DPolygon auxSourceMsk, final BSplineModel swx, final BSplineModel swy, final double auxFactorWidth,
+		EvaluateSimilarityTile(final BSplineModel auxTarget, final BSplineModel auxSource, final ROI2D auxTargetMsk,
+		    final ROI2D auxSourceMsk, final BSplineModel swx, final BSplineModel swy, final double auxFactorWidth,
 		    final double auxFactorHeight, final int intervals, final double[] grad, final double[] result,
 		    final Rectangle rect) {
 			this.auxTarget = auxTarget;
@@ -2493,7 +2496,7 @@ public class Transformation {
 					// .....................................................
 
 					// Check if this point is in the target mask
-					if (auxTargetMsk.contains(u / auxFactorWidth, v / auxFactorHeight)) {
+					if (auxTargetMsk == null || auxTargetMsk.contains(u / auxFactorWidth, v / auxFactorHeight)) {
 						// Compute value in the source image
 						final double I2 = targetCurrentImage[uv];
 
@@ -2502,7 +2505,7 @@ public class Transformation {
 						double y = swy.precomputedInterpolateI(u, v);
 
 						// Check if this point is in the source mask
-						if (auxSourceMsk.contains(x / auxFactorWidth, y / auxFactorHeight)) {
+						if (auxSourceMsk == null || auxSourceMsk.contains(x / auxFactorWidth, y / auxFactorHeight)) {
 							// Compute the value of the target at that point
 							final double I1 = auxSource.prepareForInterpolationAndInterpolateIAndD(x, y, I1D, false, PYRAMID);
 
@@ -2697,8 +2700,8 @@ public class Transformation {
 
 		BSplineModel auxTarget = targetModel;
 		BSplineModel auxSource = sourceModel;
-		ROI2DPolygon auxTargetMsk = targetMask;
-		ROI2DPolygon auxSourceMsk = sourceMask;
+		ROI2D auxTargetMsk = targetMask;
+		ROI2D auxSourceMsk = sourceMask;
 		BSplineModel swx = swxTargetToSource;
 		BSplineModel swy = swyTargetToSource;
 		int auxTargetWidth = this.targetWidth;
@@ -2901,8 +2904,8 @@ public class Transformation {
 		final BSplineModel swy;
 		final BSplineModel auxSource;
 		final BSplineModel auxTarget;
-		final ROI2DPolygon auxTargetMsk;
-		final ROI2DPolygon auxSourceMsk;
+		final ROI2D auxTargetMsk;
+		final ROI2D auxSourceMsk;
 		final double auxFactorWidth;
 		final double auxFactorHeight;
 		final int auxTargetCurrentHeight;
@@ -2940,9 +2943,9 @@ public class Transformation {
 		 *          processor to be updated
 		 */
 		OutputTileMaker(final BSplineModel swx, final BSplineModel swy, final BSplineModel auxSource,
-		    final BSplineModel auxTarget, final ROI2DPolygon auxSourceMsk, final ROI2DPolygon auxTargetMsk,
-		    final double auxFactorWidth, final double auxFactorHeight, final int auxTargetCurrentHeight,
-		    final int auxTargetCurrentWidth, final Rectangle rect, final IcyBufferedImage fp) {
+		    final BSplineModel auxTarget, final ROI2D auxSourceMsk, final ROI2D auxTargetMsk, final double auxFactorWidth,
+		    final double auxFactorHeight, final int auxTargetCurrentHeight, final int auxTargetCurrentWidth,
+		    final Rectangle rect, final IcyBufferedImage fp) {
 			this.swx = swx;
 			this.swy = swy;
 			this.auxSource = auxSource;
@@ -2985,7 +2988,7 @@ public class Transformation {
 				final int v_offset = v_rect * rect.width;
 
 				for (int u_rect = 0, u = rect.x; u < auxTargetWidth; u++, uv++, u_rect++) {
-					if (auxTargetMsk.contains(u * subFactorT, v * subFactorT)) {
+					if (auxTargetMsk == null || auxTargetMsk.contains(u * subFactorT, v * subFactorT)) {
 						double down_u = u * auxFactorWidth;
 						double down_v = v * auxFactorHeight;
 						final double tv = (double) (down_v * intervals) / (double) (auxTargetCurrentHeight - 1) + 1.0F;
@@ -2994,7 +2997,7 @@ public class Transformation {
 						double y = swy.prepareForInterpolationAndInterpolateI(tu, tv, fromSubT, ORIGINAL);
 						double up_x = x / auxFactorWidth;
 						double up_y = y / auxFactorHeight;
-						if (auxSourceMsk.contains(up_x * subFactorS, up_y * subFactorS)) {
+						if (auxSourceMsk == null || auxSourceMsk.contains(up_x * subFactorS, up_y * subFactorS)) {
 							double sourceValue = auxSource.prepareForInterpolationAndInterpolateI(up_x, up_y, fromSubS, ORIGINAL);
 							// fp.putPixelValue(u_rect, v_rect, tImage[uv] - sourceValue);
 							f_array[u_rect + v_offset] = (float) (tImage[uv] - sourceValue);
@@ -3214,7 +3217,8 @@ public class Transformation {
 			for (int v = rect_target.y; v < YdimT; v++)
 				for (int u = rect_target.x; u < XdimT; u++) {
 					// Check if this point is in the target mask
-					if (this.transf.targetMask.contains(u / this.transf.targetFactorWidth, v / this.transf.targetFactorHeight)) {
+					if (this.transf.targetMask == null || this.transf.targetMask.contains(u / this.transf.targetFactorWidth,
+					    v / this.transf.targetFactorHeight)) {
 
 						final int x = (int) Math.round(swx_direct.precomputedInterpolateI(u, v));
 						final int y = (int) Math.round(swy_direct.precomputedInterpolateI(u, v));
@@ -3302,7 +3306,8 @@ public class Transformation {
 			for (int v = rect_source.y; v < YdimS; v++)
 				for (int u = rect_source.x; u < XdimS; u++) {
 					// Check if this point is in the target mask
-					if (this.transf.sourceMask.contains(u / this.transf.sourceFactorWidth, v / this.transf.sourceFactorHeight)) {
+					if (this.transf.sourceMask == null || this.transf.sourceMask.contains(u / this.transf.sourceFactorWidth,
+					    v / this.transf.sourceFactorHeight)) {
 						final int x = (int) Math.round(swx_inverse.precomputedInterpolateI(u, v));
 						final int y = (int) Math.round(swy_inverse.precomputedInterpolateI(u, v));
 
@@ -3779,8 +3784,8 @@ public class Transformation {
 	    final double[][] cy, boolean bIsReverse) {
 		// BSplineModel auxTarget = targetModel;
 		// BSplineModel auxSource = sourceModel;
-		ROI2DPolygon auxTargetMsk = targetMask;
-		ROI2DPolygon auxSourceMsk = sourceMask;
+		ROI2D auxTargetMsk = targetMask;
+		ROI2D auxSourceMsk = sourceMask;
 		int auxTargetWidth = this.originalTargetIBI.getWidth();
 		int auxTargetHeight = this.originalTargetIBI.getHeight();
 		IcyBufferedImage originalIBI = this.originalSourceIBI;
@@ -4017,8 +4022,8 @@ public class Transformation {
 		final BSplineModel[] sourceModels;
 		final int auxTargetCurrentWidth;
 		final int auxTargetCurrentHeight;
-		final ROI2DPolygon auxTargetMsk;
-		final ROI2DPolygon auxSourceMsk;
+		final ROI2D auxTargetMsk;
+		final ROI2D auxSourceMsk;
 		final Rectangle rect;
 		final private IcyBufferedImage ibiTile;
 		final private IcyBufferedImage ibiMaskTile;
@@ -4057,8 +4062,8 @@ public class Transformation {
 		 *          mask color processor to be updated
 		 */
 		ColorResultTileMaker(BSplineModel swx, BSplineModel swy, BSplineModel[] sourceModels, int auxTargetCurrentWidth,
-		    int auxTargetCurrentHeight, ROI2DPolygon auxTargetMsk, ROI2DPolygon auxSourceMsk, Rectangle rect,
-		    IcyBufferedImage fpB, IcyBufferedImage cp_mask) {
+		    int auxTargetCurrentHeight, ROI2D auxTargetMsk, ROI2D auxSourceMsk, Rectangle rect, IcyBufferedImage fpB,
+		    IcyBufferedImage cp_mask) {
 			this.swx = swx;
 			this.swy = swy;
 			this.sourceModels = sourceModels;
@@ -4094,7 +4099,7 @@ public class Transformation {
 					final double transformation_x_v_u = swx.prepareForInterpolationAndInterpolateI(tu, tv, false, ORIGINAL);
 					final double transformation_y_v_u = swy.prepareForInterpolationAndInterpolateI(tu, tv, false, ORIGINAL);
 
-					if (!auxTargetMsk.contains(u, v)) {
+					if (auxTargetMsk != null && !auxTargetMsk.contains(u, v)) {
 						for (int c = 0; c < ibiTile.getSizeC(); c++) {
 							ibiData[c][u_rect + v_offset] = 0;
 							ibiMaskData[c][u_rect + v_offset] = 0;
@@ -4103,7 +4108,7 @@ public class Transformation {
 
 						final double x = transformation_x_v_u;
 						final double y = transformation_y_v_u;
-						if (auxSourceMsk.contains(x, y)) {
+						if (auxSourceMsk == null || auxSourceMsk.contains(x, y)) {
 							for (int c = 0; c < ibiTile.getSizeC(); c++) {
 								ibiData[c][u_rect + v_offset] = sourceModels[c].prepareForInterpolationAndInterpolateI(x, y, false,
 								    ORIGINAL);
@@ -4147,8 +4152,8 @@ public class Transformation {
 	 */
 	private void computeDeformationVectors(int intervals, double[][] cx, double[][] cy, Sequence is, boolean bIsReverse) {
 		// Auxiliar variables for changing from source to target and inversely
-		ROI2DPolygon auxTargetMsk = this.targetMask;
-		ROI2DPolygon auxSourceMsk = this.sourceMask;
+		ROI2D auxTargetMsk = this.targetMask;
+		ROI2D auxSourceMsk = this.sourceMask;
 		int auxTargetCurrentHeight = this.targetCurrentHeight;
 		int auxTargetCurrentWidth = this.targetCurrentWidth;
 
@@ -4181,10 +4186,10 @@ public class Transformation {
 		// Show deformation vectors
 		for (int v = 0; v < auxTargetCurrentHeight; v += stepv)
 			for (int u = 0; u < auxTargetCurrentWidth; u += stepu)
-				if (auxTargetMsk.contains(u, v)) {
+				if (auxTargetMsk == null || auxTargetMsk.contains(u, v)) {
 					final double x = transformation_x[v][u];
 					final double y = transformation_y[v][u];
-					if (auxSourceMsk.contains(x, y))
+					if (auxSourceMsk == null || auxSourceMsk.contains(x, y))
 						MiscTools.drawArrow(transformedImage, u, v, (int) Math.round(x), (int) Math.round(y), 0, 2);
 				}
 
@@ -4722,14 +4727,14 @@ public class Transformation {
 		MiscTools.applyTransformationToSourceMT(source, target, intervals, cx, cy);
 	}
 
-	public Sequence getRegisteredSource(String srcResultPath, String srcPath, String tgtPath) {
-		return BigImageTools.applyTransformationToImage(srcResultPath, srcPath, tgtPath, intervals, cxTargetToSource,
-		    cyTargetToSource, new Dimension(targetWidth, targetHeight));
+	public Sequence getRegisteredSource(String srcResultPath, String srcPath, String transformedSrcPath, String tgtPath) {
+		return BigImageTools.applyTransformationToImage(srcResultPath, srcPath, transformedSrcPath, tgtPath, intervals,
+		    cxTargetToSource, cyTargetToSource, new Dimension(targetWidth, targetHeight));
 	}
 
-	public Sequence getRegisteredTarget(String tgtResultPath, String srcPath, String tgtPath) {
-		return BigImageTools.applyTransformationToImage(tgtResultPath, srcPath, tgtPath, intervals, cxSourceToTarget,
-		    cySourceToTarget, new Dimension(sourceWidth, sourceHeight));
+	public Sequence getRegisteredTarget(String tgtResultPath, String srcPath, String tgtPath, String transformedTgtPath) {
+		return BigImageTools.applyTransformationToImage(tgtResultPath, tgtPath, transformedTgtPath, srcPath, intervals,
+		    cxSourceToTarget, cySourceToTarget, new Dimension(sourceWidth, sourceHeight));
 	}
 
 	public double[][] getCxSourceToTarget() {
@@ -4751,5 +4756,22 @@ public class Transformation {
 	public int getIntervals() {
 		return intervals;
 	}
+
+	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcResultPath, String srcPath,
+	    String transformedSrcPath, String tgtPath, Rectangle tile)
+	    throws ServiceException, IOException, FormatException, InterruptedException {
+		BigImageTools.applyAndSaveTransformationToBigImage(srcResultPath, transformedSrcResultPath, srcPath,
+		    transformedSrcPath, tgtPath, intervals, cxTargetToSource, cyTargetToSource,
+		    new Dimension(targetWidth, targetHeight), plugin, tile);
+	}
+
+	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtResultPath, String tgtPath,
+	    String transformedTgtPath, String srcPath, Rectangle tile)
+	    throws ServiceException, IOException, FormatException, InterruptedException {
+		BigImageTools.applyAndSaveTransformationToBigImage(tgtResultPath, transformedTgtResultPath, tgtPath,
+		    transformedTgtPath, srcPath, intervals, cxSourceToTarget, cySourceToTarget,
+		    new Dimension(targetWidth, targetHeight), plugin, tile);
+	}
+
 
 }

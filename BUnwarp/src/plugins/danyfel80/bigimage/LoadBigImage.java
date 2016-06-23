@@ -100,9 +100,9 @@ public class LoadBigImage extends EzPlug implements Block, EzStoppable {
 		Sequence s;
 		try {
 			long startTime = System.nanoTime();
-			BigImageLoader.setPluginGUI(this.getUI());
-			BigImageLoader.setPlugin(this);
-			s = BigImageLoader.loadDownsampledImage(path, isTiled? new Rectangle(tileX, tileY, tileW, tileH): null, maxWidth, maxHeight);
+			BigImageLoader loader = new BigImageLoader();
+			loader.setPluginGUI(this.getUI());
+			s = loader.loadDownsampledImage(path, isTiled? new Rectangle(tileX, tileY, tileW, tileH): null, maxWidth, maxHeight, true);
 			long endTime = System.nanoTime();
 			addSequence(s);
 			System.out.println("Loaded in " + ((endTime - startTime) / 1000000) + "msecs.");
@@ -111,7 +111,9 @@ public class LoadBigImage extends EzPlug implements Block, EzStoppable {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
+		if (this.getUI() != null) {
+		  this.getUI().setProgressBarValue(0);
+		}
 	}
 
 	/*
@@ -126,6 +128,9 @@ public class LoadBigImage extends EzPlug implements Block, EzStoppable {
 		EzGroup downsamplingGroup = new EzGroup("Downsampling", inMaxWidth, inMaxHeight);
 		addEzComponent(downsamplingGroup);
 
+		inMaxWidth.setValue(2000);
+		inMaxHeight.setValue(2000);
+		
 		inIsTiled.addVarChangeListener(new EzVarListener<Boolean>() {
 			@Override
 			public void variableChanged(EzVar<Boolean> source, Boolean newValue) {
