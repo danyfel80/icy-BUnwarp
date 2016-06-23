@@ -5,18 +5,23 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 
 import org.apache.commons.io.FilenameUtils;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
 
 import icy.common.exception.UnsupportedFormatException;
 import icy.gui.frame.progress.ProgressFrame;
 import icy.image.IcyBufferedImage;
 import icy.image.IcyBufferedImageUtil;
 import icy.roi.BooleanMask2D;
+import icy.roi.ROI;
 import icy.roi.ROI2D;
 import icy.sequence.Sequence;
 import icy.type.DataType;
 import icy.type.collection.array.Array1DUtil;
+import icy.util.XMLUtil;
 import loci.formats.ome.OMEXMLMetadataImpl;
 import plugins.adufour.ezplug.EzGUI;
 import plugins.kernel.importer.LociImporterPlugin;
@@ -79,6 +84,7 @@ public class BigImageLoader {
 			this.progressFrame = new ProgressFrame("Loading image...");
 		}
 
+		String xmlPath = FilenameUtils.getFullPath(path) + FilenameUtils.getBaseName(path) + ".xml";
 		LociImporterPlugin importer = new LociImporterPlugin();
 		try {
 			importer.open(path, 0);
@@ -236,6 +242,7 @@ public class BigImageLoader {
 				System.out.println("Treated Tiles" + treatedTiles);
 			}
 			result.setImage(0, 0, resultImg);
+			result.addROIs(loadROIs(xmlPath, tile, 1.0), false);
 			result.dataChanged();
 			result.endUpdate();
 			result.setName(imgName);
@@ -368,5 +375,14 @@ public class BigImageLoader {
 		}
 
 		return new ROI2DArea(boolMask);
+	}
+	
+	public List<ROI> loadROIs(String xmlPath, Rectangle rect, double scale) {
+		File xmlFile = new File(xmlPath);
+		Document doc = XMLUtil.loadDocument(xmlFile);
+		Node rois = XMLUtil.getChild(XMLUtil.getRootElement(doc), "rois");
+		List<ROI> roiList = ROI.loadROIsFromXML(rois);
+		// TODO implement rect filter and scaling
+		return roiList;
 	}
 }
