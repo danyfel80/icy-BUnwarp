@@ -21,11 +21,13 @@ import icy.roi.ROI2D;
 import icy.sequence.Sequence;
 import icy.type.DataType;
 import icy.type.collection.array.Array1DUtil;
+import icy.type.point.Point5D;
 import icy.util.XMLUtil;
 import loci.formats.ome.OMEXMLMetadataImpl;
 import plugins.adufour.ezplug.EzGUI;
 import plugins.kernel.importer.LociImporterPlugin;
 import plugins.kernel.roi.roi2d.ROI2DArea;
+import plugins.kernel.roi.roi2d.ROI2DRectangle;
 
 /**
  * This class allows easy big image loading through downsampling and tile
@@ -242,7 +244,7 @@ public class BigImageLoader {
 				System.out.println("Treated Tiles" + treatedTiles);
 			}
 			result.setImage(0, 0, resultImg);
-			result.addROIs(loadROIs(xmlPath, tile, 1.0), false);
+			result.addROIs(loadROIs(xmlPath, tile, scaleFactor), false);
 			result.dataChanged();
 			result.endUpdate();
 			result.setName(imgName);
@@ -382,7 +384,15 @@ public class BigImageLoader {
 		Document doc = XMLUtil.loadDocument(xmlFile);
 		Node rois = XMLUtil.getChild(XMLUtil.getRootElement(doc), "rois");
 		List<ROI> roiList = ROI.loadROIsFromXML(rois);
-		// TODO implement rect filter and scaling
+		roiList = BigImageUtil.getROIsInTile(roiList, rect);
+		for (ROI roi : roiList) {
+			Point5D pos = roi.getPosition5D();
+			pos.setX(pos.getX() - rect.x);
+			pos.setY(pos.getY() - rect.y);
+			roi.setPosition5D(pos);
+			BigImageUtil.scaleROI(roi, scale);
+		}
+		
 		return roiList;
 	}
 }

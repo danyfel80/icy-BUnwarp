@@ -1,12 +1,24 @@
 package algorithms.danyfel80.bigimage;
 
 import java.awt.Dimension;
+import java.awt.Rectangle;
+import java.awt.geom.Point2D;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.apache.commons.lang.NotImplementedException;
 
 import icy.common.exception.UnsupportedFormatException;
+import icy.painter.Anchor2D;
+import icy.roi.ROI;
+import icy.roi.ROIUtil;
 import icy.type.DataType;
 import loci.formats.ome.OMEXMLMetadataImpl;
 import plugins.kernel.importer.LociImporterPlugin;
+import plugins.kernel.roi.roi2d.ROI2DArea;
+import plugins.kernel.roi.roi2d.ROI2DRectangle;
+import plugins.kernel.roi.roi2d.ROI2DShape;
 
 /**
  * @author Daniel Felipe Gonzalez Obando
@@ -98,4 +110,44 @@ public class BigImageUtil {
 		return null;
 	}
 	
+	public static List<ROI> getROIsInTile(List<ROI> rois, Rectangle tile) {
+		List<ROI> result = new ArrayList<>();
+		ROI2DRectangle rectROI = new ROI2DRectangle(tile);
+		for (ROI roi : rois) {
+			List<ROI> ROIsToIntersect = new ArrayList<>();
+			ROIsToIntersect.add(roi);
+			ROIsToIntersect.add(rectROI);
+			result.add(ROIUtil.getIntersection(ROIsToIntersect));
+		}
+		return result;
+	}
+
+	public static void scaleROI(ROI roi, double scale) {
+		if (roi instanceof ROI2DShape) {
+			scaleROI2DShape((ROI2DShape)roi, scale);
+		} else if (roi instanceof ROI2DArea) {
+			scaleROI2DArea((ROI2DArea)roi, scale);
+		} else {
+			throw new IllegalArgumentException("the specified element cannot be scaled");
+		}
+	}
+
+	private static void scaleROI2DShape(ROI2DShape roi, double scale) {
+		List<Anchor2D> pts = roi.getControlPoints();
+		Point2D pos = roi.getPosition();
+		for (Anchor2D pt : pts) {
+			double posX = pt.getX() - pos.getX();
+			double posY = pt.getY() - pos.getY();
+			posX *= scale;
+			posY *= scale;
+			pt.moveTo(posX + pos.getX(), posY + pos.getY());
+			roi.controlPointPositionChanged(pt);
+		}
+		pos.setLocation(pos.getX()*scale, pos.getY()*scale);
+		roi.setPosition2D(pos);
+	}
+	
+	private static void scaleROI2DArea(ROI2DArea roi, double scale) {
+		throw new NotImplementedException("area roi scaling not yet implemented");
+	}
 }
