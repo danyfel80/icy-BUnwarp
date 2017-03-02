@@ -61,14 +61,17 @@ public class BigImageBUnwarp extends BUnwarp {
 	EzVarDouble inDivWeight = new EzVarDouble("Divergence Weight");
 	// - Curl Weight
 	EzVarDouble inCurlWeight = new EzVarDouble("Curl Weight");
+	// TODO add landmark support
+	/*
 	// - Landmark Weight
 	EzVarDouble inLandmarkWeight = new EzVarDouble("Landmark Weight");
 	// - Image Weight
+	 */
 	EzVarDouble inImageWeight = new EzVarDouble("Image Weight");
 	// - Consistency Weight
 	EzVarDouble inConsistencyWeight = new EzVarDouble("Consistency Weight");
 
-	EzGroup weightsGroup = new EzGroup("Weights", inDivWeight, inCurlWeight, inLandmarkWeight, inImageWeight,
+	EzGroup weightsGroup = new EzGroup("Weights", inDivWeight, inCurlWeight/*, inLandmarkWeight*/, inImageWeight,
 	    inConsistencyWeight);
 
 	// - Stop threshold
@@ -103,7 +106,7 @@ public class BigImageBUnwarp extends BUnwarp {
 		inputMap.add(inFnlDef.name, inFnlDef.getVariable());
 		inputMap.add(inDivWeight.name, inDivWeight.getVariable());
 		inputMap.add(inCurlWeight.name, inCurlWeight.getVariable());
-		inputMap.add(inLandmarkWeight.name, inLandmarkWeight.getVariable());
+		/*inputMap.add(inLandmarkWeight.name, inLandmarkWeight.getVariable());*/
 		inputMap.add(inImageWeight.name, inImageWeight.getVariable());
 		inputMap.add(inConsistencyWeight.name, inConsistencyWeight.getVariable());
 		inputMap.add(inStopThreshold.name, inStopThreshold.getVariable());
@@ -111,7 +114,7 @@ public class BigImageBUnwarp extends BUnwarp {
 
 		inDivWeight.setValue(0d);
 		inCurlWeight.setValue(0d);
-		inLandmarkWeight.setValue(0d);
+		/*inLandmarkWeight.setValue(0d);*/
 		inImageWeight.setValue(1d);
 		inConsistencyWeight.setValue(10d);
 		inStopThreshold.setValue(1e-2);
@@ -156,7 +159,7 @@ public class BigImageBUnwarp extends BUnwarp {
 		
 		inDivWeight.setToolTipText("Weight related to the divergence of the tensors in the transformation. Higher value means result will have less divergence.");
 		inCurlWeight.setToolTipText("Weight related to the curl of the tensors in the transformation. Higher value means result will have less curl.");
-		inLandmarkWeight.setToolTipText("Weight related to landmarks present on the sequence. Higher value means landmarks have more impact on the result. Landmarks must be ROI2DPoints in the sequence.");
+		//inLandmarkWeight.setToolTipText("Weight related to landmarks present on the sequence. Higher value means landmarks have more impact on the result. Landmarks must be ROI2DPoints in the sequence.");
 		inImageWeight.setToolTipText("Weight related to image intensities. Higher value means image intensities will have more impact on the result.");
 		inConsistencyWeight.setToolTipText("When the mode is set to Fast or Accurate, this weight represents the similarity constraint on the s->t and t->s transformations. The higher the value, the more similar the transformations will be.");
 		inStopThreshold.setToolTipText("This is the optimization stop criteria. When the optimization changes the transformation less than the given value, the process ends and the result is shown.");
@@ -165,7 +168,7 @@ public class BigImageBUnwarp extends BUnwarp {
 
 		inDivWeight.setValue(0d);
 		inCurlWeight.setValue(0d);
-		inLandmarkWeight.setValue(0d);
+		//inLandmarkWeight.setValue(0d);
 		inImageWeight.setValue(1d);
 		inConsistencyWeight.setValue(10d);
 		inStopThreshold.setValue(1e-2);
@@ -255,7 +258,7 @@ public class BigImageBUnwarp extends BUnwarp {
 		BigBUnwarpper bu = new BigBUnwarpper(srcPath, tgtPath, transformedSrcPath, transformedTgtPath, srcResultPath,
 		    tgtResultPath, transformedSrcResultPath, transformedTgtResultPath, srcLandmarks, tgtLandmarks, srcMask, tgtMask,
 		    inSubsampleFactor.getValue(), inIniDef.getValue().getNumber(),
-		    inFnlDef.getValue().getNumber(), inDivWeight.getValue(), inCurlWeight.getValue(), inLandmarkWeight.getValue(),
+		    inFnlDef.getValue().getNumber(), inDivWeight.getValue(), inCurlWeight.getValue(), 0/*inLandmarkWeight.getValue()*/,
 		    inImageWeight.getValue(), inConsistencyWeight.getValue(), inStopThreshold.getValue(), inShowProcess.getValue(),
 		    inMode.getValue().getNumber(), this);
 		but = new Thread(bu);
