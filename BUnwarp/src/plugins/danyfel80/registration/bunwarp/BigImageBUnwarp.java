@@ -15,7 +15,6 @@ import plugins.adufour.ezplug.EzGroup;
 import plugins.adufour.ezplug.EzVar;
 import plugins.adufour.ezplug.EzVarBoolean;
 import plugins.adufour.ezplug.EzVarDouble;
-import plugins.adufour.ezplug.EzVarDoubleArrayNative;
 import plugins.adufour.ezplug.EzVarEnum;
 import plugins.adufour.ezplug.EzVarFile;
 import plugins.adufour.ezplug.EzVarInteger;
@@ -37,16 +36,16 @@ public class BigImageBUnwarp extends BUnwarp {
 	// - Target image file path
 	EzVarFile inTgtFile = new EzVarFile("Target file", "");
 	// - Source transformation image file path
-	EzVarFile inSrcResultFile = new EzVarFile("Transformed source file", "");
+	EzVarFile inSrcResultFile = new EzVarFile("File to apply source transformation", "");
 	// - Target transformation image file path
-	EzVarFile inTgtResultFile = new EzVarFile("Transformed target file", "");
+	EzVarFile inTgtResultFile = new EzVarFile("File to apply target transformation", "");
 
 	// Parameters
 	// - Registration mode
 	EzVarEnum<RegistrationModeEnum> inMode = new EzVarEnum<>("Mode", RegistrationModeEnum.values(),
 	    RegistrationModeEnum.ACCURATE);
-	double[][] scales = { { 0.16 } };
-	EzVarDoubleArrayNative inUsedScales = new EzVarDoubleArrayNative("Registration scales", scales, true);
+	//double[][] scales = { { 0.16 } };
+	//EzVarDoubleArrayNative inUsedScales = new EzVarDoubleArrayNative("Registration scales", scales, true);
 	// - Subsampling factor
 	EzVarInteger inSubsampleFactor = new EzVarInteger("Image Subsampling Factor", 0, 0, 7, 1);
 	// - Advanced Parameters
@@ -98,7 +97,7 @@ public class BigImageBUnwarp extends BUnwarp {
 		inputMap.add(inSrcResultFile.name, inSrcResultFile.getVariable());
 		inputMap.add(inTgtResultFile.name, inTgtResultFile.getVariable());
 		inputMap.add(inMode.name, inMode.getVariable());
-		inputMap.add(inUsedScales.name, inUsedScales.getVariable());
+		//inputMap.add(inUsedScales.name, inUsedScales.getVariable());
 		inputMap.add(inSubsampleFactor.name, inSubsampleFactor.getVariable());
 		inputMap.add(inIniDef.name, inIniDef.getVariable());
 		inputMap.add(inFnlDef.name, inFnlDef.getVariable());
@@ -141,34 +140,28 @@ public class BigImageBUnwarp extends BUnwarp {
 		addEzComponent(inSrcResultFile);
 		addEzComponent(inTgtResultFile);
 		addEzComponent(inMode);
-		addEzComponent(inUsedScales);
+		//addEzComponent(inUsedScales);
 		addEzComponent(inSubsampleFactor);
 		addEzComponent(advancedParamsGroup);
 
-		// EzVarListener<File> fileChangeListener = new EzVarListener<File>() {
-		// @Override
-		// public void variableChanged(EzVar<File> source, File newValue) {
-		// if (newValue != null) {
-		// System.out.println(inSrcFile.getValue());
-		// System.out.println(inTgtFile.getValue());
-		// System.out.println(inSrcResultFile.getValue());
-		// System.out.println(inTgtResultFile.getValue());
-		// if (inSrcFile.getValue() == null)
-		// inSrcFile.setValue(newValue);
-		// if (inTgtFile.getValue() == null)
-		// inTgtFile.setValue(newValue);
-		// if (inSrcResultFile.getValue() == null)
-		// inSrcResultFile.setValue(newValue);
-		// if (inTgtResultFile.getValue() == null)
-		// inTgtResultFile.setValue(newValue);
-		// }
-		// }
-		// };
-		//
-		// inSrcFile.addVarChangeListener(fileChangeListener);
-		// inSrcFile.addVarChangeListener(fileChangeListener);
-		// inSrcFile.addVarChangeListener(fileChangeListener);
-		// inSrcFile.addVarChangeListener(fileChangeListener);
+		inSrcFile.setToolTipText("Source(floating) image file used to perform the registration.");
+		inTgtFile.setToolTipText("Target(fixed) image file used to perform the registration.");
+		inSrcResultFile.setToolTipText("Image file used to apply source transformation.");
+		inTgtResultFile.setToolTipText("Image file used to apply target transformation.");
+		inMode.setToolTipText("Mode of interpolation: Mono uses source -> target transformation. Fast or Accurate use source <-> target transformation.");
+		inSubsampleFactor.setToolTipText("Level of subsampling of the source and target sequences to perform the registration.");
+		
+		inIniDef.setToolTipText("Sets the initial transformation detail.");
+		inFnlDef.setToolTipText("Sets the final transformation detail.");
+		
+		inDivWeight.setToolTipText("Weight related to the divergence of the tensors in the transformation. Higher value means result will have less divergence.");
+		inCurlWeight.setToolTipText("Weight related to the curl of the tensors in the transformation. Higher value means result will have less curl.");
+		inLandmarkWeight.setToolTipText("Weight related to landmarks present on the sequence. Higher value means landmarks have more impact on the result. Landmarks must be ROI2DPoints in the sequence.");
+		inImageWeight.setToolTipText("Weight related to image intensities. Higher value means image intensities will have more impact on the result.");
+		inConsistencyWeight.setToolTipText("When the mode is set to Fast or Accurate, this weight represents the similarity constraint on the s->t and t->s transformations. The higher the value, the more similar the transformations will be.");
+		inStopThreshold.setToolTipText("This is the optimization stop criteria. When the optimization changes the transformation less than the given value, the process ends and the result is shown.");
+		
+		inShowProcess.setToolTipText("If checked, more details of the transformation will be shown at the end of the procedure.");
 
 		inDivWeight.setValue(0d);
 		inCurlWeight.setValue(0d);
@@ -261,7 +254,7 @@ public class BigImageBUnwarp extends BUnwarp {
 
 		BigBUnwarpper bu = new BigBUnwarpper(srcPath, tgtPath, transformedSrcPath, transformedTgtPath, srcResultPath,
 		    tgtResultPath, transformedSrcResultPath, transformedTgtResultPath, srcLandmarks, tgtLandmarks, srcMask, tgtMask,
-		    inSubsampleFactor.getValue(), inUsedScales.getValue(), inIniDef.getValue().getNumber(),
+		    inSubsampleFactor.getValue(), inIniDef.getValue().getNumber(),
 		    inFnlDef.getValue().getNumber(), inDivWeight.getValue(), inCurlWeight.getValue(), inLandmarkWeight.getValue(),
 		    inImageWeight.getValue(), inConsistencyWeight.getValue(), inStopThreshold.getValue(), inShowProcess.getValue(),
 		    inMode.getValue().getNumber(), this);

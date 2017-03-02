@@ -38,8 +38,6 @@ public class BigBUnwarpper implements Runnable {
 	private ROI2D tgtMask;
 
 	private int subsampleFactor;
-	@SuppressWarnings("unused")
-	private double[] usedScales;
 	private int initialDeformation;
 	private int finalDeformation;
 
@@ -80,8 +78,6 @@ public class BigBUnwarpper implements Runnable {
 	 *          Target mask. Indicates the area to register.
 	 * @param subsampleFactor
 	 *          Subsample factor of the image.
-	 * @param usedScales
-	 *          Used scales to perform the registration.
 	 * @param initialDeformation
 	 *          Initial deformation detail. (0 = Very coarse, 1 = Coarse, 2 =
 	 *          Fine, 3 = Very fine)
@@ -110,7 +106,7 @@ public class BigBUnwarpper implements Runnable {
 	public BigBUnwarpper(String srcPath, String tgtPath, String transformedSrcPath, String transformedTgtPath,
 	    String srcResultPath, String tgtResultPath, String transformedSrcResultPath, String transformedTgtResultPath,
 	    List<ROI2DPoint> srcLandmarks, List<ROI2DPoint> tgtLandmarks, ROI2D srcMask, ROI2D tgtMask, int subsampleFactor,
-	    double[] usedScales, int initialDeformation, int finalDeformation, double divWeight, double curlWeight,
+	    int initialDeformation, int finalDeformation, double divWeight, double curlWeight,
 	    double landmarkWeight, double imageWeight, double consistencyWeight, double stopThreshold, boolean showProcess,
 	    int mode, BUnwarp plugin) {
 		this.srcPath = srcPath;
@@ -126,7 +122,6 @@ public class BigBUnwarpper implements Runnable {
 		this.srcMask = srcMask;
 		this.tgtMask = tgtMask;
 		this.subsampleFactor = subsampleFactor;
-		this.usedScales = usedScales;
 		this.initialDeformation = initialDeformation;
 		this.finalDeformation = finalDeformation;
 		this.divWeight = divWeight;

@@ -34,6 +34,7 @@ import plugins.kernel.roi.roi2d.ROI2DPolygon;
  * Arganda-Carreras and Jan Kybic which extends previous UnwarpJ project by
  * Carlos Oscar Sanchez Sorzano.
  * 
+ * Adapted by Daniel Gonzalez Obando
  * @author Daniel Felipe Gonzalez Obando
  */
 public class BUnwarpSimple extends BUnwarp {
@@ -52,7 +53,7 @@ public class BUnwarpSimple extends BUnwarp {
 	// Parameters
 	// - Registration mode
 	EzVarEnum<RegistrationModeEnum> inMode = new EzVarEnum<>("Mode", RegistrationModeEnum.values(),
-	    RegistrationModeEnum.ACCURATE);
+	    RegistrationModeEnum.MONO);
 	// - Subsampling factor
 	EzVarInteger inSubsampleFactor = new EzVarInteger("Image Subsampling Factor", 0, 0, 7, 1);
 	// - Advanced Parameters
@@ -168,6 +169,25 @@ public class BUnwarpSimple extends BUnwarp {
 	 */
 	@Override
 	protected void initialize() {
+		inSrcSeq.setToolTipText("Source(floating) sequence used to perform the registration.");
+		inTgtSeq.setToolTipText("Target(fixed) sequence used to perform the registration.");
+		inSrcTgtSeq.setToolTipText("Sequence used to apply source transformation.");
+		inTgtTgtSeq.setToolTipText("Sequence used to apply target transformation.");
+		inMode.setToolTipText("Mode of interpolation: Mono uses source -> target transformation. Fast or Accurate use source <-> target transformation.");
+		inSubsampleFactor.setToolTipText("Level of subsampling of the source and target sequences to perform the registration.");
+		
+		inIniDef.setToolTipText("Sets the initial transformation detail.");
+		inFnlDef.setToolTipText("Sets the final transformation detail.");
+		
+		inDivWeight.setToolTipText("Weight related to the divergence of the tensors in the transformation. Higher value means result will have less divergence.");
+		inCurlWeight.setToolTipText("Weight related to the curl of the tensors in the transformation. Higher value means result will have less curl.");
+		inLandmarkWeight.setToolTipText("Weight related to landmarks present on the sequence. Higher value means landmarks have more impact on the result. Landmarks must be ROI2DPoints in the sequence.");
+		inImageWeight.setToolTipText("Weight related to image intensities. Higher value means image intensities will have more impact on the result.");
+		inConsistencyWeight.setToolTipText("When the mode is set to Fast or Accurate, this weight represents the similarity constraint on the s->t and t->s transformations. The higher the value, the more similar the transformations will be.");
+		inStopThreshold.setToolTipText("This is the optimization stop criteria. When the optimization changes the transformation less than the given value, the process ends and the result is shown.");
+		
+		inShowProcess.setToolTipText("If checked, more details of the transformation will be shown at the end of the procedure.");
+		
 		addEzComponent(inSrcSeq);
 		addEzComponent(inTgtSeq);
 		addEzComponent(inSrcTgtSeq);
@@ -190,6 +210,7 @@ public class BUnwarpSimple extends BUnwarp {
 				inConsistencyWeight.setEnabled(newValue != RegistrationModeEnum.MONO);
 			}
 		});
+		inMode.setValue(RegistrationModeEnum.MONO);
 	}
 
 	/*
