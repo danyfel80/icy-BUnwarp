@@ -27,7 +27,6 @@ import loci.formats.ome.OMEXMLMetadataImpl;
 import plugins.adufour.ezplug.EzGUI;
 import plugins.kernel.importer.LociImporterPlugin;
 import plugins.kernel.roi.roi2d.ROI2DArea;
-import plugins.kernel.roi.roi2d.ROI2DRectangle;
 
 /**
  * This class allows easy big image loading through downsampling and tile
