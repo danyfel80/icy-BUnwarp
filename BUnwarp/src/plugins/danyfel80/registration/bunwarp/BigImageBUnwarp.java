@@ -145,6 +145,8 @@ public class BigImageBUnwarp extends BUnwarp {
 		addEzComponent(inMode);
 		//addEzComponent(inUsedScales);
 		addEzComponent(inSubsampleFactor);
+		weightsGroup.setFoldedState(true);
+		advancedParamsGroup.setFoldedState(true);
 		addEzComponent(advancedParamsGroup);
 
 		inSrcFile.setToolTipText("Source(floating) image file used to perform the registration.");

@@ -53,7 +53,7 @@ public class BUnwarpSimple extends BUnwarp {
 	// Parameters
 	// - Registration mode
 	EzVarEnum<RegistrationModeEnum> inMode = new EzVarEnum<>("Mode", RegistrationModeEnum.values(),
-	    RegistrationModeEnum.MONO);
+	    RegistrationModeEnum.ACCURATE);
 	// - Subsampling factor
 	EzVarInteger inSubsampleFactor = new EzVarInteger("Image Subsampling Factor", 0, 0, 7, 1);
 	// - Advanced Parameters
@@ -194,6 +194,8 @@ public class BUnwarpSimple extends BUnwarp {
 		addEzComponent(inTgtTgtSeq);
 		addEzComponent(inMode);
 		addEzComponent(inSubsampleFactor);
+		weightsGroup.setFoldedState(true);
+		advancedParamsGroup.setFoldedState(true);
 		addEzComponent(advancedParamsGroup);
 
 		inDivWeight.setValue(0d);
