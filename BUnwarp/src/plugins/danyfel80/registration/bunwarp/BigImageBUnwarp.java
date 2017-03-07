@@ -35,11 +35,7 @@ public class BigImageBUnwarp extends BUnwarp {
 	EzVarFile inSrcFile = new EzVarFile("Source file", "");
 	// - Target image file path
 	EzVarFile inTgtFile = new EzVarFile("Target file", "");
-	// - Source transformation image file path
-	EzVarFile inSrcResultFile = new EzVarFile("File to apply source transformation", "");
-	// - Target transformation image file path
-	EzVarFile inTgtResultFile = new EzVarFile("File to apply target transformation", "");
-
+	
 	// Parameters
 	// - Registration mode
 	EzVarEnum<RegistrationModeEnum> inMode = new EzVarEnum<>("Mode", RegistrationModeEnum.values(),
@@ -49,9 +45,14 @@ public class BigImageBUnwarp extends BUnwarp {
 	// - Subsampling factor
 	EzVarInteger inSubsampleFactor = new EzVarInteger("Image Subsampling Factor", 0, 0, 7, 1);
 	// - Advanced Parameters
+	// - Source transformation image file path
+	EzVarFile inSrcResultFile = new EzVarFile("File to apply source transformation", "");
+	// - Target transformation image file path
+	EzVarFile inTgtResultFile = new EzVarFile("File to apply target transformation", "");
+	
 	// - Initial deformation
 	EzVarEnum<MinimumScaleDeformationEnum> inIniDef = new EzVarEnum<>("Initial deformation",
-	    MinimumScaleDeformationEnum.values(), MinimumScaleDeformationEnum.VERY_COARSE);
+	    MinimumScaleDeformationEnum.values(), MinimumScaleDeformationEnum.COARSE);
 	// - Final deformation
 	EzVarEnum<MaximumScaleDeformationEnum> inFnlDef = new EzVarEnum<>("Final Deformation",
 	    MaximumScaleDeformationEnum.values(), MaximumScaleDeformationEnum.VERY_FINE);
@@ -79,7 +80,8 @@ public class BigImageBUnwarp extends BUnwarp {
 	// - Show process
 	EzVarBoolean inShowProcess = new EzVarBoolean("Show Process", false);
 
-	EzGroup advancedParamsGroup = new EzGroup("Advanced Parameters", inIniDef, inFnlDef, weightsGroup, inStopThreshold,
+	EzGroup outputFileGroup = new EzGroup("Transformed output", inSrcResultFile, inTgtResultFile);
+	EzGroup advancedParamsGroup = new EzGroup("Advanced Parameters", inIniDef, inFnlDef, outputFileGroup, weightsGroup, inStopThreshold,
 	    inShowProcess);
 
 	// Internal variables
@@ -140,11 +142,12 @@ public class BigImageBUnwarp extends BUnwarp {
 	protected void initialize() {
 		addEzComponent(inSrcFile);
 		addEzComponent(inTgtFile);
-		addEzComponent(inSrcResultFile);
-		addEzComponent(inTgtResultFile);
+//		addEzComponent(inSrcResultFile);
+//		addEzComponent(inTgtResultFile);
 		addEzComponent(inMode);
 		//addEzComponent(inUsedScales);
 		addEzComponent(inSubsampleFactor);
+		outputFileGroup.setFoldedState(true);
 		weightsGroup.setFoldedState(true);
 		advancedParamsGroup.setFoldedState(true);
 		addEzComponent(advancedParamsGroup);

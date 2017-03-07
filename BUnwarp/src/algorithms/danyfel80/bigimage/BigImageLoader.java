@@ -5,6 +5,7 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.io.FilenameUtils;
@@ -382,8 +383,9 @@ public class BigImageLoader {
 	public List<ROI> loadROIs(String xmlPath, Rectangle rect, double scale) {
 		File xmlFile = new File(xmlPath);
 		Document doc = XMLUtil.loadDocument(xmlFile);
-		Node rois = XMLUtil.getChild(XMLUtil.getRootElement(doc), "rois");
-		List<ROI> roiList = ROI.loadROIsFromXML(rois);
+		Node root = XMLUtil.getRootElement(doc);
+		Node rois = XMLUtil.getChild(root, "rois");
+		List<ROI> roiList = (rois != null)?ROI.loadROIsFromXML(rois):new ArrayList<>();
 		roiList = BigImageUtil.getROIsInTile(roiList, rect);
 		for (ROI roi : roiList) {
 			Point5D pos = roi.getPosition5D();
