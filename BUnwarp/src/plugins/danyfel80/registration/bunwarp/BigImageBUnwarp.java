@@ -224,13 +224,13 @@ public class BigImageBUnwarp extends BUnwarp {
 
 		srcResultPath = FilenameUtils.getFullPath(srcPath);
 		srcResultPath += FilenameUtils.getBaseName(srcPath);
-		srcResultPath += "_BUnwarp.";
-		srcResultPath += FilenameUtils.getExtension(srcPath);
+		srcResultPath += "_BUnwarp.tiff";
+		//srcResultPath += FilenameUtils.getExtension(srcPath);
 
 		tgtResultPath = FilenameUtils.getFullPath(tgtPath);
 		tgtResultPath += FilenameUtils.getBaseName(tgtPath);
-		tgtResultPath += "_BUnwarp.";
-		tgtResultPath += FilenameUtils.getExtension(tgtPath);
+		tgtResultPath += "_BUnwarp.tiff";
+		//tgtResultPath += FilenameUtils.getExtension(tgtPath);
 
 		transformedSrcResultPath = FilenameUtils.getFullPath(transformedSrcPath);
 		transformedSrcResultPath += FilenameUtils.getBaseName(transformedSrcPath);
