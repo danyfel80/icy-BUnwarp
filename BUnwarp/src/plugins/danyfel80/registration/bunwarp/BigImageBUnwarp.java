@@ -224,23 +224,23 @@ public class BigImageBUnwarp extends BUnwarp {
 
 		srcResultPath = FilenameUtils.getFullPath(srcPath);
 		srcResultPath += FilenameUtils.getBaseName(srcPath);
-		srcResultPath += "_BUnwarp.tiff";
+		srcResultPath += "_BUnwarp.tif";
 		//srcResultPath += FilenameUtils.getExtension(srcPath);
 
 		tgtResultPath = FilenameUtils.getFullPath(tgtPath);
 		tgtResultPath += FilenameUtils.getBaseName(tgtPath);
-		tgtResultPath += "_BUnwarp.tiff";
+		tgtResultPath += "_BUnwarp.tif";
 		//tgtResultPath += FilenameUtils.getExtension(tgtPath);
 
 		transformedSrcResultPath = FilenameUtils.getFullPath(transformedSrcPath);
 		transformedSrcResultPath += FilenameUtils.getBaseName(transformedSrcPath);
-		transformedSrcResultPath += "_BUnwarp.";
-		transformedSrcResultPath += FilenameUtils.getExtension(transformedSrcPath);
+		transformedSrcResultPath += "_BUnwarp.tif";
+		//transformedSrcResultPath += FilenameUtils.getExtension(transformedSrcPath);
 
 		transformedTgtResultPath = FilenameUtils.getFullPath(transformedTgtPath);
 		transformedTgtResultPath += FilenameUtils.getBaseName(transformedTgtPath);
-		transformedTgtResultPath += "_BUnwarp.";
-		transformedTgtResultPath += FilenameUtils.getExtension(transformedTgtPath);
+		transformedTgtResultPath += "_BUnwarp.tif";
+		//transformedTgtResultPath += FilenameUtils.getExtension(transformedTgtPath);
 
 		long startTime = System.nanoTime();
 
