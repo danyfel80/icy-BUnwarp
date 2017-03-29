@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 import icy.image.IcyBufferedImage;
 import icy.image.IcyBufferedImageUtil;
@@ -4759,7 +4760,7 @@ public class Transformation {
 
 	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcResultPath, String srcPath,
 	    String transformedSrcPath, String tgtPath, Rectangle tile)
-	    throws ServiceException, IOException, FormatException, InterruptedException {
+	    throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
 		BigImageTools.applyAndSaveTransformationToBigImage(srcResultPath, transformedSrcResultPath, srcPath,
 		    transformedSrcPath, tgtPath, intervals, cxTargetToSource, cyTargetToSource,
 		    new Dimension(targetWidth, targetHeight), plugin, tile);
@@ -4767,7 +4768,7 @@ public class Transformation {
 
 	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtResultPath, String tgtPath,
 	    String transformedTgtPath, String srcPath, Rectangle tile)
-	    throws ServiceException, IOException, FormatException, InterruptedException {
+	    throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
 		BigImageTools.applyAndSaveTransformationToBigImage(tgtResultPath, transformedTgtResultPath, tgtPath,
 		    transformedTgtPath, srcPath, intervals, cxSourceToTarget, cySourceToTarget,
 		    new Dimension(targetWidth, targetHeight), plugin, tile);

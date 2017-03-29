@@ -8,8 +8,11 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.io.FilenameUtils;
@@ -796,7 +799,7 @@ public class BigImageTools {
 	public static void applyAndSaveTransformationToBigImage(String srcResultPath, String transformedSrcResultPath,
 			String srcPath, String transformedSrcPath, String tgtPath, int intervals, double[][] cx, double[][] cy,
 			Dimension registeredTgtDimension, BUnwarp plugin, Rectangle resultTile)
-			throws ServiceException, IOException, FormatException, InterruptedException {
+			throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
 		ProgressBar.setProgressBarMessage("Transforming original image...");
 		ProgressBar.setProgressBarValue(0);
 		Dimension transformedSrcDimension = getSequenceSize(transformedSrcPath);
@@ -827,7 +830,7 @@ public class BigImageTools {
 		// Calculate tile's dimension and count
 		System.gc();
 		long ram = Runtime.getRuntime().freeMemory();
-		int numProc = Math.max(Runtime.getRuntime().availableProcessors()-1 , 1);
+		int numProc = Math.max(Runtime.getRuntime().availableProcessors() - 1, 1);
 		System.out.println("Available memory: " + ram + " bytes, Available processors: " + numProc);
 		// Divide by channel count
 		ram /= transformedSrcChannels;
@@ -835,7 +838,7 @@ public class BigImageTools {
 		ram /= numProc;
 		double szMax = Math.sqrt(ram);
 		// Divide by amount of elements treated at the same time
-		szMax /= 4;
+		//szMax /= 4;
 
 		int tileSize = 16;
 		while (szMax > tileSize * 16) {
@@ -876,75 +879,82 @@ public class BigImageTools {
 				tileDimension);
 
 		// Calculate Thread number
-		int numThreads = Math.max(numProc/2, 1);
-		TileTransformProcessing[] threads = new TileTransformProcessing[numThreads];
+		int numThreads = Math.max((numProc+1) / 2, 1);
+		ExecutorService transformExecutor = Executors.newFixedThreadPool(numThreads);
+		ExecutorCompletionService<TileTransformProcessing> transformCs = new ExecutorCompletionService<>(transformExecutor);
 		ExecutorService saveExecutor = Executors.newFixedThreadPool(numProc);
-		// TileSaveProcessing[] threadsSave = new TileSaveProcessing[numProc];
+		ExecutorCompletionService<Void> saveCs = new ExecutorCompletionService<>(saveExecutor);
 
 		// until all tiles have been treated
 		int tileNo = 0;
-		while (tileNo < totalTgtTileCount && !plugin.isPluginInterrumped()) {
+		try {
+			while (tileNo < totalTgtTileCount && !plugin.isPluginInterrumped()) {
 
-			int thr;
-			// treat as many tiles as the amount of available processors.
-			for (thr = 0; thr < numThreads && tileNo < totalTgtTileCount && !plugin.isPluginInterrumped(); thr++, tileNo++) {
-				ProgressBar.setProgressBarMessage("Processing tile " + (tileNo + 1) + " of " + totalTgtTileCount);
-				ProgressBar.setProgressBarValue((double) tileNo / (double) totalTgtTileCount);
+				int thr;
+				// treat as many tiles as the amount of available processors.
+				for (thr = 0; thr < numThreads && tileNo < totalTgtTileCount && !plugin.isPluginInterrumped();
+						thr++, tileNo++) {
+					ProgressBar.setProgressBarMessage("Processing tile " + (tileNo + 1) + " of " + totalTgtTileCount);
+					ProgressBar.setProgressBarValue((double) tileNo / (double) totalTgtTileCount);
 
-				Rectangle tileRect = new Rectangle((tileNo % tgtTileCount.width) * tileDimension.width,
-						(tileNo / tgtTileCount.width) * tileDimension.height, tileDimension.width, tileDimension.height);
-				if (tileRect.x + tileRect.width > resultTile.width) {
-					tileRect.width -= tileRect.x + tileRect.width - resultTile.width;
+					Rectangle tileRect = new Rectangle((tileNo % tgtTileCount.width) * tileDimension.width,
+							(tileNo / tgtTileCount.width) * tileDimension.height, tileDimension.width, tileDimension.height);
+					if (tileRect.x + tileRect.width > resultTile.width) {
+						tileRect.width -= tileRect.x + tileRect.width - resultTile.width;
+					}
+					if (tileRect.y + tileRect.height > resultTile.height) {
+						tileRect.height -= tileRect.y + tileRect.height - resultTile.height;
+					}
+
+					// create thread to process tile
+					TileTransformProcessing task = new TileTransformProcessing(intervals, swx, swy, resultTile.getSize(),
+							registeredTgtDimension, tileRect/* , tileNo */, srcPath, srcChannels, srcDataType, transformedSrcPath,
+							transformedSrcChannels, transformedSrcDataType, transformedSrcDimension, resultTile.getLocation());
+					transformCs.submit(task, task);
 				}
-				if (tileRect.y + tileRect.height > resultTile.height) {
-					tileRect.height -= tileRect.y + tileRect.height - resultTile.height;
+				int usedThr = thr;
+
+				// wait for tiles to be treated
+				for (thr = 0; thr < usedThr; thr++) {
+					Future<TileTransformProcessing> transFuture = transformCs.take();
+					saveCs.submit(new Runnable() {
+
+						@Override
+						public void run() {
+							TileTransformProcessing task;
+							try {
+								task = transFuture.get();
+								System.out.println("printing tile " + task.tileRect);
+								TileSaveProcessing saveTask = new TileSaveProcessing(task.resultTile, task.transformedResultTile,
+										task.maskTile, task.tileRect.getLocation(), resultSaver, transformedResultSaver, maskSaver);
+								saveTask.run();
+							} catch (InterruptedException | ExecutionException e) {
+								e.printStackTrace();
+							}
+
+						}
+					}, null);
 				}
 
-				// System.out.println("value "+ srcTile.getChannelBounds(0)[0] + " " +
-				// srcTile.getChannelBounds(0)[1]);
-
-				// create thread to process tile
-				threads[thr] = new TileTransformProcessing(intervals, swx, swy, resultTile.getSize(), registeredTgtDimension,
-						tileRect/* , tileNo */, srcPath, srcChannels, srcDataType, transformedSrcPath, transformedSrcChannels,
-						transformedSrcDataType, transformedSrcDimension, resultTile.getLocation());
-				threads[thr].start();
-			}
-			int usedThr = thr;
-
-			// wait for tiles to be treated
-			for (thr = 0; thr < usedThr; thr++) {
-				TileTransformProcessing thread = threads[thr];
-				try {
-					thread.join();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
+				for (thr = 0; thr < usedThr; thr++) {
+					saveCs.take().get();
 				}
-			}
 
-			for (thr = 0; thr < usedThr; thr++) {
-				TileTransformProcessing thread = threads[thr];
-				// Thread th = new Thread(new TileSaveProcessing(thread.resultTile,
-				// thread.tileRect.getLocation(), saver));
-				System.out.println("printing tile " + thread.tileRect);
-				// th.start();
-				// System.out.println("finished tile");
-				// th.join();
-				saveExecutor.execute(new TileSaveProcessing(thread.resultTile, thread.transformedResultTile, thread.maskTile,
-						thread.tileRect.getLocation(), resultSaver, transformedResultSaver, maskSaver));
-				// System.out.println("printing tile " + thread.tileRect);
-				// write tiles to the full result sequence.
-				// saver.saveTile(thread.resultTile, thread.tileRect.getLocation());
-				threads[thr] = null;
+				System.out.println("finished pool");
 			}
-			saveExecutor.shutdown();
-			saveExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
-			System.out.println("finished pool");
-			saveExecutor = Executors.newFixedThreadPool(numThreads);
+		} catch (ExecutionException e) {
+			throw e;
+		}finally {
+			saveExecutor.shutdownNow();
+			saveExecutor.awaitTermination(0, TimeUnit.SECONDS);
+			transformExecutor.shutdownNow();
+			transformExecutor.awaitTermination(0, TimeUnit.SECONDS);
+			resultSaver.closeWriter();
+			transformedResultSaver.closeWriter();
+			maskSaver.closeWriter();
 		}
+		
 
-		resultSaver.closeWriter();
-		transformedResultSaver.closeWriter();
-		maskSaver.closeWriter();
 	}
 
 	private static class TileSaveProcessing implements Runnable {
