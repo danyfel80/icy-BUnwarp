@@ -150,7 +150,7 @@ public class BigImageTools {
 			Sequence sequenceDS = new Sequence(imageDS);
 			if (maxResolution > 1000) {
 				sequenceDS = SequenceUtil.scale(sequenceDS, (int) Math.round(imageDS.getSizeX() / 2.0),
-				    (int) Math.round(imageDS.getSizeY() / 2.0));
+						(int) Math.round(imageDS.getSizeY() / 2.0));
 			}
 			sequenceDS.setName(name);
 			return sequenceDS;
@@ -216,7 +216,7 @@ public class BigImageTools {
 	 *         image.
 	 */
 	public static Rectangle computeTransformationUsedArea(int intervals, double[][] cx, double[][] cy,
-	    Dimension targetFullSize) {
+			Dimension targetFullSize) {
 		// Load B-Spline transformation model
 		BSplineModel swx = new BSplineModel(cx);
 		BSplineModel swy = new BSplineModel(cy);
@@ -226,8 +226,7 @@ public class BigImageTools {
 
 		// Threads (tiles) setup
 		int blockHeight = targetFullSize.height / nproc;
-		if (targetFullSize.height % 2 != 0)
-			blockHeight++;
+		if (targetFullSize.height % 2 != 0) blockHeight++;
 
 		int nThreads = nproc;
 
@@ -240,14 +239,13 @@ public class BigImageTools {
 			// last block size is the rest of the window
 			int y0 = i * blockHeight;
 
-			if (nThreads - 1 == i)
-				blockHeight = targetFullSize.height - i * blockHeight;
+			if (nThreads - 1 == i) blockHeight = targetFullSize.height - i * blockHeight;
 
 			rects[i] = new Rectangle(0, y0, targetFullSize.width, blockHeight);
 			usedBoxes[i] = new Rectangle();
 
 			threads[i] = new Thread(
-			    new TransformBoundingBoxComputationOnTile(swx, swy, intervals, targetFullSize, rects[i], usedBoxes[i]));
+					new TransformBoundingBoxComputationOnTile(swx, swy, intervals, targetFullSize, rects[i], usedBoxes[i]));
 			threads[i].start();
 		}
 
@@ -285,17 +283,17 @@ public class BigImageTools {
 	 */
 	private static class TransformBoundingBoxComputationOnTile implements Runnable {
 		/** B-spline deformation in x */
-		final BSplineModel swx;
+		final BSplineModel	swx;
 		/** B-spline deformation in y */
-		final BSplineModel swy;
+		final BSplineModel	swy;
 		/** number of intervals between B-spline coefficients */
-		final int intervals;
+		final int						intervals;
 		/** target current size */
-		final Dimension targetFullSize;
+		final Dimension			targetFullSize;
 		/** area of the image to be transformed */
-		final Rectangle tileBox;
+		final Rectangle			tileBox;
 		/** bounding box used for the transformation of this tile */
-		final Rectangle tileBoundingBox;
+		final Rectangle			tileBoundingBox;
 
 		/**
 		 * Constructor
@@ -314,7 +312,7 @@ public class BigImageTools {
 		 *          Bounding box used for the transformation of this tile
 		 */
 		public TransformBoundingBoxComputationOnTile(BSplineModel swx, BSplineModel swy, int intervals,
-		    Dimension targetFullSize, Rectangle tileBox, Rectangle tileBoundingBox) {
+				Dimension targetFullSize, Rectangle tileBox, Rectangle tileBoundingBox) {
 			this.swx = swx;
 			this.swy = swy;
 			this.intervals = intervals;
@@ -366,7 +364,7 @@ public class BigImageTools {
 	}
 
 	public static Sequence applyTransformationToImage(String srcResultPath, String srcPath, String transformedSrcPath,
-	    String tgtPath, int intervals, double[][] cx, double[][] cy, Dimension registeredTgtDimension) {
+			String tgtPath, int intervals, double[][] cx, double[][] cy, Dimension registeredTgtDimension) {
 
 		int srcChannels = getSequenceChannelCount(srcPath);
 		DataType srcDataType = getSequenceDataType(srcPath);
@@ -387,12 +385,12 @@ public class BigImageTools {
 		// Calculate tile's dimension and count
 		Dimension tileDimension = new Dimension(500, 500);
 		Dimension tgtTileCount = new Dimension((int) Math.ceil((double) tgtDimension.width / (double) tileDimension.width),
-		    (int) Math.ceil((double) tgtDimension.height / (double) tileDimension.height));
+				(int) Math.ceil((double) tgtDimension.height / (double) tileDimension.height));
 		int totalTgtTileCount = tgtTileCount.width * tgtTileCount.height;
 
 		// Create full size result image
 		Sequence resultSeq = new Sequence(new IcyBufferedImage(tgtTileCount.width * tileDimension.width,
-		    tgtTileCount.height * tileDimension.height, transformedSrcChannels, transformedSrcDataType));
+				tgtTileCount.height * tileDimension.height, transformedSrcChannels, transformedSrcDataType));
 		resultSeq.beginUpdate();
 		double[][] resultData = Array2DUtil.arrayToDoubleArray(resultSeq.getDataXYC(0, 0), resultSeq.isSignedDataType());
 		for (int c = 0; c < resultData.length; c++) {
@@ -415,7 +413,7 @@ public class BigImageTools {
 			// treat as many tiles as the amount of available processors.
 			for (thr = 0; thr < numProc && tileNo < totalTgtTileCount; thr++, tileNo++) {
 				Rectangle tileRect = new Rectangle((tileNo % tgtTileCount.width) * tileDimension.width,
-				    (tileNo / tgtTileCount.width) * tileDimension.height, tileDimension.width, tileDimension.height);
+						(tileNo / tgtTileCount.width) * tileDimension.height, tileDimension.width, tileDimension.height);
 
 				// // Get tile from source image
 				// Rectangle srcRect = computeTransformSourceTileArea(intervals, swx,
@@ -446,8 +444,8 @@ public class BigImageTools {
 				// }
 				// create thread to process tile
 				threads[thr] = new TileTransformProcessing(intervals, swx, swy, tgtDimension, registeredTgtDimension,
-				    tileRect/* , tileNo */, srcPath, srcChannels, srcDataType, transformedSrcPath, transformedSrcChannels,
-				    transformedSrcDataType, transformedSrcDimension, new Point(0,0));
+						tileRect/* , tileNo */, srcPath, srcChannels, srcDataType, transformedSrcPath, transformedSrcChannels,
+						transformedSrcDataType, transformedSrcDimension, new Point(0, 0));
 			}
 			int usedThr = thr;
 
@@ -467,7 +465,7 @@ public class BigImageTools {
 				// System.out.println("printing tile " + thread.tileRect);
 				// write tiles to the full result sequence.
 				double[][] resultTileData = Array2DUtil.arrayToDoubleArray(thread.transformedResultTile.getDataXYC(),
-				    thread.transformedResultTile.isSignedDataType());
+						thread.transformedResultTile.isSignedDataType());
 				for (int y = 0, v = thread.tileRect.y; y < thread.tileRect.height; y++, v++) {
 					int y_offset = y * thread.tileRect.width;
 					int v_offset = v * resultSeq.getWidth();
@@ -489,7 +487,7 @@ public class BigImageTools {
 	}
 
 	private static Rectangle computeTransformSourceTileArea(int intervals, BSplineModel swx, BSplineModel swy,
-	    Rectangle rect, Dimension srcDimension, Dimension tgtDimension, Dimension registeredTgtDimension) {
+			Rectangle rect, Dimension srcDimension, Dimension tgtDimension, Dimension registeredTgtDimension) {
 		Rectangle area = new Rectangle();
 		double minX = 0, maxX = 0, minY = 0, maxY = 0;
 		boolean first = true;
@@ -536,33 +534,33 @@ public class BigImageTools {
 
 	private static class TileTransformProcessing extends Thread {
 		/** B-spline deformation in x */
-		private final BSplineModel swx;
+		private final BSplineModel	swx;
 		/** B-spline deformation in y */
-		private final BSplineModel swy;
+		private final BSplineModel	swy;
 		/** number of intervals between B-spline coefficients */
-		private final int intervals;
+		private final int						intervals;
 		/** dimension of the full target image */
-		private final Dimension tgtFullDim;
+		private final Dimension			tgtFullDim;
 		/** dimension of the registered target image */
-		private final Dimension tgtRegisteredDim;
+		private final Dimension			tgtRegisteredDim;
 		/** target tile rectangle */
-		private final Rectangle tileRect;
+		private final Rectangle			tileRect;
 		/** result tile after processing */
-		private IcyBufferedImage transformedResultTile;
+		private IcyBufferedImage		transformedResultTile;
 		/** result source tile after processing */
-		private IcyBufferedImage resultTile;
+		private IcyBufferedImage		resultTile;
 		/** result tile mask after processing */
-		private IcyBufferedImage maskTile;
+		private IcyBufferedImage		maskTile;
 		/// ** number of the tile processed */
 		// private final int tileNo;
 		// /** source image tile used for processing the target tile */
 		// private final IcyBufferedImage srcTile;
 		/** the source image path */
-		private final String srcPath;
+		private final String		srcPath;
 		/** the source tile channel count */
-		private final int srcChannels;
+		private final int				srcChannels;
 		/** the source tile data type */
-		private final DataType srcDataType;
+		private final DataType	srcDataType;
 
 		// /** models to interpolate colors */
 		// private final BSplineModel[] srcModels;
@@ -570,24 +568,24 @@ public class BigImageTools {
 		// private final Rectangle srcTileRect;
 
 		/** the transformed source path */
-		private final String transformedSrcPath;
+		private final String		transformedSrcPath;
 		/** the source tile channel count */
-		private final int transformedSrcChannels;
+		private final int				transformedSrcChannels;
 		/** the source tile data type */
-		private final DataType transformedSrcDataType;
+		private final DataType	transformedSrcDataType;
 		/** the source tile image dimension */
-		private final Dimension transformedSrcDimension;
-		
+		private final Dimension	transformedSrcDimension;
+
 		/** the position in the full size image */
 		private final Point fullSizePosition;
 
 		// intervals, swx, swy, tgtDimension, registeredTgtDimension,tileRect/* ,
 		// tileNo */, srcChannels, srcDataType, srcModels, srcRect
 		public TileTransformProcessing(final int intervals, final BSplineModel swx, final BSplineModel swy,
-		    final Dimension tgtFullDim, final Dimension tgtRegisteredDim,
-		    final Rectangle tileRect/* , final int tileNo */, String srcPath, final int srcChannels,
-		    final DataType srcDataType, String transformedSrcPath, final int transformedSrcChannels,
-		    final DataType transformedSrcDataType, final Dimension transformedSrcDimension, final Point fullSizePosition) {
+				final Dimension tgtFullDim, final Dimension tgtRegisteredDim,
+				final Rectangle tileRect/* , final int tileNo */, String srcPath, final int srcChannels,
+				final DataType srcDataType, String transformedSrcPath, final int transformedSrcChannels,
+				final DataType transformedSrcDataType, final Dimension transformedSrcDimension, final Point fullSizePosition) {
 			this.swx = swx;
 			this.swy = swy;
 			this.intervals = intervals;
@@ -602,14 +600,14 @@ public class BigImageTools {
 			this.transformedSrcChannels = transformedSrcChannels;
 			this.transformedSrcDataType = transformedSrcDataType;
 			this.transformedSrcDimension = transformedSrcDimension;
-			this.fullSizePosition = (fullSizePosition == null)? new Point(0, 0): fullSizePosition;
+			this.fullSizePosition = (fullSizePosition == null) ? new Point(0, 0) : fullSizePosition;
 		}
 
 		@Override
 		public void run() {
 			// Get tile from source image
 			Rectangle srcRect = computeTransformSourceTileArea(intervals, swx, swy, tileRect, transformedSrcDimension,
-			    tgtFullDim, tgtRegisteredDim);
+					tgtFullDim, tgtRegisteredDim);
 			// System.out.println("tile no " + tileNo + "area: " + srcRect);
 			// System.out.println("tile no " + tileNo + "area: " + tileRect);
 			IcyBufferedImage srcTile;
@@ -625,45 +623,50 @@ public class BigImageTools {
 			}
 			srcRect.x -= fullSizePosition.x;
 			srcRect.y -= fullSizePosition.y;
-			
-			double[][] srcTileData = Array2DUtil.arrayToDoubleArray(srcTile.getDataXYC(), srcTile.isSignedDataType());
-			double[][] transformedSrcTileData = Array2DUtil.arrayToDoubleArray(transformedSrcTile.getDataXYC(), transformedSrcTile.isSignedDataType());
-			// compute color mode for interpolation in transformed source image
-			/*BSplineModel[] transformedSrcModels = new BSplineModel[transformedSrcTile.getSizeC()];
-			for (int c = 0; c < transformedSrcModels.length; c++) {
-				transformedSrcModels[c] = new BSplineModel(IcyBufferedImageUtil.extractChannel(transformedSrcTile, c), false,
-				    1);
-				transformedSrcModels[c].setPyramidDepth(0);
-				transformedSrcModels[c].startPyramids();
-			}
-			transformedSrcTile = null;
-			// Join threads
-			try {
-				for (int c = 0; c < transformedSrcModels.length; c++) {
-					transformedSrcModels[c].join();
-				}
-			} catch (InterruptedException e) {
-				System.out.println("Unexpected interruption exception " + e);
-			}
-			
 
-			// compute color mode for interpolation in source image
-			BSplineModel[] srcModels = new BSplineModel[srcTile.getSizeC()];
-			for (int c = 0; c < srcModels.length; c++) {
-				srcModels[c] = new BSplineModel(IcyBufferedImageUtil.extractChannel(srcTile, c), false, 1);
-				srcModels[c].setPyramidDepth(0);
-				srcModels[c].startPyramids();
-			}
-			srcTile = null;
-			// Join threads
-			try {
-				for (int c = 0; c < srcModels.length; c++) {
-					srcModels[c].join();
-				}
-			} catch (InterruptedException e) {
-				System.out.println("Unexpected interruption exception " + e);
-			}
-*/
+			double[][] srcTileData = Array2DUtil.arrayToDoubleArray(srcTile.getDataXYC(), srcTile.isSignedDataType());
+			double[][] transformedSrcTileData = Array2DUtil.arrayToDoubleArray(transformedSrcTile.getDataXYC(),
+					transformedSrcTile.isSignedDataType());
+			// compute color mode for interpolation in transformed source image
+			/*
+			 * BSplineModel[] transformedSrcModels = new
+			 * BSplineModel[transformedSrcTile.getSizeC()];
+			 * for (int c = 0; c < transformedSrcModels.length; c++) {
+			 * transformedSrcModels[c] = new
+			 * BSplineModel(IcyBufferedImageUtil.extractChannel(transformedSrcTile,
+			 * c), false,
+			 * 1);
+			 * transformedSrcModels[c].setPyramidDepth(0);
+			 * transformedSrcModels[c].startPyramids();
+			 * }
+			 * transformedSrcTile = null;
+			 * // Join threads
+			 * try {
+			 * for (int c = 0; c < transformedSrcModels.length; c++) {
+			 * transformedSrcModels[c].join();
+			 * }
+			 * } catch (InterruptedException e) {
+			 * System.out.println("Unexpected interruption exception " + e);
+			 * }
+			 * // compute color mode for interpolation in source image
+			 * BSplineModel[] srcModels = new BSplineModel[srcTile.getSizeC()];
+			 * for (int c = 0; c < srcModels.length; c++) {
+			 * srcModels[c] = new
+			 * BSplineModel(IcyBufferedImageUtil.extractChannel(srcTile, c), false,
+			 * 1);
+			 * srcModels[c].setPyramidDepth(0);
+			 * srcModels[c].startPyramids();
+			 * }
+			 * srcTile = null;
+			 * // Join threads
+			 * try {
+			 * for (int c = 0; c < srcModels.length; c++) {
+			 * srcModels[c].join();
+			 * }
+			 * } catch (InterruptedException e) {
+			 * System.out.println("Unexpected interruption exception " + e);
+			 * }
+			 */
 			double factorX = (double) tgtFullDim.width / (double) tgtRegisteredDim.width;
 			double factorY = (double) tgtFullDim.height / (double) tgtRegisteredDim.height;
 
@@ -672,7 +675,7 @@ public class BigImageTools {
 			int tileEndWidth = tileRect.x + tileRect.width;
 
 			transformedResultTile = new IcyBufferedImage(tileRect.width, tileRect.height, transformedSrcChannels,
-			    transformedSrcDataType);
+					transformedSrcDataType);
 			resultTile = new IcyBufferedImage(tileRect.width, tileRect.height, srcChannels, srcDataType);
 			maskTile = new IcyBufferedImage(tileRect.width, tileRect.height, 1, DataType.UBYTE);
 
@@ -680,7 +683,7 @@ public class BigImageTools {
 			resultTile.beginUpdate();
 			maskTile.beginUpdate();
 			double[][] transformedResultData = Array2DUtil.arrayToDoubleArray(transformedResultTile.getDataXYC(),
-			    transformedResultTile.isSignedDataType());
+					transformedResultTile.isSignedDataType());
 			double[][] resultData = Array2DUtil.arrayToDoubleArray(resultTile.getDataXYC(), resultTile.isSignedDataType());
 			byte[] maskData = maskTile.getDataXYAsByte(0);
 			Rectangle srcLimits = new Rectangle();
@@ -697,10 +700,10 @@ public class BigImageTools {
 
 					double srcTileX = x - srcRect.x;
 					double srcTileY = y - srcRect.y;
-					
+
 					srcTileX = Math.round(srcTileX);
 					srcTileY = Math.round(srcTileY);
-					
+
 					if (firstLim) {
 						firstLim = false;
 						srcLimits.x = (int) srcTileX;
@@ -718,14 +721,19 @@ public class BigImageTools {
 					if (srcTileX >= 0 && srcTileX < srcRect.width && srcTileY >= 0 && srcTileY < srcRect.height) {
 						maskData[u_rect + v_offset] = (byte) DataType.UBYTE.getMaxValue();
 						for (int c = 0; c < transformedResultTile.getSizeC(); c++) {
-							transformedResultData[c][u_rect + v_offset] = transformedSrcTileData[c][(int)(srcTileX + (srcTileY * transformedSrcTile.getSizeX()))];
-//							transformedResultData[c][u_rect + v_offset] = transformedSrcModels[c]
-//							    .prepareForInterpolationAndInterpolateI(srcTileX, srcTileY, false, false);
+							transformedResultData[c][u_rect + v_offset] = transformedSrcTileData[c][(int) (srcTileX
+									+ (srcTileY * transformedSrcTile.getSizeX()))];
+							// transformedResultData[c][u_rect + v_offset] =
+							// transformedSrcModels[c]
+							// .prepareForInterpolationAndInterpolateI(srcTileX, srcTileY,
+							// false, false);
 						}
 						for (int c = 0; c < resultTile.getSizeC(); c++) {
-							resultData[c][u_rect + v_offset] = srcTileData[c][(int)(srcTileX + (srcTileY * srcTile.getSizeX()))];
-//							resultData[c][u_rect + v_offset] = srcModels[c].prepareForInterpolationAndInterpolateI(srcTileX, srcTileY,
-//							    false, false);
+							resultData[c][u_rect + v_offset] = srcTileData[c][(int) (srcTileX + (srcTileY * srcTile.getSizeX()))];
+							// resultData[c][u_rect + v_offset] =
+							// srcModels[c].prepareForInterpolationAndInterpolateI(srcTileX,
+							// srcTileY,
+							// false, false);
 						}
 					} else {
 						maskData[u_rect + v_offset] = (byte) 0;
@@ -742,7 +750,7 @@ public class BigImageTools {
 			maskTile.dataChanged();
 			maskTile.endUpdate();
 			Array2DUtil.doubleArrayToSafeArray(transformedResultData, transformedResultTile.getDataXYC(),
-			    transformedResultTile.isSignedDataType());
+					transformedResultTile.isSignedDataType());
 			transformedResultTile.dataChanged();
 			transformedResultTile.endUpdate();
 			Array2DUtil.doubleArrayToSafeArray(resultData, resultTile.getDataXYC(), resultTile.isSignedDataType());
@@ -768,7 +776,7 @@ public class BigImageTools {
 			}
 		}
 		Sequence result = new Sequence(
-		    new IcyBufferedImage(ibi.getWidth(), ibi.getHeight(), ibi.getSizeC(), ibi.getDataType_()));
+				new IcyBufferedImage(ibi.getWidth(), ibi.getHeight(), ibi.getSizeC(), ibi.getDataType_()));
 		result.beginUpdate();
 		double[][] resultData = Array2DUtil.arrayToDoubleArray(result.getDataXYC(0, 0), result.isSignedDataType());
 		for (int y = 0; y < ibi.getSizeY(); y++) {
@@ -786,9 +794,9 @@ public class BigImageTools {
 	}
 
 	public static void applyAndSaveTransformationToBigImage(String srcResultPath, String transformedSrcResultPath,
-	    String srcPath, String transformedSrcPath, String tgtPath, int intervals, double[][] cx, double[][] cy,
-	    Dimension registeredTgtDimension, BUnwarp plugin, Rectangle resultTile)
-	    throws ServiceException, IOException, FormatException, InterruptedException {
+			String srcPath, String transformedSrcPath, String tgtPath, int intervals, double[][] cx, double[][] cy,
+			Dimension registeredTgtDimension, BUnwarp plugin, Rectangle resultTile)
+			throws ServiceException, IOException, FormatException, InterruptedException {
 		ProgressBar.setProgressBarMessage("Transforming original image...");
 		ProgressBar.setProgressBarValue(0);
 		Dimension transformedSrcDimension = getSequenceSize(transformedSrcPath);
@@ -804,11 +812,11 @@ public class BigImageTools {
 		if (resultTile == null) {
 			resultTile = new Rectangle(new Point(0, 0), tgtDimension);
 		}
-		
-		resultTile = resultTile.intersection(new Rectangle(new Point(0,0), tgtDimension));
+
+		resultTile = resultTile.intersection(new Rectangle(new Point(0, 0), tgtDimension));
 
 		if (resultTile.isEmpty()) return;
-		
+
 		// int tgtChannels = getSequenceChannelCount(tgtPath);
 		// DataType tgtDataType = getSequenceDataType(tgtPath);
 
@@ -819,20 +827,24 @@ public class BigImageTools {
 		// Calculate tile's dimension and count
 		System.gc();
 		long ram = Runtime.getRuntime().freeMemory();
-		int numProc = Runtime.getRuntime().availableProcessors();
+		int numProc = Math.max(Runtime.getRuntime().availableProcessors()-1 , 1);
 		System.out.println("Available memory: " + ram + " bytes, Available processors: " + numProc);
 		// Divide by channel count
 		ram /= transformedSrcChannels;
 		// Divide by processor count
-		ram /= numProc * 2;
+		ram /= numProc;
 		double szMax = Math.sqrt(ram);
 		// Divide by amount of elements treated at the same time
 		szMax /= 4;
-		int tileSize = (int) Math.ceil(szMax);
+
+		int tileSize = 16;
+		while (szMax > tileSize * 16) {
+			tileSize *= 16;
+		}
 		// tileSize = 500;
 
 		System.out.println("Image size: " + transformedSrcDimension.width + "px*" + transformedSrcDimension.height
-		    + "px. Tile size: " + tileSize);
+				+ "px. Tile size: " + tileSize);
 
 		Dimension tileDimension = new Dimension(tileSize, tileSize);
 		if (tileDimension.width > resultTile.width) {
@@ -842,7 +854,7 @@ public class BigImageTools {
 			tileDimension.height = resultTile.height;
 		}
 		Dimension tgtTileCount = new Dimension(resultTile.width / tileDimension.width,
-		    resultTile.height / tileDimension.height);
+				resultTile.height / tileDimension.height);
 		if (tgtTileCount.width * tileDimension.width < resultTile.width) {
 			tgtTileCount.width++;
 		}
@@ -852,21 +864,21 @@ public class BigImageTools {
 		int totalTgtTileCount = tgtTileCount.width * tgtTileCount.height;
 
 		// Create full size result image
-		BigImageSaver resultSaver = new BigImageSaver(new File(srcResultPath), resultTile.getSize(), srcChannels, srcDataType,
-		    tileDimension);
+		BigImageSaver resultSaver = new BigImageSaver(new File(srcResultPath), resultTile.getSize(), srcChannels,
+				srcDataType, tileDimension);
 		BigImageSaver transformedResultSaver = new BigImageSaver(new File(transformedSrcResultPath), resultTile.getSize(),
-		    transformedSrcChannels, transformedSrcDataType, tileDimension);
+				transformedSrcChannels, transformedSrcDataType, tileDimension);
 		String maskResultPath = FilenameUtils.getFullPath(transformedSrcResultPath);
 		maskResultPath += FilenameUtils.getBaseName(transformedSrcResultPath);
 		maskResultPath += "_mask.";
 		maskResultPath += FilenameUtils.getExtension(transformedSrcResultPath);
 		BigImageSaver maskSaver = new BigImageSaver(new File(maskResultPath), resultTile.getSize(), 1, DataType.UBYTE,
-		    tileDimension);
+				tileDimension);
 
 		// Calculate Thread number
-		int numThreads = numProc / 2;
+		int numThreads = Math.max(numProc/2, 1);
 		TileTransformProcessing[] threads = new TileTransformProcessing[numThreads];
-		ExecutorService saveExecutor = Executors.newFixedThreadPool(numThreads);
+		ExecutorService saveExecutor = Executors.newFixedThreadPool(numProc);
 		// TileSaveProcessing[] threadsSave = new TileSaveProcessing[numProc];
 
 		// until all tiles have been treated
@@ -880,7 +892,7 @@ public class BigImageTools {
 				ProgressBar.setProgressBarValue((double) tileNo / (double) totalTgtTileCount);
 
 				Rectangle tileRect = new Rectangle((tileNo % tgtTileCount.width) * tileDimension.width,
-				    (tileNo / tgtTileCount.width) * tileDimension.height, tileDimension.width, tileDimension.height);
+						(tileNo / tgtTileCount.width) * tileDimension.height, tileDimension.width, tileDimension.height);
 				if (tileRect.x + tileRect.width > resultTile.width) {
 					tileRect.width -= tileRect.x + tileRect.width - resultTile.width;
 				}
@@ -893,8 +905,8 @@ public class BigImageTools {
 
 				// create thread to process tile
 				threads[thr] = new TileTransformProcessing(intervals, swx, swy, resultTile.getSize(), registeredTgtDimension,
-				    tileRect/* , tileNo */, srcPath, srcChannels, srcDataType, transformedSrcPath, transformedSrcChannels,
-				    transformedSrcDataType, transformedSrcDimension, resultTile.getLocation());
+						tileRect/* , tileNo */, srcPath, srcChannels, srcDataType, transformedSrcPath, transformedSrcChannels,
+						transformedSrcDataType, transformedSrcDimension, resultTile.getLocation());
 				threads[thr].start();
 			}
 			int usedThr = thr;
@@ -918,7 +930,7 @@ public class BigImageTools {
 				// System.out.println("finished tile");
 				// th.join();
 				saveExecutor.execute(new TileSaveProcessing(thread.resultTile, thread.transformedResultTile, thread.maskTile,
-				    thread.tileRect.getLocation(), resultSaver, transformedResultSaver, maskSaver));
+						thread.tileRect.getLocation(), resultSaver, transformedResultSaver, maskSaver));
 				// System.out.println("printing tile " + thread.tileRect);
 				// write tiles to the full result sequence.
 				// saver.saveTile(thread.resultTile, thread.tileRect.getLocation());
@@ -938,19 +950,19 @@ public class BigImageTools {
 	private static class TileSaveProcessing implements Runnable {
 
 		/** result tile after processing */
-		private IcyBufferedImage resultTile;
+		private IcyBufferedImage	resultTile;
 		/** transformed result tile after processing */
-		private IcyBufferedImage transformedResultTile;
+		private IcyBufferedImage	transformedResultTile;
 		/** result tile mask after processing */
-		private IcyBufferedImage maskTile;
+		private IcyBufferedImage	maskTile;
 		/** position */
-		private Point position;
+		private Point							position;
 		/** saver */
-		BigImageSaver saver;
+		BigImageSaver							saver;
 		/** saver */
-		BigImageSaver transformedSaver;
+		BigImageSaver							transformedSaver;
 		/** mask saver */
-		BigImageSaver maskSaver;
+		BigImageSaver							maskSaver;
 
 		/**
 		 * @param transformedResultTile
@@ -958,8 +970,8 @@ public class BigImageTools {
 		 * @param transformedSaver
 		 */
 		public TileSaveProcessing(IcyBufferedImage resultTile, IcyBufferedImage transformedResultTile,
-		    IcyBufferedImage maskTile, Point position, BigImageSaver saver, BigImageSaver transformedSaver,
-		    BigImageSaver maskSaver) {
+				IcyBufferedImage maskTile, Point position, BigImageSaver saver, BigImageSaver transformedSaver,
+				BigImageSaver maskSaver) {
 			this.resultTile = resultTile;
 			this.transformedResultTile = transformedResultTile;
 			this.maskTile = maskTile;
@@ -971,7 +983,6 @@ public class BigImageTools {
 
 		/*
 		 * (non-Javadoc)
-		 * 
 		 * @see java.lang.Thread#run()
 		 */
 		@Override

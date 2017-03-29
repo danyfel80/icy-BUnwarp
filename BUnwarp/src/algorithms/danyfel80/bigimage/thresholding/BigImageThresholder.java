@@ -78,10 +78,14 @@ public class BigImageThresholder {
     int numProc = Runtime.getRuntime().availableProcessors();
     long ram = Runtime.getRuntime().freeMemory();
 
-    long tileSideSize = ram / (imgSizeC + 1);
-    tileSideSize /= numProc;
-    tileSideSize = (long) Math.ceil(Math.sqrt(tileSideSize));
-    tileSideSize /= 2;
+    long maxTileSideSize = ram / (imgSizeC + 1);
+    maxTileSideSize /= numProc;
+    maxTileSideSize = (long) Math.ceil(Math.sqrt(maxTileSideSize));
+    maxTileSideSize /= 2;
+    long tileSideSize = 16;
+    while (maxTileSideSize > tileSideSize * 16) {
+    	tileSideSize *= 16;
+    }
     //tileSideSize = 2000;
 
     Dimension tileCount = new Dimension(imgSize.width / (int) tileSideSize,
