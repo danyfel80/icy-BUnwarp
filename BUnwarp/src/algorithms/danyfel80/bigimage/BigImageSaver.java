@@ -27,17 +27,17 @@ import loci.formats.tiff.TiffCompression;
 public class BigImageSaver {
 	private File outFile;
 
-	private int sizeX;
-	private int sizeY;
-	private int sizeC;
-	private DataType dataType;
-	
-	private int tileSizeX;
-	private int tileSizeY;
-	private IFD ifd;
-	
-	private boolean isSeparateChannels;
-	private boolean isLittleEndian;
+	private int				sizeX;
+	private int				sizeY;
+	private int				sizeC;
+	private DataType	dataType;
+
+	private int	tileSizeX;
+	private int	tileSizeY;
+	private IFD	ifd;
+
+	private boolean	isSeparateChannels;
+	private boolean	isLittleEndian;
 
 	private TiffWriter writer;
 
@@ -46,7 +46,7 @@ public class BigImageSaver {
 	// private final OMEXMLMetadata tgtMetadata;
 
 	public BigImageSaver(File outFile, Dimension tgtDim, int sizeC, DataType dataType, Dimension tileSize)
-	    throws ServiceException, FormatException, IOException {
+			throws ServiceException, FormatException, IOException {
 		this.outFile = outFile;
 		this.sizeX = tgtDim.width;
 		this.sizeY = tgtDim.height;
@@ -59,16 +59,14 @@ public class BigImageSaver {
 	}
 
 	private void initializeWriter() throws ServiceException, FormatException, IOException {
-		writer = new TiffWriter();
-		
-		OMEXMLMetadataImpl mdi = OMEUtil.createOMEMetadata();
-		MetaDataUtil.setMetaData(mdi, sizeX, sizeY, sizeC, 1, 1, -1, -1, dataType, isSeparateChannels);
-		this.isLittleEndian = !mdi.getPixelsBinDataBigEndian(0, 0);
-//		System.out.println("little endian = " + isLittleEndian);
-		this.isSeparateChannels = getSeparateChannelFlag(writer, sizeC, dataType);
-//		System.out.println("separate channels = " + isSeparateChannels);
-		writer.setMetadataRetrieve(mdi);
+		writer = new OMETiffWriter();
 		writer.setCompression(TiffCompression.LZW.getCodecName());
+
+		OMEXMLMetadataImpl mdi = OMEUtil.createOMEMetadata();
+		this.isSeparateChannels = getSeparateChannelFlag(writer, sizeC, dataType);
+		MetaDataUtil.setMetaData(mdi, sizeX, sizeY, sizeC, 1, 1, -1, -1, dataType, isSeparateChannels);
+
+		writer.setMetadataRetrieve(mdi);
 		writer.setWriteSequentially(true);
 		writer.setInterleaved(false);
 		writer.setBigTiff(true);
@@ -76,7 +74,10 @@ public class BigImageSaver {
 			FileUtil.delete(outFile, true);
 		}
 		writer.setId(outFile.getAbsolutePath());
-		
+		writer.setSeries(0);
+
+		this.isLittleEndian = !writer.getMetadataRetrieve().getPixelsBinDataBigEndian(0, 0).booleanValue();
+
 		ifd = new IFD();
 		long[] rowPerStrip = new long[1];
 		rowPerStrip[0] = tileSizeY;
@@ -84,30 +85,32 @@ public class BigImageSaver {
 		ifd.put(IFD.TILE_LENGTH, tileSizeY);
 		ifd.put(IFD.ROWS_PER_STRIP, rowPerStrip);
 	}
-	
+
 	/**
 	 * Return the separate channel flag from specified writer and color space
 	 */
 	private static boolean getSeparateChannelFlag(IFormatWriter writer, int numChannel, DataType dataType) {
-		if (writer instanceof OMETiffWriter)
-			return (numChannel == 2) || (numChannel > 4) || (dataType.getSize() > 1);
-		// return numChannel > 1;
+		// OMETiffWriter fixed, we can now always separate channel for this writer
+		// Note: not working on big images.
+		//if (writer instanceof OMETiffWriter) return true;
+
+		// others writers does not support separated channel
 		return false;
 	}
 
 	public void closeWriter() throws IOException {
 		this.writer.close();
 	}
-	
+
 	public synchronized void saveTile(IcyBufferedImage srcIBI, Point tgtPoint)
-	    throws ServiceException, IOException, FormatException {
+			throws ServiceException, IOException, FormatException {
 
 		byte[] data = null;
 
 		// separated channel data
 		if (isSeparateChannels) {
 			for (int c = 0; c < sizeC; c++) {
-				
+
 				if (srcIBI != null) {
 					data = srcIBI.getRawData(c, isLittleEndian);
 					writer.saveBytes(c, data, ifd, tgtPoint.x, tgtPoint.y, srcIBI.getSizeX(), srcIBI.getSizeY());
