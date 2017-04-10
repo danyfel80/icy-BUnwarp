@@ -64,7 +64,7 @@ public class BigImageSaver {
 
 		OMEXMLMetadataImpl mdi = OMEUtil.createOMEMetadata();
 		this.isSeparateChannels = getSeparateChannelFlag(writer, sizeC, dataType);
-		MetaDataUtil.setMetaData(mdi, sizeX, sizeY, sizeC, 1, 1, -1, -1, dataType, isSeparateChannels);
+		MetaDataUtil.setMetaData(mdi, sizeX, sizeY, sizeC, 1, 1, dataType, isSeparateChannels);
 
 		writer.setMetadataRetrieve(mdi);
 		writer.setWriteSequentially(true);
