@@ -312,11 +312,11 @@ public class BigImageBUnwarp extends BUnwarp {
 	private int validateInput() {
 		@SuppressWarnings("resource")
 		LociImporterPlugin p = new LociImporterPlugin();
-		if (inSrcFile.getValue() == null || !p.acceptFile(inSrcFile.getValue().getPath())) {
+		if (!p.acceptFile(inSrcFile.getValue().getPath())) {
 			MessageDialog.showDialog("Error", "Invalid source file.", MessageDialog.ERROR_MESSAGE);
 			return 1;
 		}
-		if (inTgtFile.getValue() == null || !p.acceptFile(inTgtFile.getValue().getPath())) {
+		if (!p.acceptFile(inTgtFile.getValue().getPath())) {
 			MessageDialog.showDialog("Error", "Invalid target file.", MessageDialog.ERROR_MESSAGE);
 			return 1;
 		}
