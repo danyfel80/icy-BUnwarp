@@ -2,42 +2,35 @@ apply plugin: 'java'
 apply plugin: 'eclipse'
 
 repositories {
-  mavenCentral()
+  jcenter()
 }
 
 dependencies {
-//  compile 'org.jgrapht:jgrapht-core:0.9.1'
+
+// 1.2. Icy libraries
+    compile files("${System.env.ICY_HOME}/icy.jar") // Icy core
+    compile files("${System.env.ICY_HOME}/plugins/adufour/ezplug/EzPlug.jar") // EzPlug
+    compile files("${System.env.ICY_HOME}/plugins/adufour/blocks/Blocks.jar") // Blocks
+    compile files("${System.env.ICY_HOME}/plugins/adufour/protocols/Protocols.jar") // Protocols
 }
 
+// Source folder structure
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src']
+            resources.srcDirs = ['res']
+        }
+        test {
+            java.srcDirs = ['test']
+            resources.srcDirs = ['res']
+        }
+    }
+}
+
+// Make an icy plugin project
 eclipse {
   project {
     natures += ['icy.icy4eclipse.core.icynature']
-  }
-  classpath {
-    file {
-      withXml {
-          def node = it.asNode()
-          
-          // clean src
-          node.classpathentry.findAll{
-            it.@kind == 'src'
-          }.each{
-            node.remove(it)
-          }
-          
-          // clean var
-          node.classpathentry.findAll{
-            it.@kind == 'var'
-          }.each{
-            node.remove(it)
-          }
-          
-          // set src and var
-          node.appendNode('classpathentry', [kind: 'src', path: 'src'])
-          node.appendNode('classpathentry', [kind: 'var', path: 'ICY_HOME/icy.jar'])
-          node.appendNode('classpathentry', [kind: 'var', path: 'ICY_HOME/plugins/adufour/blocks/Blocks.jar'])
-          node.appendNode('classpathentry', [kind: 'var', path: 'ICY_HOME/plugins/adufour/ezplug/EzPlug.jar'])
-      }
-    }
   }
 }
