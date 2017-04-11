@@ -3,6 +3,7 @@ package algorithms.danyfel80.registration.bunwarp;
 import java.awt.Rectangle;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 import icy.image.IcyBufferedImage;
 import icy.roi.ROI2D;
@@ -371,11 +372,11 @@ public class BUnwarpper implements Runnable {
 		return warp.getIntervals();
 	}
 
-	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcResultPath, String srcPath, String transformedSrcPath, String tgtPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
+	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcResultPath, String srcPath, String transformedSrcPath, String tgtPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
 		warp.saveBigRegisteredSource(srcResultPath, transformedSrcResultPath, srcPath, transformedSrcPath, tgtPath, tile);
 	}
 
-	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtResultPath, String tgtPath, String transformedTgtPath, String srcPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException {
+	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtResultPath, String tgtPath, String transformedTgtPath, String srcPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
 		warp.saveBigRegisteredTarget(tgtResultPath, transformedTgtResultPath, tgtPath, transformedTgtPath, srcPath, tile);
 	}
 

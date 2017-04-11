@@ -5,6 +5,7 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.io.FilenameUtils;
@@ -27,7 +28,6 @@ import loci.formats.ome.OMEXMLMetadataImpl;
 import plugins.adufour.ezplug.EzGUI;
 import plugins.kernel.importer.LociImporterPlugin;
 import plugins.kernel.roi.roi2d.ROI2DArea;
-import plugins.kernel.roi.roi2d.ROI2DRectangle;
 
 /**
  * This class allows easy big image loading through downsampling and tile
@@ -37,9 +37,9 @@ import plugins.kernel.roi.roi2d.ROI2DRectangle;
  */
 public class BigImageLoader {
 
-	private EzGUI pluginGUI = null;
-	private ProgressFrame progressFrame = null;
-	private boolean isInterrupted;
+	private EzGUI					pluginGUI			= null;
+	private ProgressFrame	progressFrame	= null;
+	private boolean				isInterrupted;
 
 	public void setPluginGUI(EzGUI pluginGUI) {
 		this.pluginGUI = pluginGUI;
@@ -56,7 +56,7 @@ public class BigImageLoader {
 			this.pluginGUI.setProgressBarMessage(message);
 		}
 	}
-	
+
 	public void interrupt() {
 		this.isInterrupted = true;
 	}
@@ -78,7 +78,7 @@ public class BigImageLoader {
 	 * @throws UnsupportedFormatException
 	 */
 	public Sequence loadDownsampledImage(String path, Rectangle tile, int resultMaxWidth, int resultMaxHeight,
-	    boolean showProgressBar) throws UnsupportedFormatException, IOException {
+			boolean showProgressBar) throws UnsupportedFormatException, IOException {
 		this.isInterrupted = false;
 		double progress = 0;
 		setProgress(progress);
@@ -108,12 +108,9 @@ public class BigImageLoader {
 					tile.height += tile.y;
 					tile.y = 0;
 				}
-				if (tile.x > imgSizeX || tile.y > imgSizeY)
-					return null;
-				if (tile.x + tile.width > imgSizeX)
-					tile.width = imgSizeX - tile.x;
-				if (tile.y + tile.height > imgSizeY)
-					tile.height = imgSizeY - tile.y;
+				if (tile.x > imgSizeX || tile.y > imgSizeY) return null;
+				if (tile.x + tile.width > imgSizeX) tile.width = imgSizeX - tile.x;
+				if (tile.y + tile.height > imgSizeY) tile.height = imgSizeY - tile.y;
 			}
 			System.out.println("tile to extract: " + tile);
 
@@ -165,13 +162,11 @@ public class BigImageLoader {
 			int outTileSizeY = (int) Math.round(tileTmpSizeY);
 			int outSizeX = ((int) (tile.width / tileSize)) * outTileSizeX;
 			int outSizeY = ((int) (tile.height / tileSize)) * outTileSizeY;
-			if (tile.width % tileSize > 0)
-				outSizeX += (int) Math.round((double) (tile.width % tileSize) * scaleFactor);
-			if (tile.height % tileSize > 0)
-				outSizeY += (int) Math.round((double) (tile.height % tileSize) * scaleFactor);
+			if (tile.width % tileSize > 0) outSizeX += (int) Math.round((double) (tile.width % tileSize) * scaleFactor);
+			if (tile.height % tileSize > 0) outSizeY += (int) Math.round((double) (tile.height % tileSize) * scaleFactor);
 			if (showProgressBar) {
 				System.out.println("Result image size: " + outSizeX + "px*" + outSizeY + "px. Tile size: " + outTileSizeX
-				    + "px*" + outTileSizeY + "px");
+						+ "px*" + outTileSizeY + "px");
 			}
 			Sequence result = new Sequence(new IcyBufferedImage(outSizeX, outSizeY, imgSizeC, imgDataType));
 			result.beginUpdate();
@@ -202,12 +197,12 @@ public class BigImageLoader {
 					int outCurrTileSizeY = (posTileY + outTileSizeY) <= outSizeY ? outTileSizeY : outSizeY - posTileY;
 
 					threads[currProc] = new TileLoaderThread(path, new Rectangle(posX, posY, tileSizeX, tileSizeY),
-					    new Dimension(outCurrTileSizeX, outCurrTileSizeY), imgSize);
+							new Dimension(outCurrTileSizeX, outCurrTileSizeY), imgSize);
 					points[currProc] = new Point(posTileX, posTileY);
 					threads[currProc++].start();
 
 					if (currProc >= nProc || ((posX + tileSizeX) >= imgSizeX && (posY + tileSizeY) >= imgSizeY)
-					    || ((posX + tileSizeX) >= tile.x + tile.width && (posY + tileSizeY) >= tile.y + tile.height)) {
+							|| ((posX + tileSizeX) >= tile.x + tile.width && (posY + tileSizeY) >= tile.y + tile.height)) {
 						for (int p = 0; p < currProc; p++) {
 							try {
 								progress = (double) treatedTiles / (double) totalTiles;
@@ -215,10 +210,10 @@ public class BigImageLoader {
 								if (showProgressBar) {
 									this.progressFrame.setPosition(progress * 100);
 									this.progressFrame.setMessage(String.format("Loading image: %d%%, tile: %d/%d",
-									    (int) (progress * 100), treatedTiles, totalTiles));
+											(int) (progress * 100), treatedTiles, totalTiles));
 								}
 								setStatusMessage(String.format("Loading image: %d%%, tile: %d/%d", (int) (progress * 100), treatedTiles,
-								    totalTiles));
+										totalTiles));
 								threads[p].join();
 								resultImg.copyData(threads[p].resultImage, null, new Point(points[p].x, points[p].y));
 								threads[p] = null;
@@ -270,14 +265,14 @@ public class BigImageLoader {
 	 */
 	private static class TileLoaderThread extends Thread {
 
-		private final String path;
-		private final Rectangle rect;
-		private final Dimension outDimension;
-		private final Dimension fullDimension;
+		private final String		path;
+		private final Rectangle	rect;
+		private final Dimension	outDimension;
+		private final Dimension	fullDimension;
 
-		private IcyBufferedImage resultImage;
-		private final double scaleX;
-		private final double scaleY;
+		private IcyBufferedImage	resultImage;
+		private final double			scaleX;
+		private final double			scaleY;
 
 		/**
 		 * Constructor
@@ -303,7 +298,6 @@ public class BigImageLoader {
 
 		/*
 		 * (non-Javadoc)
-		 * 
 		 * @see java.lang.Thread#run()
 		 */
 		@Override
@@ -314,33 +308,34 @@ public class BigImageLoader {
 
 				// get bigger tile to avoid interpolation issues
 				Dimension scaledExtractedDim = new Dimension(outDimension);
-				Point scaledPosition = new Point(0,0);
+				Point scaledPosition = new Point(0, 0);
 				Rectangle bigRect = new Rectangle(rect);
 				if (rect.x - 3 >= 0) {
 					bigRect.x -= 3;
-					scaledExtractedDim.width += (int)(3/scaleX);
-					scaledPosition.x += (int)(3/scaleX);
+					scaledExtractedDim.width += (int) (3 / scaleX);
+					scaledPosition.x += (int) (3 / scaleX);
 				}
 				if (rect.y - 3 >= 0) {
 					bigRect.y -= 3;
-					scaledExtractedDim.height += (int)(3/scaleY);
-					scaledPosition.y += (int)(3/scaleY);
+					scaledExtractedDim.height += (int) (3 / scaleY);
+					scaledPosition.y += (int) (3 / scaleY);
 				}
 				if (rect.x + rect.width + 3 < fullDimension.width) {
 					bigRect.width += 3;
-					scaledExtractedDim.width += (int)(3/scaleX);
+					scaledExtractedDim.width += (int) (3 / scaleX);
 				}
 				if (rect.y + rect.height + 3 < fullDimension.height) {
 					bigRect.height += 3;
-					scaledExtractedDim.height += (int)(3/scaleY);
+					scaledExtractedDim.height += (int) (3 / scaleY);
 				}
 
 				resultImage = importer.getImage(0, 0, bigRect, 0, 0);
-				if (resultImage.getWidth() != scaledExtractedDim.getWidth() || resultImage.getHeight() != scaledExtractedDim.height) {
+				if (resultImage.getWidth() != scaledExtractedDim.getWidth()
+						|| resultImage.getHeight() != scaledExtractedDim.height) {
 					resultImage = IcyBufferedImageUtil.scale(resultImage, scaledExtractedDim.width, scaledExtractedDim.height);
 				}
 				IcyBufferedImageUtil.getSubImage(resultImage, scaledPosition.x, scaledPosition.y, outDimension.width,
-				    outDimension.height);
+						outDimension.height);
 				importer.close();
 			} catch (UnsupportedFormatException | IOException e) {
 				e.printStackTrace();
@@ -349,7 +344,7 @@ public class BigImageLoader {
 	}
 
 	public ROI2D loadDownsampledMask(Sequence srcSeq, String srcPath, Rectangle tile, int resultMaxWidth,
-	    int resultMaxHeight, boolean showProgressBar) throws UnsupportedFormatException, IOException {
+			int resultMaxHeight, boolean showProgressBar) throws UnsupportedFormatException, IOException {
 
 		String maskPath = FilenameUtils.getFullPath(srcPath);
 		maskPath += FilenameUtils.getBaseName(srcPath) + "_mask.";
@@ -379,21 +374,23 @@ public class BigImageLoader {
 
 		return new ROI2DArea(boolMask);
 	}
-	
+
 	public List<ROI> loadROIs(String xmlPath, Rectangle rect, double scale) {
 		File xmlFile = new File(xmlPath);
 		Document doc = XMLUtil.loadDocument(xmlFile);
-		Node rois = XMLUtil.getChild(XMLUtil.getRootElement(doc), "rois");
-		List<ROI> roiList = ROI.loadROIsFromXML(rois);
+		Node root = XMLUtil.getRootElement(doc);
+		if (root == null) return new ArrayList<ROI>();
+		Node rois = XMLUtil.getChild(root, "rois");
+		List<ROI> roiList = (List<ROI>) ((rois != null) ? ROI.loadROIsFromXML(rois) : new ArrayList<ROI>());
 		roiList = BigImageUtil.getROIsInTile(roiList, rect);
-		for (ROI roi : roiList) {
+		for (ROI roi: roiList) {
 			Point5D pos = roi.getPosition5D();
 			pos.setX(pos.getX() - rect.x);
 			pos.setY(pos.getY() - rect.y);
 			roi.setPosition5D(pos);
 			BigImageUtil.scaleROI(roi, scale);
 		}
-		
+
 		return roiList;
 	}
 }
