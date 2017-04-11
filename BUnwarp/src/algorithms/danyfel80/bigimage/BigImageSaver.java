@@ -119,7 +119,16 @@ public class BigImageSaver {
 		} else {
 			if (srcIBI != null) {
 				data = srcIBI.getRawData(isLittleEndian);
+				try {
 				writer.saveBytes(0, data, ifd, tgtPoint.x, tgtPoint.y, srcIBI.getSizeX(), srcIBI.getSizeY());
+				}
+				catch (Exception e) {
+//					System.out.println(data);
+//					System.out.println(ifd);
+//					System.out.println(tgtPoint);
+//					System.out.println(srcIBI.getBounds());
+					throw e;
+				}
 			}
 		}
 	}
