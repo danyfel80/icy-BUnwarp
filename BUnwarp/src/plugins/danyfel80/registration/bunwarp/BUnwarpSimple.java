@@ -33,6 +33,7 @@ import plugins.kernel.roi.roi2d.ROI2DPolygon;
  * BUnwarp Plugin based on ImageJ plugin "bUnwarpJ" by Ignacio
  * Arganda-Carreras and Jan Kybic which extends previous UnwarpJ project by
  * Carlos Oscar Sanchez Sorzano.
+ * Adapted by Daniel Gonzalez Obando
  * 
  * @author Daniel Felipe Gonzalez Obando
  */
@@ -44,24 +45,26 @@ public class BUnwarpSimple extends BUnwarp {
 	EzVarSequence inSrcSeq = new EzVarSequence("Source");
 	// - Target image
 	EzVarSequence inTgtSeq = new EzVarSequence("Target");
+
+	// Parameters
+	// - Registration mode
+	EzVarEnum<RegistrationModeEnum> inMode = new EzVarEnum<>("Mode", RegistrationModeEnum.values(),
+			RegistrationModeEnum.ACCURATE);
+	// - Subsampling factor
+	EzVarInteger inSubsampleFactor = new EzVarInteger("Image Subsampling Factor", 0, 0, 7, 1);
+
+	// - Advanced Parameters
 	// - Source transformation target image
 	EzVarSequence inSrcTgtSeq = new EzVarSequence("Transformation Source");
 	// - Target transformation target image
 	EzVarSequence inTgtTgtSeq = new EzVarSequence("Transformation Target");
 
-	// Parameters
-	// - Registration mode
-	EzVarEnum<RegistrationModeEnum> inMode = new EzVarEnum<>("Mode", RegistrationModeEnum.values(),
-	    RegistrationModeEnum.ACCURATE);
-	// - Subsampling factor
-	EzVarInteger inSubsampleFactor = new EzVarInteger("Image Subsampling Factor", 0, 0, 7, 1);
-	// - Advanced Parameters
 	// - Initial deformation
 	EzVarEnum<MinimumScaleDeformationEnum> inIniDef = new EzVarEnum<>("Initial deformation",
-	    MinimumScaleDeformationEnum.values(), MinimumScaleDeformationEnum.VERY_COARSE);
+			MinimumScaleDeformationEnum.values(), MinimumScaleDeformationEnum.VERY_COARSE);
 	// - Final deformation
 	EzVarEnum<MaximumScaleDeformationEnum> inFnlDef = new EzVarEnum<>("Final Deformation",
-	    MaximumScaleDeformationEnum.values(), MaximumScaleDeformationEnum.FINE);
+			MaximumScaleDeformationEnum.values(), MaximumScaleDeformationEnum.FINE);
 
 	// Weights
 	// - Divergence Weight
@@ -76,41 +79,42 @@ public class BUnwarpSimple extends BUnwarp {
 	EzVarDouble inConsistencyWeight = new EzVarDouble("Consistency Weight");
 
 	EzGroup weightsGroup = new EzGroup("Weights", inDivWeight, inCurlWeight, inLandmarkWeight, inImageWeight,
-	    inConsistencyWeight);
+			inConsistencyWeight);
 
 	// - Stop threshold
 	EzVarDouble inStopThreshold = new EzVarDouble("Stop Threshold");
 	// - Show process
 	EzVarBoolean inShowProcess = new EzVarBoolean("Show Process", false);
 
-	EzGroup advancedParamsGroup = new EzGroup("Advanced Parameters", inIniDef, inFnlDef, weightsGroup, inStopThreshold,
-	    inShowProcess);
+	EzGroup	outputSequenceGroup	= new EzGroup("Transformed Output", inSrcTgtSeq, inTgtTgtSeq);
+	EzGroup	advancedParamsGroup	= new EzGroup("Advanced Parameters", inIniDef, inFnlDef, outputSequenceGroup,
+			weightsGroup, inStopThreshold, inShowProcess);
 
 	// Output variables
 
-	VarSequence outSrcSeq = new VarSequence("Source Registered", (Sequence) null);
-	VarSequence outTgtSeq = new VarSequence("Target Registered", (Sequence) null);
+	VarSequence	outSrcSeq	= new VarSequence("Source Registered", (Sequence) null);
+	VarSequence	outTgtSeq	= new VarSequence("Target Registered", (Sequence) null);
 
-	Var<double[][]> outCxSourceToTarget = new Var<double[][]>("Cx Source to Target", new double[1][1]);
-	Var<double[][]> outCySourceToTarget = new Var<double[][]>("Cy Source to Target", new double[1][1]);
-	Var<double[][]> outCxTargetToSource = new Var<double[][]>("Cx Target to Source", new double[1][1]);
-	Var<double[][]> outCyTargetToSource = new Var<double[][]>("Cy Target to Source", new double[1][1]);
-	VarInteger outIntervals = new VarInteger("Transform intervals", 0);
+	Var<double[][]>	outCxSourceToTarget	= new Var<double[][]>("Cx Source to Target", new double[1][1]);
+	Var<double[][]>	outCySourceToTarget	= new Var<double[][]>("Cy Source to Target", new double[1][1]);
+	Var<double[][]>	outCxTargetToSource	= new Var<double[][]>("Cx Target to Source", new double[1][1]);
+	Var<double[][]>	outCyTargetToSource	= new Var<double[][]>("Cy Target to Source", new double[1][1]);
+	VarInteger			outIntervals				= new VarInteger("Transform intervals", 0);
 
 	// Internal variables
-	Sequence srcSeq;
-	Sequence tgtSeq;
-	Sequence srcTgtSeq;
-	Sequence tgtTgtSeq;
+	Sequence	srcSeq;
+	Sequence	tgtSeq;
+	Sequence	srcTgtSeq;
+	Sequence	tgtTgtSeq;
 
-	IcyBufferedImage originalSrcIBI;
-	IcyBufferedImage originalTgtIBI;
-	
-	BUnwarpper bu;
+	IcyBufferedImage	originalSrcIBI;
+	IcyBufferedImage	originalTgtIBI;
+
+	BUnwarpper	bu;
+	Thread			but;
 
 	/*
 	 * (non-Javadoc)
-	 * 
 	 * @see
 	 * plugins.adufour.blocks.lang.Block#declareInput(plugins.adufour.blocks.util.
 	 * VarList)
@@ -143,7 +147,6 @@ public class BUnwarpSimple extends BUnwarp {
 
 	/*
 	 * (non-Javadoc)
-	 * 
 	 * @see
 	 * plugins.adufour.blocks.lang.Block#declareOutput(plugins.adufour.blocks.util
 	 * .VarList)
@@ -162,17 +165,48 @@ public class BUnwarpSimple extends BUnwarp {
 
 	/*
 	 * (non-Javadoc)
-	 * 
 	 * @see plugins.adufour.ezplug.EzPlug#initialize()
 	 */
 	@Override
 	protected void initialize() {
+		inSrcSeq.setToolTipText("Source(floating) sequence used to perform the registration.");
+		inTgtSeq.setToolTipText("Target(fixed) sequence used to perform the registration.");
+		inMode.setToolTipText(
+				"Mode of interpolation: Mono uses source -> target transformation. Fast or Accurate use source <-> target transformation.");
+		inSubsampleFactor
+				.setToolTipText("Level of subsampling of the source and target sequences to perform the registration.");
+
+		inSrcTgtSeq.setToolTipText("Sequence used to apply source transformation.");
+		inTgtTgtSeq.setToolTipText("Sequence used to apply target transformation.");
+
+		inIniDef.setToolTipText("Sets the initial transformation detail.");
+		inFnlDef.setToolTipText("Sets the final transformation detail.");
+
+		inDivWeight.setToolTipText(
+				"Weight related to the divergence of the tensors in the transformation. Higher value means result will have less divergence.");
+		inCurlWeight.setToolTipText(
+				"Weight related to the curl of the tensors in the transformation. Higher value means result will have less curl.");
+		inLandmarkWeight.setToolTipText(
+				"Weight related to landmarks present on the sequence. Higher value means landmarks have more impact on the result. Landmarks must be ROI2DPoints in the sequence.");
+		inImageWeight.setToolTipText(
+				"Weight related to image intensities. Higher value means image intensities will have more impact on the result.");
+		inConsistencyWeight.setToolTipText(
+				"When the mode is set to Fast or Accurate, this weight represents the similarity constraint on the s->t and t->s transformations. The higher the value, the more similar the transformations will be.");
+		inStopThreshold.setToolTipText(
+				"This is the optimization stop criteria. When the optimization changes the transformation less than the given value, the process ends and the result is shown.");
+
+		inShowProcess
+				.setToolTipText("If checked, more details of the transformation will be shown at the end of the procedure.");
+
 		addEzComponent(inSrcSeq);
 		addEzComponent(inTgtSeq);
-		addEzComponent(inSrcTgtSeq);
-		addEzComponent(inTgtTgtSeq);
+		// addEzComponent(inSrcTgtSeq);
+		// addEzComponent(inTgtTgtSeq);
 		addEzComponent(inMode);
 		addEzComponent(inSubsampleFactor);
+		outputSequenceGroup.setFoldedState(true);
+		weightsGroup.setFoldedState(true);
+		advancedParamsGroup.setFoldedState(true);
 		addEzComponent(advancedParamsGroup);
 
 		inDivWeight.setValue(0d);
@@ -189,11 +223,11 @@ public class BUnwarpSimple extends BUnwarp {
 				inConsistencyWeight.setEnabled(newValue != RegistrationModeEnum.MONO);
 			}
 		});
+		inMode.setValue(RegistrationModeEnum.MONO);
 	}
 
 	/*
 	 * (non-Javadoc)
-	 * 
 	 * @see plugins.adufour.ezplug.EzPlug#execute()
 	 */
 	@Override
@@ -206,10 +240,8 @@ public class BUnwarpSimple extends BUnwarp {
 		tgtSeq = inTgtSeq.getValue();
 		srcTgtSeq = inSrcTgtSeq.getValue();
 		tgtTgtSeq = inTgtTgtSeq.getValue();
-		if (srcTgtSeq == null)
-			srcTgtSeq = srcSeq;
-		if (tgtTgtSeq == null)
-			tgtTgtSeq = tgtSeq;
+		if (srcTgtSeq == null) srcTgtSeq = srcSeq;
+		if (tgtTgtSeq == null) tgtTgtSeq = tgtSeq;
 
 		originalSrcIBI = srcSeq.getFirstImage();
 		originalTgtIBI = tgtSeq.getFirstImage();
@@ -254,16 +286,18 @@ public class BUnwarpSimple extends BUnwarp {
 		}
 
 		@SuppressWarnings("unchecked")
-		BUnwarpper buLocal = new BUnwarpper(srcSeq, tgtSeq, (List<ROI2DPoint>) srcLandmarks, (List<ROI2DPoint>) tgtLandmarks,
-		    srcMask, tgtMask, inSubsampleFactor.getValue(), inIniDef.getValue().getNumber(),
-		    inFnlDef.getValue().getNumber(), 0, inDivWeight.getValue(), inCurlWeight.getValue(),
-		    inLandmarkWeight.getValue(), inImageWeight.getValue(), inConsistencyWeight.getValue(),
-		    inStopThreshold.getValue(), inShowProcess.getValue() ? 2 : 1, inShowProcess.getValue(),
-		    inMode.getValue().getNumber(), this);
+		BUnwarpper buLocal = new BUnwarpper(srcSeq, tgtSeq, (List<ROI2DPoint>) srcLandmarks,
+				(List<ROI2DPoint>) tgtLandmarks, srcMask, tgtMask, inSubsampleFactor.getValue(),
+				inIniDef.getValue().getNumber(), inFnlDef.getValue().getNumber(), 0, inDivWeight.getValue(),
+				inCurlWeight.getValue(), inLandmarkWeight.getValue(), inImageWeight.getValue(), inConsistencyWeight.getValue(),
+				inStopThreshold.getValue(), inShowProcess.getValue() ? 2 : 1, inShowProcess.getValue(),
+				inMode.getValue().getNumber(), this);
 		bu = buLocal;
-		bu.start();
+		but = new Thread(bu);
+		but.start();
 		try {
-			bu.join();
+			but.join();
+			but = null;
 		} catch (InterruptedException e) {
 			System.err.println("Thread interrupted: " + e.getMessage());
 		}
@@ -292,7 +326,8 @@ public class BUnwarpSimple extends BUnwarp {
 
 	/**
 	 * Validate plugin input variables
-	 * @return 0 if input is valid, else a positive number with the error code. 
+	 * 
+	 * @return 0 if input is valid, else a positive number with the error code.
 	 */
 	private int validateInput() {
 		if (inSrcSeq.getValue() == null || inTgtSeq.getValue() == null) {
@@ -300,9 +335,9 @@ public class BUnwarpSimple extends BUnwarp {
 			return 1;
 		}
 		if (inSrcSeq.getValue().getROICount(ROI2DPolygon.class) > 1
-		    || inTgtSeq.getValue().getROICount(ROI2DPolygon.class) > 1) {
+				|| inTgtSeq.getValue().getROICount(ROI2DPolygon.class) > 1) {
 			MessageDialog.showDialog("Error", "Please define a single mask for each input sequence.",
-			    MessageDialog.ERROR_MESSAGE);
+					MessageDialog.ERROR_MESSAGE);
 			return 2;
 		}
 		return 0;
@@ -310,15 +345,15 @@ public class BUnwarpSimple extends BUnwarp {
 
 	/*
 	 * (non-Javadoc)
-	 * 
 	 * @see plugins.adufour.ezplug.EzPlug#stopExecution()
 	 */
 	@Override
 	public void stopExecution() {
 		isPluginInterrupted = true;
-		if (bu != null && bu.isAlive()) {
+		if (but != null && but.isAlive()) {
 			try {
-				bu.join();
+				but.join();
+				but = null;
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
@@ -327,14 +362,13 @@ public class BUnwarpSimple extends BUnwarp {
 
 	/*
 	 * (non-Javadoc)
-	 * 
 	 * @see plugins.adufour.ezplug.EzPlug#clean()
 	 */
 	@Override
-	public void clean() {
-	}
+	public void clean() {}
 
-	/* (non-Javadoc)
+	/*
+	 * (non-Javadoc)
 	 * @see plugins.danyfel80.registration.bunwarp.BUnwarp#restoreAll()
 	 */
 	@Override
