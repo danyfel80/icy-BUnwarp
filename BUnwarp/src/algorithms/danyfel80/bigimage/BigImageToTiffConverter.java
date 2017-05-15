@@ -100,7 +100,8 @@ public class BigImageToTiffConverter implements Callable<Void> {
 
 		// Compute reading tile size
 		int numProc = Runtime.getRuntime().availableProcessors();
-		long ram = Runtime.getRuntime().freeMemory();
+		long usedRam = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+		long ram = Runtime.getRuntime().maxMemory() - usedRam;
 
 		long maxTileSideSize = (ram / imgSizeC);
 		maxTileSideSize /= numProc;

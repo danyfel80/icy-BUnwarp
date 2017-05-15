@@ -98,7 +98,7 @@ public class BigImageConvertToTiff extends EzPlug implements Block, EzStoppable 
 
 		File inFile = varInFile.getValue();
 		File outFile = Paths.get(FilenameUtils.getFullPath(inFile.getAbsolutePath()),
-				FilenameUtils.getBaseName(inFile.getAbsolutePath()) + ".tif").toFile();
+				FilenameUtils.getBaseName(inFile.getAbsolutePath()) + "_ToTiff.tif").toFile();
 
 		int[] intChannels = varInChannels.getValue();
 		boolean[] channels = new boolean[intChannels.length];
