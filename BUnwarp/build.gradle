@@ -1,36 +1,70 @@
-apply plugin: 'java'
+apply plugin: 'java-library'
 apply plugin: 'eclipse'
 
+version = '1.0.0'
+
+task wrapper(type: Wrapper) {
+	gradleVersion = '4.3'
+}
+
 repositories {
-  jcenter()
+	jcenter()
+	mavenCentral()
+	
+	maven {
+		name 'Unidata'
+		url 'https://artifacts.unidata.ucar.edu/content/repositories/unidata-releases'
+	}
+	maven {
+		url 'https://artifacts.openmicroscopy.org/artifactory/maven/'
+	}
+	
+	flatDir {
+		dirs "$rootProject.projectDir/jars/BigImageTools"
+	}
 }
 
+println "ICY_HOME=${System.env.ICY_HOME}"
 dependencies {
+	// 1.1 External libraries
+	implementation 'ome:bio-formats-tools:5.7.2'
+	implementation 'javax.vecmath:vecmath:1.5.2'
+	implementation 'org.ehcache:ehcache:3.4.0'
+	implementation 'javax.cache:cache-api:1.0.0'
 
-// 1.2. Icy libraries
-    compile files("${System.env.ICY_HOME}/icy.jar") // Icy core
-    compile files("${System.env.ICY_HOME}/plugins/adufour/ezplug/EzPlug.jar") // EzPlug
-    compile files("${System.env.ICY_HOME}/plugins/adufour/blocks/Blocks.jar") // Blocks
-    compile files("${System.env.ICY_HOME}/plugins/adufour/protocols/Protocols.jar") // Protocols
-}
-
-// Source folder structure
-sourceSets {
-    main {
-        java {
-            srcDirs = ['src']
-            resources.srcDirs = ['res']
-        }
-        test {
-            java.srcDirs = ['test']
-            resources.srcDirs = ['res']
-        }
-    }
+	// 1.2. Icy libraries
+	implementation files("${System.env.ICY_HOME}/icy.jar") // Icy core
+	implementation files("${System.env.ICY_HOME}/plugins/adufour/ezplug/EzPlug.jar") // EzPlug
+	implementation files("${System.env.ICY_HOME}/plugins/adufour/blocks/Blocks.jar") // Blocks
+	implementation files("${System.env.ICY_HOME}/plugins/adufour/protocols/Protocols.jar") // Protocols
+	implementation files("${System.env.ICY_HOME}/plugins/adufour/thresholder/Thresholder.jar") // Thresholder
+	
+	api ':BigImageTools:1.0.0'
 }
 
 // Make an icy plugin project
 eclipse {
-  project {
-    natures += ['icy.icy4eclipse.core.icynature']
-  }
+	classpath.downloadJavadoc = true
+	
+	project {
+		buildCommand 'org.eclipse.buildship.core.gradleprojectbuilder'
+		
+		natures += ['icy.icy4eclipse.core.icynature']
+		natures += ['org.eclipse.buildship.core.gradleprojectnature']
+	}
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+	classifier = 'javadoc'
+	from javadoc.destinationDir
+}
+
+artifacts {
+	archives sourcesJar
+	archives javadocJar
 }
