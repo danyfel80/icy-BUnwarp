@@ -3,6 +3,7 @@ package algorithms.danyfel80.registration.bunwarp;
 import java.awt.Point;
 import java.awt.Rectangle;
 
+import icy.common.listener.DetailedProgressListener;
 import icy.image.IcyBufferedImage;
 import icy.image.IcyBufferedImageUtil;
 import icy.sequence.Sequence;
@@ -42,7 +43,7 @@ public class MiscTools {
 
 	public static IcyBufferedImage scale(IcyBufferedImage ibi, float scaleFactor) {
 		return IcyBufferedImageUtil.scale(ibi, (int) Math.round(scaleFactor * (double) ibi.getWidth()),
-		    (int) Math.round(scaleFactor * (double) ibi.getHeight()));
+				(int) Math.round(scaleFactor * (double) ibi.getHeight()));
 	}
 
 	/**
@@ -278,9 +279,9 @@ public class MiscTools {
 	}
 
 	public static void applyTransformationToSourceMT(Sequence source, Sequence target, int intervals, double[][] cx,
-	    double[][] cy) {
+			double[][] cy, DetailedProgressListener progressListener) {
 
-		IcyBufferedImage result_imp = applyTransformationMT(source, target, intervals, cx, cy);
+		IcyBufferedImage result_imp = applyTransformationMT(source, target, intervals, cx, cy, progressListener);
 
 		source.beginUpdate();
 		source.setImage(0, 0, result_imp);
@@ -307,20 +308,21 @@ public class MiscTools {
 	 * @return result transformed image
 	 */
 	public static IcyBufferedImage applyTransformationMT(Sequence sourceSeq, Sequence targetSeq, int intervals,
-	    double[][] cx, double[][] cy) {
+			double[][] cx, double[][] cy, DetailedProgressListener progressListener) {
 		final int targetHeight = targetSeq.getHeight();
 		final int targetWidth = targetSeq.getWidth();
 
 		// Compute the deformation
 		// Set these coefficients to an interpolator
-		BSplineModel swx = new BSplineModel(cx);
-		BSplineModel swy = new BSplineModel(cy);
+		BSplineModel swx = new BSplineModel(cx, progressListener);
+		BSplineModel swy = new BSplineModel(cy, progressListener);
 
 		// Compute the warped image
 
 		BSplineModel[] sourceModels = new BSplineModel[sourceSeq.getSizeC()];
 		for (int c = 0; c < sourceSeq.getSizeC(); c++) {
-			sourceModels[c] = new BSplineModel(IcyBufferedImageUtil.extractChannel(sourceSeq.getFirstImage(), c), false, 1);
+			sourceModels[c] = new BSplineModel(IcyBufferedImageUtil.extractChannel(sourceSeq.getFirstImage(), c), false, 1,
+					progressListener);
 			sourceModels[c].setPyramidDepth(0);
 			sourceModels[c].startPyramids();
 		}
@@ -336,7 +338,7 @@ public class MiscTools {
 
 		// Calculate warped RGB image
 		IcyBufferedImage cp = new IcyBufferedImage(targetWidth, targetHeight, sourceSeq.getSizeC(),
-		    sourceSeq.getDataType_());
+				sourceSeq.getDataType_());
 
 		// Check the number of processors in the computer
 		int nproc = Runtime.getRuntime().availableProcessors();
@@ -365,10 +367,10 @@ public class MiscTools {
 			// block_height );
 
 			fpTiles[i] = new IcyBufferedImage(rects[i].width, rects[i].height, sourceSeq.getSizeC(),
-			    sourceSeq.getDataType_());
+					sourceSeq.getDataType_());
 
 			threads[i] = new Thread(new ColorApplyTransformTile(swx, swy, sourceModels, targetWidth, targetHeight, intervals,
-			    rects[i], fpTiles[i]));
+					rects[i], fpTiles[i]));
 			threads[i].start();
 		}
 
@@ -443,7 +445,7 @@ public class MiscTools {
 		 *          blue channel processor to be updated
 		 */
 		ColorApplyTransformTile(BSplineModel swx, BSplineModel swy, BSplineModel[] sourceModels, int targetCurrentWidth,
-		    int targetCurrentHeight, int intervals, Rectangle rect, IcyBufferedImage ibi) {
+				int targetCurrentHeight, int intervals, Rectangle rect, IcyBufferedImage ibi) {
 			this.swx = swx;
 			this.swy = swy;
 			this.sourceModels = sourceModels;
@@ -473,30 +475,30 @@ public class MiscTools {
 			for (int v_rect = 0, v = rect.y; v < auxTargetHeight; v++, v_rect++) {
 				final int v_offset = v_rect * rect.width;
 				final double tv = (double) (v * intervals) / (double) (targetCurrentHeight - 1) + 1.0F;
-				
+
 				for (int u_rect = 0, u = rect.x; u < auxTargetWidth; u++, u_rect++) {
 					final double tu = (double) (u * intervals) / (double) (targetCurrentWidth - 1) + 1.0F;
-					
+
 					final double x = swx.prepareForInterpolationAndInterpolateI(tu, tv, false, false);
 					final double y = swy.prepareForInterpolationAndInterpolateI(tu, tv, false, false);
-					
+
 					if (firstLim) {
 						firstLim = false;
-						srcLimits.x = (int)x;
-						srcLimits.y = (int)y;
-						srcLimits.width = (int)x;
-						srcLimits.height = (int)y;
+						srcLimits.x = (int) x;
+						srcLimits.y = (int) y;
+						srcLimits.width = (int) x;
+						srcLimits.height = (int) y;
 					} else {
-						srcLimits.x = Math.min(srcLimits.x, (int)x);
-						srcLimits.y = Math.min(srcLimits.y, (int)y);
-						srcLimits.width = Math.max(srcLimits.width, (int)x);
-						srcLimits.height = Math.max(srcLimits.height, (int)y);
+						srcLimits.x = Math.min(srcLimits.x, (int) x);
+						srcLimits.y = Math.min(srcLimits.y, (int) y);
+						srcLimits.width = Math.max(srcLimits.width, (int) x);
+						srcLimits.height = Math.max(srcLimits.height, (int) y);
 					}
-					
+
 					if (x >= 0 && x < sourceWidth && y >= 0 && y < sourceHeight) {
 						for (int c = 0; c < ibi.getSizeC(); c++) {
 							ibiArray[c][u_rect + v_offset] = sourceModels[c].prepareForInterpolationAndInterpolateI(x, y, false,
-							    false);
+									false);
 						}
 					} else {
 						for (int c = 0; c < ibi.getSizeC(); c++) {

@@ -5,13 +5,15 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
+import icy.common.listener.DetailedProgressListener;
 import icy.image.IcyBufferedImage;
+import icy.main.Icy;
 import icy.roi.ROI2D;
 import icy.sequence.Sequence;
+import icy.sequence.SequenceUtil;
 import icy.type.DataType;
 import loci.common.services.ServiceException;
 import loci.formats.FormatException;
-import plugins.danyfel80.registration.bunwarp.BUnwarp;
 //import plugins.danyfel80.registration.bunwarp.BUnwarpSimple;
 import plugins.kernel.roi.roi2d.ROI2DPoint;
 
@@ -75,9 +77,7 @@ public class BUnwarpper implements Runnable {
 	/** warp transformation */
 	private Transformation warp;
 
-	// Ez Plugin
-	/** Ez Plugin reference */
-	private BUnwarp plugin;
+	private DetailedProgressListener progressListener;
 
 	/*
 	 * List<ROI2DPoint> srcLandmarks, List<ROI2DPoint> tgtLandmarks, ROI2DPolygon
@@ -88,11 +88,12 @@ public class BUnwarpper implements Runnable {
 	 * imageWeight, Double stopThreshold, Boolean showProcess, EzPlug plugin
 	 */
 	public BUnwarpper(final Sequence sourceSequence, final Sequence targetSequence,
-	    final List<ROI2DPoint> sourceLandmarks, final List<ROI2DPoint> targetLandmarks, final ROI2D sourceMask,
-	    final ROI2D targetMask, final int maxImageSubsamplingFactor, final int minScaleDeformation,
-	    final int maxScaleDeformation, final int minScaleImage, final double divWeight, final double curlWeight,
-	    final double landmarkWeight, final double imageWeight, final double consistencyWeight, final double stopThreshold,
-	    final int outputLevel, final boolean showMarquardtOptim, final int accurateMode, final BUnwarp plugin) {
+			final List<ROI2DPoint> sourceLandmarks, final List<ROI2DPoint> targetLandmarks, final ROI2D sourceMask,
+			final ROI2D targetMask, final int maxImageSubsamplingFactor, final int minScaleDeformation,
+			final int maxScaleDeformation, final int minScaleImage, final double divWeight, final double curlWeight,
+			final double landmarkWeight, final double imageWeight, final double consistencyWeight, final double stopThreshold,
+			final int outputLevel, final boolean showMarquardtOptim, final int accurateMode,
+			DetailedProgressListener progressListener) {
 		this.sourceSeq = sourceSequence;
 		this.targetSeq = targetSequence;
 		this.sourceLandmarks = sourceLandmarks;
@@ -112,16 +113,29 @@ public class BUnwarpper implements Runnable {
 		this.outputLevel = outputLevel;
 		this.showMarquardtOptim = showMarquardtOptim;
 		this.accurateMode = accurateMode;
-		this.plugin = plugin;
-
-		ProgressBar.setPlugin(this.plugin);
+		
+		setProgressListener(progressListener);
 
 		createSourceImage(this.accurateMode < RegistrationModeEnum.MONO.getNumber());
 		createTargetImage();
 	}
 
+	public void setProgressListener(DetailedProgressListener listener) {
+		this.progressListener = listener;
+	}
+
+	protected void notifyProgress(double progress, String message) {
+		if (this.progressListener != null) {
+			this.progressListener.notifyProgress(progress, message, null);
+		}
+	}
+
 	private void createSourceImage(boolean isReverse) {
-		sourceModel = new BSplineModel(sourceSeq.getFirstImage(), isReverse, (int) Math.pow(2, maxImageSubsamplingFactor));
+		sourceModel = new BSplineModel(sourceSeq.getFirstImage(), isReverse, (int) Math.pow(2, maxImageSubsamplingFactor),
+				(progress, message, data) -> {
+					notifyProgress(progress, "Creating source image model: ");
+					return false;
+				});
 		computeImagePyramidDepth();
 		sourceModel.setPyramidDepth(imagePyramidDepth + minScaleImage);
 	}
@@ -131,7 +145,11 @@ public class BUnwarpper implements Runnable {
 	}
 
 	private void createTargetImage() {
-		targetModel = new BSplineModel(targetSeq.getFirstImage(), true, (int) Math.pow(2, maxImageSubsamplingFactor));
+		targetModel = new BSplineModel(targetSeq.getFirstImage(), true, (int) Math.pow(2, maxImageSubsamplingFactor),
+				(progress, message, data) -> {
+					notifyProgress(progress, "Creating target image model: ");
+					return false;
+				});
 		computeImagePyramidDepth();
 		targetModel.setPyramidDepth(imagePyramidDepth + minScaleImage);
 	}
@@ -145,11 +163,11 @@ public class BUnwarpper implements Runnable {
 	public void run() {
 
 		// Start pyramids
-		ProgressBar.setProgressBarMessage("Starting image pyramids...");
+		notifyProgress(0.001d, "Starting image pyramids...");
 
 		if (targetModel.getWidth() > BSplineModel.MAX_OUTPUT_SIZE || targetModel.getHeight() > BSplineModel.MAX_OUTPUT_SIZE
-		    || sourceModel.getWidth() > BSplineModel.MAX_OUTPUT_SIZE
-		    || sourceModel.getHeight() > BSplineModel.MAX_OUTPUT_SIZE)
+				|| sourceModel.getWidth() > BSplineModel.MAX_OUTPUT_SIZE
+				|| sourceModel.getHeight() > BSplineModel.MAX_OUTPUT_SIZE)
 			System.out.println("Starting image pyramids...");
 
 		sourceModel.startPyramids();
@@ -173,13 +191,20 @@ public class BUnwarpper implements Runnable {
 		// maxImageSubsamplingFactor);
 
 		// Prepare registration parameters
-		warp = new Transformation(sourceSeq, targetSeq, sourceModel, targetModel, sourceLandmarks, targetLandmarks,
-		    sourceMask, targetMask, minScaleDeformation, maxScaleDeformation, minScaleImage, divWeight, curlWeight,
-		    landmarkWeight, imageWeight, consistencyWeight, stopThreshold, outputLevel, showMarquardtOptim, accurateMode,
-		    outputSeqs[0], outputSeqs[1], plugin);
+		Sequence srcSeq = SequenceUtil.getCopy(sourceSeq);
+		Sequence tgtSeq = SequenceUtil.getCopy(targetSeq);
+		Icy.getMainInterface().addSequence(srcSeq);
+		Icy.getMainInterface().addSequence(tgtSeq);
+		warp = new Transformation(srcSeq, tgtSeq, sourceModel, targetModel, sourceLandmarks, targetLandmarks, sourceMask,
+				targetMask, minScaleDeformation, maxScaleDeformation, minScaleImage, divWeight, curlWeight, landmarkWeight,
+				imageWeight, consistencyWeight, stopThreshold, outputLevel, showMarquardtOptim, accurateMode, outputSeqs[0],
+				outputSeqs[1], (progress, message, data)-> {
+					notifyProgress(progress, "Transformation: " + message);
+					return false;
+				});
 
 		// Perform the registration
-		ProgressBar.setProgressBarMessage("Registering...");
+		notifyProgress(0.01d, "Registering...");
 
 		long start = System.currentTimeMillis(); // start timing
 
@@ -211,7 +236,8 @@ public class BUnwarpper implements Runnable {
 		if (outputLevel == 2)
 			System.out.println("\nRegistration time: " + (stop - start) + "ms"); // print
 
-		plugin.restoreAll();
+		Icy.getMainInterface().closeSequence(srcSeq);
+		Icy.getMainInterface().closeSequence(tgtSeq);
 	}
 
 	private Sequence[] initializeOutputSeqs() {
@@ -264,8 +290,8 @@ public class BUnwarpper implements Runnable {
 			for (int j = 0; j < Xdimt; j++) {
 
 				if ((sourceMask == null || targetMask == null
-				    || (sourceMask.contains(j * sSubFactorX, i_s_sub) && targetMask.contains(j * tSubFactorX, i_t_sub)))
-				    && j < Xdims && i < Ydims)
+						|| (sourceMask.contains(j * sSubFactorX, i_s_sub) && targetMask.contains(j * tSubFactorX, i_t_sub)))
+						&& j < Xdims && i < Ydims)
 					ibiData[j + i_offset_t] = (float) (tImage[i_offset_t + j] - sImage[i_offset_s + j]);
 				else {
 					ibiData[j + i_offset_t] = 0;
@@ -276,7 +302,7 @@ public class BUnwarpper implements Runnable {
 		ibi.dataChanged();
 
 		final Sequence seq1 = new Sequence("Output Source-Target" + extraTitleS, ibi);
-		plugin.addSequence(seq1);
+		Icy.getMainInterface().addSequence(seq1);
 
 		outputSeqs[0] = seq1;
 
@@ -294,8 +320,8 @@ public class BUnwarpper implements Runnable {
 
 				for (int j = 0; j < Xdims; j++)
 					if ((targetMask == null || sourceMask != null
-					    || (targetMask.contains(j * tSubFactorX, i_t_sub) && sourceMask.contains(j * sSubFactorX, i_s_sub)))
-					    && i < Ydimt && j < Xdimt)
+							|| (targetMask.contains(j * tSubFactorX, i_t_sub) && sourceMask.contains(j * sSubFactorX, i_s_sub)))
+							&& i < Ydimt && j < Xdimt)
 						ibi2Data[j + i_offset_s] = (float) (sImage[i_offset_s + j] - tImage[i_offset_t + j]);
 					else
 						ibi2Data[j + i_offset_s] = 0;
@@ -303,7 +329,7 @@ public class BUnwarpper implements Runnable {
 			ibi2.dataChanged();
 
 			final Sequence seq2 = new Sequence("Output Target-Source" + extraTitleT, ibi2);
-			plugin.addSequence(seq2);
+			Icy.getMainInterface().addSequence(seq2);
 
 			outputSeqs[1] = seq2;
 		} else
@@ -372,11 +398,15 @@ public class BUnwarpper implements Runnable {
 		return warp.getIntervals();
 	}
 
-	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcResultPath, String srcPath, String transformedSrcPath, String tgtPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
+	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcResultPath, String srcPath,
+			String transformedSrcPath, String tgtPath, Rectangle tile)
+			throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
 		warp.saveBigRegisteredSource(srcResultPath, transformedSrcResultPath, srcPath, transformedSrcPath, tgtPath, tile);
 	}
 
-	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtResultPath, String tgtPath, String transformedTgtPath, String srcPath, Rectangle tile) throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
+	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtResultPath, String tgtPath,
+			String transformedTgtPath, String srcPath, Rectangle tile)
+			throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
 		warp.saveBigRegisteredTarget(tgtResultPath, transformedTgtResultPath, tgtPath, transformedTgtPath, srcPath, tile);
 	}
 

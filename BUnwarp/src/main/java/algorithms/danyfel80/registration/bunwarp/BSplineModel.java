@@ -2,6 +2,7 @@ package algorithms.danyfel80.registration.bunwarp;
 
 import java.util.Stack;
 
+import icy.common.listener.DetailedProgressListener;
 import icy.image.IcyBufferedImage;
 
 /**
@@ -52,10 +53,10 @@ public class BSplineModel extends Thread {
 	private int pyramidDepth;
 	/** current pyramid depth */
 	private int currentDepth;
-//	/** smallest image width */
-//	private int smallestWidth;
-//	/** smallest image height */
-//	private int smallestHeight;
+	// /** smallest image width */
+	// private int smallestWidth;
+	// /** smallest image height */
+	// private int smallestHeight;
 	/** flag to check target image */
 	private boolean isTarget;
 	/** flag to check if the coefficients are mirrored */
@@ -142,6 +143,11 @@ public class BSplineModel extends Thread {
 	private double prec_d2yWeight[][];
 
 	/**
+	 * Progress listener to notify changes on the progress of the processing.
+	 */
+	private DetailedProgressListener progressListener;
+
+	/**
 	 * Create image model for sequence: image and coefficient pyramid. When
 	 * calling this constructor, the thread is not started, to do so,
 	 * startPyramids needs to be called.
@@ -153,7 +159,8 @@ public class BSplineModel extends Thread {
 	 * @param maxImageSubsamplingFactor
 	 *          sub-sampling factor at highest resolution level
 	 */
-	public BSplineModel(IcyBufferedImage ibi, boolean isTarget, int maxImageSubsamplingFactor) {
+	public BSplineModel(IcyBufferedImage ibi, boolean isTarget, int maxImageSubsamplingFactor,
+			DetailedProgressListener progressListener) {
 		this.ibi = ibi;
 
 		// Get image information
@@ -172,6 +179,8 @@ public class BSplineModel extends Thread {
 		dyWeight = new double[4];
 		d2xWeight = new double[4];
 		d2yWeight = new double[4];
+
+		setProgressListener(progressListener);
 	}
 
 	/**
@@ -188,7 +197,8 @@ public class BSplineModel extends Thread {
 	 *          Offset of the beginning of the array with respect to the origin of
 	 *          c
 	 */
-	public BSplineModel(final double[] c, final int Ydim, final int Xdim, final int offset) {
+	public BSplineModel(final double[] c, final int Ydim, final int Xdim, final int offset,
+			DetailedProgressListener progressListener) {
 		// Get the size of the input array
 		currentHeight = height = Ydim;
 		currentWidth = width = Xdim;
@@ -207,6 +217,8 @@ public class BSplineModel extends Thread {
 		dyWeight = new double[4];
 		d2xWeight = new double[4];
 		d2yWeight = new double[4];
+
+		setProgressListener(progressListener);
 	}
 
 	/**
@@ -215,7 +227,7 @@ public class BSplineModel extends Thread {
 	 * @param c
 	 *          Set of B-spline coefficients
 	 */
-	public BSplineModel(final double[][] c) {
+	public BSplineModel(final double[][] c, DetailedProgressListener progressListener) {
 		// Get the size of the input array
 		this.currentHeight = height = c.length;
 		this.currentWidth = width = c[0].length;
@@ -236,6 +248,8 @@ public class BSplineModel extends Thread {
 		dyWeight = new double[4];
 		d2xWeight = new double[4];
 		d2yWeight = new double[4];
+
+		setProgressListener(progressListener);
 	}
 
 	// Getters and Setters
@@ -484,6 +498,32 @@ public class BSplineModel extends Thread {
 		return prec_yWeight[v][l] * prec_xWeight[u][m];
 	}
 
+	/**
+	 * Defines the progress listener that is notified of any progress on the
+	 * processing.
+	 * 
+	 * @param listener
+	 *          Progress listener.
+	 */
+	public void setProgressListener(DetailedProgressListener listener) {
+		this.progressListener = listener;
+	}
+
+	/**
+	 * Notifies the progress listener if it is not null about the processing
+	 * progress.
+	 * 
+	 * @param progress
+	 *          A real number between 0 (0%) and 1 (100%).
+	 * @param message
+	 *          Message related to the progress.
+	 */
+	protected void notifyProgress(double progress, String message) {
+		if (this.progressListener != null) {
+			this.progressListener.notifyProgress(progress, message, null);
+		}
+	}
+
 	// Methods
 	public void setPyramidDepth(final int pyramidDepth) {
 		int proposedPyramidDepth = pyramidDepth;
@@ -553,15 +593,13 @@ public class BSplineModel extends Thread {
 				this.ibi = MiscTools.scale(ibi, scaleFactor);
 				this.width = ibi.getWidth();
 				this.height = ibi.getHeight();
-				
+
 				this.image = new double[width * height];
 				MiscTools.extractImage(ibi, this.image);
 			} else {
 				this.image = this.originalImage;
 			}
-			
-			
-			
+
 			// update sub-sampled output version information if necessary
 			if (this.width <= this.subWidth) {
 				this.subWidth = this.width;
@@ -709,7 +747,7 @@ public class BSplineModel extends Thread {
 	 * @param tolerance
 	 */
 	private double getInitialAntiCausalCoefficientMirrorOffBounds(final double[] c, final double z,
-	    final double tolerance) {
+			final double tolerance) {
 		return (z * c[c.length - 1] / (z - 1.0));
 	}
 
@@ -773,8 +811,8 @@ public class BSplineModel extends Thread {
 
 		// We compute the coefficients pyramid
 		for (int depth = 1; ((depth <= pyramidDepth) && (!super.isInterrupted())); depth++) {
-			ProgressBar.setProgressBarMessage("Building coefficients pyramid...");
-			ProgressBar.setProgressBarValue((double) depth / pyramidDepth);
+			notifyProgress(depth / (double) pyramidDepth,
+					String.format("Building coefficients pyramid (depth %d)...", depth));
 			fullWidth = halfWidth;
 			fullHeight = halfHeight;
 			halfWidth /= 2;
@@ -811,8 +849,8 @@ public class BSplineModel extends Thread {
 				this.subCoeffs = halfCoefficient;
 			}
 		}
-//		smallestWidth = halfWidth;
-//		smallestHeight = halfHeight;
+		// smallestWidth = halfWidth;
+		// smallestHeight = halfHeight;
 		currentDepth = pyramidDepth + 1;
 
 		// if(this.bSubsampledOutput && this.subCoeffs != null)
@@ -834,7 +872,7 @@ public class BSplineModel extends Thread {
 	 *          B-splines degree
 	 */
 	private void basicToCardinal2D(final double[] basic, final double[] cardinal, final int width, final int height,
-	    final int degree) {
+			final int degree) {
 		final double[] hLine = new double[width];
 		final double[] vLine = new double[height];
 		final double[] hData = new double[width];
@@ -896,14 +934,14 @@ public class BSplineModel extends Thread {
 				s[2] = h[0] * c[2] + h[1] * (c[1] + c[3]) + h[2] * (c[0] + c[4]) + h[3] * (c[0] + c[5]);
 				for (int i = 3; (i < (s.length - 3)); i++) {
 					s[i] = h[0] * c[i] + h[1] * (c[i - 1] + c[i + 1]) + h[2] * (c[i - 2] + c[i + 2])
-					    + h[3] * (c[i - 3] + c[i + 3]);
+							+ h[3] * (c[i - 3] + c[i + 3]);
 				}
 				s[s.length - 3] = h[0] * c[c.length - 3] + h[1] * (c[c.length - 4] + c[c.length - 2])
-				    + h[2] * (c[c.length - 5] + c[c.length - 1]) + h[3] * (c[c.length - 6] + c[c.length - 1]);
+						+ h[2] * (c[c.length - 5] + c[c.length - 1]) + h[3] * (c[c.length - 6] + c[c.length - 1]);
 				s[s.length - 2] = h[0] * c[c.length - 2] + h[1] * (c[c.length - 3] + c[c.length - 1])
-				    + h[2] * (c[c.length - 4] + c[c.length - 1]) + h[3] * (c[c.length - 5] + c[c.length - 2]);
+						+ h[2] * (c[c.length - 4] + c[c.length - 1]) + h[3] * (c[c.length - 5] + c[c.length - 2]);
 				s[s.length - 1] = h[0] * c[c.length - 1] + h[1] * (c[c.length - 2] + c[c.length - 1])
-				    + h[2] * (c[c.length - 3] + c[c.length - 2]) + h[3] * (c[c.length - 4] + c[c.length - 3]);
+						+ h[2] * (c[c.length - 3] + c[c.length - 2]) + h[3] * (c[c.length - 4] + c[c.length - 3]);
 			} else {
 				switch (c.length) {
 				case 5:
@@ -986,10 +1024,10 @@ public class BSplineModel extends Thread {
 			}
 			if (c.length == (2 * s.length)) {
 				s[s.length - 1] = h[0] * c[c.length - 2] + h[1] * (c[c.length - 3] + c[c.length - 1])
-				    + h[2] * (c[c.length - 4] + c[c.length - 1]);
+						+ h[2] * (c[c.length - 4] + c[c.length - 1]);
 			} else {
 				s[s.length - 1] = h[0] * c[c.length - 3] + h[1] * (c[c.length - 4] + c[c.length - 2])
-				    + h[2] * (c[c.length - 5] + c[c.length - 1]);
+						+ h[2] * (c[c.length - 5] + c[c.length - 1]);
 			}
 		} else {
 			switch (c.length) {
@@ -1020,7 +1058,7 @@ public class BSplineModel extends Thread {
 	 * @return array of standard B-spline coefficients
 	 */
 	private double[] getBasicFromCardinal2D(final double[] cardinal, final int width, final int height,
-	    final int degree) {
+			final int degree) {
 		final double[] basic = new double[width * height];
 		final double[] hLine = new double[width];
 		final double[] vLine = new double[height];
@@ -1051,8 +1089,8 @@ public class BSplineModel extends Thread {
 
 		// We compute the coefficients pyramid
 		for (int depth = 1; ((depth <= pyramidDepth) && (!super.isInterrupted())); depth++) {
-			ProgressBar.setProgressBarMessage("Building coefficients pyramid...");
-			ProgressBar.setProgressBarValue((double) depth / pyramidDepth);
+			notifyProgress(depth / (double) pyramidDepth,
+					String.format("Building coefficients pyramid (depth %d)...", depth));
 			fullWidth = halfWidth;
 			fullHeight = halfHeight;
 			halfWidth /= 2;
@@ -1085,8 +1123,8 @@ public class BSplineModel extends Thread {
 				this.subCoeffs = halfCoefficient;
 			}
 		}
-//		smallestWidth = halfWidth;
-//		smallestHeight = halfHeight;
+		// smallestWidth = halfWidth;
+		// smallestHeight = halfHeight;
 		currentDepth = pyramidDepth + 1;
 
 		// if(this.bSubsampledOutput && this.subCoeffs != null)
@@ -1105,8 +1143,7 @@ public class BSplineModel extends Thread {
 		cardinalToDual2D(image, fullDual, width, height, 3);
 
 		for (int depth = 1; depth <= pyramidDepth && !super.isInterrupted(); depth++) {
-			ProgressBar.setProgressBarMessage("Building image pyramid...");
-			ProgressBar.setProgressBarValue((double) depth / pyramidDepth);
+			notifyProgress(depth / (double) pyramidDepth, String.format("Building image pyramid (depth %d)...", depth));
 
 			fullWidth = halfWidth;
 			fullHeight = halfHeight;
@@ -1178,7 +1215,7 @@ public class BSplineModel extends Thread {
 	 * @param degree
 	 */
 	private void cardinalToDual2D(final double[] cardinal, final double[] dual, final int width, final int height,
-	    final int degree) {
+			final int degree) {
 		basicToCardinal2D(getBasicFromCardinal2D(cardinal, width, height, degree), dual, width, height, 2 * degree + 1);
 	}
 
@@ -1192,7 +1229,7 @@ public class BSplineModel extends Thread {
 	 * @param degree
 	 */
 	private void dualToCardinal2D(final double[] dual, final double[] cardinal, final int width, final int height,
-	    final int degree) {
+			final int degree) {
 		basicToCardinal2D(getBasicFromCardinal2D(dual, width, height, 2 * degree + 1), cardinal, width, height, degree);
 	}
 
@@ -1455,7 +1492,7 @@ public class BSplineModel extends Thread {
 	 *          interpolated value
 	 */
 	public double prepareForInterpolationAndInterpolateIAndD(double x, double y, double D[], boolean fromSub,
-	    boolean fromCurrent) {
+			boolean fromCurrent) {
 
 		int widthToUse = 0;
 		int heightToUse = 0;
