@@ -1,10 +1,14 @@
 apply plugin: 'java-library'
 apply plugin: 'eclipse'
 
-version = '1.0.0'
+version = '1.0.1.0'
 
 task wrapper(type: Wrapper) {
 	gradleVersion = '4.3'
+}
+
+configurations {
+	extraLibs // configuration that holds jars to include in the jar
 }
 
 repositories {
@@ -27,10 +31,13 @@ repositories {
 println "ICY_HOME=${System.env.ICY_HOME}"
 dependencies {
 	// 1.1 External libraries
-	implementation 'ome:bio-formats-tools:5.7.2'
-	implementation 'javax.vecmath:vecmath:1.5.2'
-	implementation 'org.ehcache:ehcache:3.4.0'
-	implementation 'javax.cache:cache-api:1.0.0'
+	//implementation 'ome:bio-formats-tools:5.7.2'
+	//implementation 'javax.vecmath:vecmath:1.5.2'
+	extraLibs 'org.ehcache:ehcache:3.4.0'
+	extraLibs 'javax.cache:cache-api:1.0.0'
+	extraLibs ':BigImageTools:1.0.0'
+	
+	configurations.implementation.extendsFrom(configurations.extraLibs)
 
 	// 1.2. Icy libraries
 	implementation files("${System.env.ICY_HOME}/icy.jar") // Icy core
@@ -38,8 +45,8 @@ dependencies {
 	implementation files("${System.env.ICY_HOME}/plugins/adufour/blocks/Blocks.jar") // Blocks
 	implementation files("${System.env.ICY_HOME}/plugins/adufour/protocols/Protocols.jar") // Protocols
 	implementation files("${System.env.ICY_HOME}/plugins/adufour/thresholder/Thresholder.jar") // Thresholder
-	
-	api ':BigImageTools:1.0.0'
+	implementation files("${System.env.ICY_HOME}/lib/bioformats.jar") // bioformats
+	implementation files("${System.env.ICY_HOME}/lib/vecmath.jar") // substance UI
 }
 
 // Make an icy plugin project
@@ -54,10 +61,23 @@ eclipse {
 	}
 }
 
-task sourcesJar(type: Jar, dependsOn: classes) {
-    classifier = 'sources'
-    from sourceSets.main.allSource
+jar {
+	from {
+		configurations.extraLibs.collect { it.isDirectory() ? it : zipTree(it) }
+	}
 }
+
+task sourcesJar(type: Jar) {
+	classifier = 'sources'
+	from sourceSets.main.output
+	from sourceSets.main.java
+	from configurations.extraLibs.collect { it.isDirectory() ? it : zipTree(it) }
+}
+
+//task sourcesJar(type: Jar, dependsOn: classes) {
+//    classifier = 'sources'
+//    from sourceSets.main.allSource
+//}
 
 task javadocJar(type: Jar, dependsOn: javadoc) {
 	classifier = 'javadoc'
@@ -66,5 +86,5 @@ task javadocJar(type: Jar, dependsOn: javadoc) {
 
 artifacts {
 	archives sourcesJar
-	archives javadocJar
+	//archives javadocJar
 }

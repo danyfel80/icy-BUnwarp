@@ -24,7 +24,7 @@ import icy.type.DataType;
 import icy.type.collection.array.Array1DUtil;
 import icy.type.point.Point5D;
 import icy.util.XMLUtil;
-import loci.formats.ome.OMEXMLMetadataImpl;
+import ome.xml.meta.OMEXMLMetadata;
 import plugins.adufour.ezplug.EzGUI;
 import plugins.kernel.importer.LociImporterPlugin;
 import plugins.kernel.roi.roi2d.ROI2DArea;
@@ -37,9 +37,9 @@ import plugins.kernel.roi.roi2d.ROI2DArea;
  */
 public class BigImageLoader {
 
-	private EzGUI					pluginGUI			= null;
-	private ProgressFrame	progressFrame	= null;
-	private boolean				isInterrupted;
+	private EzGUI pluginGUI = null;
+	private ProgressFrame progressFrame = null;
+	private boolean isInterrupted;
 
 	public void setPluginGUI(EzGUI pluginGUI) {
 		this.pluginGUI = pluginGUI;
@@ -90,7 +90,7 @@ public class BigImageLoader {
 		LociImporterPlugin importer = new LociImporterPlugin();
 		try {
 			importer.open(path, 0);
-			OMEXMLMetadataImpl imgProps = importer.getMetaData();
+			OMEXMLMetadata imgProps = importer.getOMEXMLMetaData();
 			String imgName = FilenameUtils.getBaseName(path);
 			int imgSizeX = imgProps.getPixelsSizeX(0).getValue();
 			int imgSizeY = imgProps.getPixelsSizeY(0).getValue();
@@ -108,9 +108,12 @@ public class BigImageLoader {
 					tile.height += tile.y;
 					tile.y = 0;
 				}
-				if (tile.x > imgSizeX || tile.y > imgSizeY) return null;
-				if (tile.x + tile.width > imgSizeX) tile.width = imgSizeX - tile.x;
-				if (tile.y + tile.height > imgSizeY) tile.height = imgSizeY - tile.y;
+				if (tile.x > imgSizeX || tile.y > imgSizeY)
+					return null;
+				if (tile.x + tile.width > imgSizeX)
+					tile.width = imgSizeX - tile.x;
+				if (tile.y + tile.height > imgSizeY)
+					tile.height = imgSizeY - tile.y;
 			}
 			System.out.println("tile to extract: " + tile);
 
@@ -162,8 +165,10 @@ public class BigImageLoader {
 			int outTileSizeY = (int) Math.round(tileTmpSizeY);
 			int outSizeX = ((int) (tile.width / tileSize)) * outTileSizeX;
 			int outSizeY = ((int) (tile.height / tileSize)) * outTileSizeY;
-			if (tile.width % tileSize > 0) outSizeX += (int) Math.round((double) (tile.width % tileSize) * scaleFactor);
-			if (tile.height % tileSize > 0) outSizeY += (int) Math.round((double) (tile.height % tileSize) * scaleFactor);
+			if (tile.width % tileSize > 0)
+				outSizeX += (int) Math.round((double) (tile.width % tileSize) * scaleFactor);
+			if (tile.height % tileSize > 0)
+				outSizeY += (int) Math.round((double) (tile.height % tileSize) * scaleFactor);
 			if (showProgressBar) {
 				System.out.println("Result image size: " + outSizeX + "px*" + outSizeY + "px. Tile size: " + outTileSizeX
 						+ "px*" + outTileSizeY + "px");
@@ -265,14 +270,14 @@ public class BigImageLoader {
 	 */
 	private static class TileLoaderThread extends Thread {
 
-		private final String		path;
-		private final Rectangle	rect;
-		private final Dimension	outDimension;
-		private final Dimension	fullDimension;
+		private final String path;
+		private final Rectangle rect;
+		private final Dimension outDimension;
+		private final Dimension fullDimension;
 
-		private IcyBufferedImage	resultImage;
-		private final double			scaleX;
-		private final double			scaleY;
+		private IcyBufferedImage resultImage;
+		private final double scaleX;
+		private final double scaleY;
 
 		/**
 		 * Constructor
@@ -298,6 +303,7 @@ public class BigImageLoader {
 
 		/*
 		 * (non-Javadoc)
+		 * 
 		 * @see java.lang.Thread#run()
 		 */
 		@Override
@@ -379,11 +385,12 @@ public class BigImageLoader {
 		File xmlFile = new File(xmlPath);
 		Document doc = XMLUtil.loadDocument(xmlFile);
 		Node root = XMLUtil.getRootElement(doc);
-		if (root == null) return new ArrayList<ROI>();
+		if (root == null)
+			return new ArrayList<ROI>();
 		Node rois = XMLUtil.getChild(root, "rois");
 		List<ROI> roiList = (List<ROI>) ((rois != null) ? ROI.loadROIsFromXML(rois) : new ArrayList<ROI>());
 		roiList = BigImageUtil.getROIsInTile(roiList, rect);
-		for (ROI roi: roiList) {
+		for (ROI roi : roiList) {
 			Point5D pos = roi.getPosition5D();
 			pos.setX(pos.getX() - rect.x);
 			pos.setY(pos.getY() - rect.y);

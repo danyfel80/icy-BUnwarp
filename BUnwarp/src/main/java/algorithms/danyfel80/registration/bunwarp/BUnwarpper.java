@@ -113,7 +113,7 @@ public class BUnwarpper implements Runnable {
 		this.outputLevel = outputLevel;
 		this.showMarquardtOptim = showMarquardtOptim;
 		this.accurateMode = accurateMode;
-		
+
 		setProgressListener(progressListener);
 
 		createSourceImage(this.accurateMode < RegistrationModeEnum.MONO.getNumber());
@@ -193,12 +193,14 @@ public class BUnwarpper implements Runnable {
 		// Prepare registration parameters
 		Sequence srcSeq = SequenceUtil.getCopy(sourceSeq);
 		Sequence tgtSeq = SequenceUtil.getCopy(targetSeq);
-		Icy.getMainInterface().addSequence(srcSeq);
-		Icy.getMainInterface().addSequence(tgtSeq);
+		if (!Icy.getMainInterface().isHeadLess()) {
+			Icy.getMainInterface().addSequence(srcSeq);
+			Icy.getMainInterface().addSequence(tgtSeq);
+		}
 		warp = new Transformation(srcSeq, tgtSeq, sourceModel, targetModel, sourceLandmarks, targetLandmarks, sourceMask,
 				targetMask, minScaleDeformation, maxScaleDeformation, minScaleImage, divWeight, curlWeight, landmarkWeight,
 				imageWeight, consistencyWeight, stopThreshold, outputLevel, showMarquardtOptim, accurateMode, outputSeqs[0],
-				outputSeqs[1], (progress, message, data)-> {
+				outputSeqs[1], (progress, message, data) -> {
 					notifyProgress(progress, "Transformation: " + message);
 					return false;
 				});
@@ -236,8 +238,10 @@ public class BUnwarpper implements Runnable {
 		if (outputLevel == 2)
 			System.out.println("\nRegistration time: " + (stop - start) + "ms"); // print
 
-		Icy.getMainInterface().closeSequence(srcSeq);
-		Icy.getMainInterface().closeSequence(tgtSeq);
+		if (!Icy.getMainInterface().isHeadLess()) {
+			Icy.getMainInterface().closeSequence(srcSeq);
+			Icy.getMainInterface().closeSequence(tgtSeq);
+		}
 	}
 
 	private Sequence[] initializeOutputSeqs() {
@@ -302,7 +306,9 @@ public class BUnwarpper implements Runnable {
 		ibi.dataChanged();
 
 		final Sequence seq1 = new Sequence("Output Source-Target" + extraTitleS, ibi);
-		Icy.getMainInterface().addSequence(seq1);
+		if (!Icy.getMainInterface().isHeadLess()) {
+			Icy.getMainInterface().addSequence(seq1);
+		}
 
 		outputSeqs[0] = seq1;
 
@@ -329,7 +335,9 @@ public class BUnwarpper implements Runnable {
 			ibi2.dataChanged();
 
 			final Sequence seq2 = new Sequence("Output Target-Source" + extraTitleT, ibi2);
-			Icy.getMainInterface().addSequence(seq2);
+			if (!Icy.getMainInterface().isHeadLess()) {
+				Icy.getMainInterface().addSequence(seq2);
+			}
 
 			outputSeqs[1] = seq2;
 		} else

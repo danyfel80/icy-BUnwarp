@@ -285,7 +285,8 @@ public class Transformation {
 			List<ROI2DPoint> sourceLandmarks, List<ROI2DPoint> targetLandmarks, ROI2D sourceMask, ROI2D targetMask,
 			int minScaleDeformation, int maxScaleDeformation, int minScaleImage, double divWeight, double curlWeight,
 			double landmarkWeight, double imageWeight, double consistencyWeight, double stopThreshold, int outputLevel,
-			boolean showMarquardtOptim, int accurateMode, Sequence outputSequence1, Sequence outputSequence2, DetailedProgressListener progressListener) {
+			boolean showMarquardtOptim, int accurateMode, Sequence outputSequence1, Sequence outputSequence2,
+			DetailedProgressListener progressListener) {
 		this.sourceSeq = sourceSeq;
 		this.targetSeq = targetSeq;
 		this.sourceModel = sourceModel;
@@ -316,7 +317,7 @@ public class Transformation {
 		this.sourceHeight = sourceModel.getHeight();
 		this.targetWidth = targetModel.getWidth();
 		this.targetHeight = targetModel.getHeight();
-		
+
 		setProgressListener(progressListener);
 	}
 
@@ -3794,8 +3795,10 @@ public class Transformation {
 		notifyProgress(processedLoad / (double) totalWorkload, "Computing result window...");
 		Sequence result_imp = applyTransformationMultiThread(intervals, cx, cy, bIsReverse);
 
-		Icy.getMainInterface().closeSequence(outputSeq);
-		Icy.getMainInterface().addSequence(result_imp);
+		if (!Icy.getMainInterface().isHeadLess()) {
+			Icy.getMainInterface().closeSequence(outputSeq);
+			Icy.getMainInterface().addSequence(result_imp);
+		}
 
 	}
 

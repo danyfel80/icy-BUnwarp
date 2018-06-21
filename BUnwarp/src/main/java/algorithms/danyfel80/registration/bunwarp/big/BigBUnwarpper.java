@@ -171,7 +171,7 @@ public class BigBUnwarpper implements Runnable {
 			});
 			srcSeq = importer.call();
 
-			File tgtFile = Paths.get(srcPath).toFile();
+			File tgtFile = Paths.get(tgtPath).toFile();
 			resolutionLevel = BigImageUtil.getResolutionLevel(tgtFile, new Dimension(1000, 1000));
 			importer = new BigImageImporter(tgtFile, resolutionLevel, null);
 			importer.setProgressListener((progress, message, data) -> {

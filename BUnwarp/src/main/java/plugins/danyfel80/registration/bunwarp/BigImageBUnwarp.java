@@ -4,12 +4,15 @@ import java.util.List;
 
 import org.apache.commons.io.FilenameUtils;
 
+import algorithms.danyfel80.command.CommandProcessor;
 import algorithms.danyfel80.registration.bunwarp.BUnwarpper;
 import algorithms.danyfel80.registration.bunwarp.MaximumScaleDeformationEnum;
 import algorithms.danyfel80.registration.bunwarp.MinimumScaleDeformationEnum;
 import algorithms.danyfel80.registration.bunwarp.RegistrationModeEnum;
 import algorithms.danyfel80.registration.bunwarp.big.BigBUnwarpper;
 import icy.gui.dialog.MessageDialog;
+import icy.gui.main.MainInterface;
+import icy.main.Icy;
 import plugins.adufour.blocks.util.VarList;
 import plugins.adufour.ezplug.EzGroup;
 import plugins.adufour.ezplug.EzVar;
@@ -180,6 +183,17 @@ public class BigImageBUnwarp extends BUnwarp {
 
 	@Override
 	protected void execute() {
+		// This will execute on headless mode
+		if (Icy.getMainInterface().isHeadLess()) {
+			try {
+				CommandProcessor processor = new CommandProcessor();
+				processor.call();
+				return;
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
+
 		if (validateInput() != 0) {
 			return;
 		}
