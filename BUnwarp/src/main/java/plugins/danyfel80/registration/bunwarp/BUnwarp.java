@@ -9,17 +9,24 @@ import plugins.adufour.ezplug.EzStoppable;
 
 /**
  * Abstract Class for BUnwarp plugin
+ * 
  * @author Daniel Felipe Gonzalez Obando
  *
  */
 public abstract class BUnwarp extends EzPlug implements Block, EzStoppable {
 
-	protected boolean isPluginInterrupted;
-	
-	public boolean isPluginInterrumped() {
-		return this.isPluginInterrupted;
-	}
+	protected void notifyProgress(double progress, String message) {
+		if (!isHeadLess()) {
+			getUI().setProgressBarMessage(message);
+			getUI().setProgressBarValue(progress);
+		}
+	};
 
 	public abstract void restoreAll();
+
+	@Override
+	public void clean() {
+		// Nothing to do here
+	}
 
 }

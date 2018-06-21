@@ -11,15 +11,17 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
+import algorithms.danyfel80.registration.bunwarp.big.BigImageTools;
+import icy.common.listener.DetailedProgressListener;
 import icy.image.IcyBufferedImage;
 import icy.image.IcyBufferedImageUtil;
+import icy.main.Icy;
 import icy.roi.ROI2D;
 import icy.sequence.Sequence;
 import icy.type.DataType;
 import icy.type.collection.array.Array2DUtil;
 import loci.common.services.ServiceException;
 import loci.formats.FormatException;
-import plugins.danyfel80.registration.bunwarp.BUnwarp;
 import plugins.kernel.roi.roi2d.ROI2DPoint;
 
 /**
@@ -48,8 +50,6 @@ public class Transformation {
 	private Sequence outputSeq1;
 	/** reference to the second output image */
 	private Sequence outputSeq2;
-	/** pointer to the BUnwarp EzPlug */
-	private BUnwarp plugin;
 
 	// Images
 	/** pointer to the source image representation */
@@ -225,6 +225,13 @@ public class Transformation {
 	private double[][] P12_TargetToSource;
 
 	/**
+	 * Progress listener.
+	 */
+	private DetailedProgressListener progressListener;
+	private int processedLoad;
+	private int totalWorkload;
+
+	/**
 	 * Create an instance of Transformation.
 	 * 
 	 * @param sourceSeq
@@ -275,11 +282,11 @@ public class Transformation {
 	 *          Pointer to the BUnwarp EzPlug
 	 */
 	public Transformation(Sequence sourceSeq, Sequence targetSeq, BSplineModel sourceModel, BSplineModel targetModel,
-	    List<ROI2DPoint> sourceLandmarks, List<ROI2DPoint> targetLandmarks, ROI2D sourceMask, ROI2D targetMask,
-	    int minScaleDeformation, int maxScaleDeformation, int minScaleImage, double divWeight, double curlWeight,
-	    double landmarkWeight, double imageWeight, double consistencyWeight, double stopThreshold, int outputLevel,
-	    boolean showMarquardtOptim, int accurateMode, Sequence outputSequence1, Sequence outputSequence2,
-	    BUnwarp plugin) {
+			List<ROI2DPoint> sourceLandmarks, List<ROI2DPoint> targetLandmarks, ROI2D sourceMask, ROI2D targetMask,
+			int minScaleDeformation, int maxScaleDeformation, int minScaleImage, double divWeight, double curlWeight,
+			double landmarkWeight, double imageWeight, double consistencyWeight, double stopThreshold, int outputLevel,
+			boolean showMarquardtOptim, int accurateMode, Sequence outputSequence1, Sequence outputSequence2,
+			DetailedProgressListener progressListener) {
 		this.sourceSeq = sourceSeq;
 		this.targetSeq = targetSeq;
 		this.sourceModel = sourceModel;
@@ -302,7 +309,6 @@ public class Transformation {
 		this.accurateMode = accurateMode;
 		this.outputSeq1 = outputSequence1;
 		this.outputSeq2 = outputSequence2;
-		this.plugin = plugin;
 
 		this.originalSourceIBI = sourceSeq.getFirstImage();
 		this.originalTargetIBI = targetSeq.getFirstImage();
@@ -311,6 +317,26 @@ public class Transformation {
 		this.sourceHeight = sourceModel.getHeight();
 		this.targetWidth = targetModel.getWidth();
 		this.targetHeight = targetModel.getHeight();
+
+		setProgressListener(progressListener);
+	}
+
+	public void setProgressListener(DetailedProgressListener listener) {
+		this.progressListener = listener;
+	}
+
+	/**
+	 * Notifies the progress listener about a progress in the processing process.
+	 * 
+	 * @param progress
+	 *          Progress between 0.0 (0%) and 1.0 (100%).
+	 * @param message
+	 *          Progress message.
+	 */
+	protected void notifyProgress(double progress, String message) {
+		if (this.progressListener != null) {
+			this.progressListener.notifyProgress(progress, message, null);
+		}
 	}
 
 	/**
@@ -338,8 +364,8 @@ public class Transformation {
 
 		// size correction factor
 		int sizeCorrectionFactor = 0; // this.targetHeight / (1024 * (int)
-		                              // Math.pow(2,
-		                              // this.maxImageSubsamplingFactor));
+																	// Math.pow(2,
+																	// this.maxImageSubsamplingFactor));
 		// System.out.println("Size correction factor = " + sizeCorrectionFactor);
 
 		// Ask memory for the transformation coefficients
@@ -416,10 +442,10 @@ public class Transformation {
 					// FROM TARGET TO SOURCE.
 					if (divWeight == 0 && curlWeight == 0)
 						underconstrained = computeCoefficientsScale(intervals, dxTargetToSource, dyTargetToSource,
-						    newcxTargetToSource, newcyTargetToSource, false);
+								newcxTargetToSource, newcyTargetToSource, false);
 					else
 						underconstrained = computeCoefficientsScaleWithRegularization(intervals, dxTargetToSource, dyTargetToSource,
-						    newcxTargetToSource, newcyTargetToSource, false);
+								newcxTargetToSource, newcyTargetToSource, false);
 
 					// Incorporate information from the previous scale
 					if (!underconstrained || (step == 0 && landmarkWeight != 0)) {
@@ -513,7 +539,7 @@ public class Transformation {
 
 			// In accurate_mode reduce the stopping threshold for the last iteration
 			if ((state == 0 || state == 1) && s == maxScaleDeformation && currentDepth == minScaleImage + 1
-			    && accurateMode == 1)
+					&& accurateMode == 1)
 				stopThreshold /= 10;
 
 		} // end while (state != -1).
@@ -522,7 +548,7 @@ public class Transformation {
 		if (sourceModel.getOriginalImageWidth() > this.targetCurrentWidth) {
 			if (sourceModel.isSubOutput() || targetModel.isSubOutput())
 				System.out.println("Adapting coefficients from " + this.sourceCurrentWidth + " to "
-				    + this.originalSourceIBI.getWidth() + "...");
+						+ this.originalSourceIBI.getWidth() + "...");
 			// Adapt the transformation to the new image size
 			double targetFactorY = (targetModel.getOriginalImageHeight() - 1) / (targetCurrentHeight - 1);
 			double targetFactorX = (targetModel.getOriginalImageWidth() - 1) / (targetCurrentWidth - 1);
@@ -625,7 +651,7 @@ public class Transformation {
 	 * Build matrix Rq1q2q3q4.
 	 */
 	private void build_Matrix_Rq1q2q3q4(int intervals, double weight, int q1, int q2, int q3, int q4, double[][] R,
-	    boolean bIsReverse) {
+			boolean bIsReverse) {
 		/*
 		 * Let's define alpha_q as the q-th derivative of a B-spline
 		 * 
@@ -742,7 +768,7 @@ public class Transformation {
 	 * <PRE>
 	 */
 	private double build_Matrix_R_computeIntegral_aa(double x0, double xF, double s1, double s2, double h, int q1,
-	    int q2) {
+			int q2) {
 		// Computes the following integral
 		//
 		// xF d^q1 3 x d^q2 3 x
@@ -792,7 +818,7 @@ public class Transformation {
 				if (cl == 0)
 					continue;
 				integral += ck * cl
-				    * build_matrix_R_computeIntegral_BB(x0, xF, s1 + s[q1][k], s2 + s[q2][l], h, d[q1][k], d[q2][l]);
+						* build_matrix_R_computeIntegral_BB(x0, xF, s1 + s[q1][k], s2 + s[q2][l], h, d[q1][k], d[q2][l]);
 			}
 		}
 		return integral;
@@ -808,7 +834,7 @@ public class Transformation {
 	 * </PRE>
 	 */
 	private double build_matrix_R_computeIntegral_BB(double x0, double xF, double s1, double s2, double h, int n1,
-	    int n2) {
+			int n2) {
 		// Computes the following integral
 		//
 		// xF n1 x n2 x
@@ -908,7 +934,7 @@ public class Transformation {
 	 */
 	private void computeInitialResidues(final double[] dx, final double[] dy,
 
-	    boolean bIsReverse) {
+			boolean bIsReverse) {
 
 		// Auxiliary variables for registering in both directions.
 		double auxFactorWidth = targetModel.getFactorWidth();
@@ -1367,7 +1393,7 @@ public class Transformation {
 	 * @return affine transformation matrix
 	 */
 	public static AffineTransform makeAffineMatrix(final double scalex, final double scaley, final double shearx,
-	    final double sheary, final double rotang, final double transx, final double transy) {
+			final double sheary, final double rotang, final double transx, final double transy) {
 		/*
 		 * %makes an affine transformation matrix from the given scale, shear,
 		 * %rotation and translation values %if you want a uniquely retrievable
@@ -1393,9 +1419,6 @@ public class Transformation {
 	 * exact number of steps.
 	 */
 	private void computeTotalWorkload() {
-		// This code is an excerpt from doBidirectionalRegistration() to compute the
-		// exact
-		// number of steps
 
 		// Now refine with the different scales
 		int state; // state=-1 --> Finish
@@ -1456,8 +1479,8 @@ public class Transformation {
 			}
 		}
 
-		ProgressBar.resetProgressBar();
-		ProgressBar.addWorkload(workload);
+		notifyProgress(0.001, "Preparing transformation");
+		this.totalWorkload = workload;
 	}
 
 	/**
@@ -1479,13 +1502,13 @@ public class Transformation {
 	 * @return under-constrained flag
 	 */
 	private boolean computeCoefficientsScale(final int intervals, // input, number
-	                                                              // of intervals
-	                                                              // at this scale
-	    final double[] dx, // input, x residue so far
-	    final double[] dy, // input, y residue so far
-	    final double[][] cx, // output, x coefficients for splines
-	    final double[][] cy, // output, y coefficients for splines
-	    boolean bIsReverse) {
+																																// of intervals
+																																// at this scale
+			final double[] dx, // input, x residue so far
+			final double[] dy, // input, y residue so far
+			final double[][] cx, // output, x coefficients for splines
+			final double[][] cy, // output, y coefficients for splines
+			boolean bIsReverse) {
 
 		List<ROI2DPoint> auxTargetPh = (bIsReverse) ? this.sourceLandmarks : this.targetLandmarks;
 
@@ -1533,9 +1556,9 @@ public class Transformation {
 	 *          target-source=FALSE)
 	 */
 	private void buildMatrixB(int intervals, // Intervals in the deformation
-	    int K, // Number of landmarks
-	    double[][] B, // System matrix of the landmark interpolation
-	    boolean bIsReverse) {
+			int K, // Number of landmarks
+			double[][] B, // System matrix of the landmark interpolation
+			boolean bIsReverse) {
 
 		// Auxiliary variables to calculate inverse transformation
 		List<ROI2DPoint> auxTargetPh = this.targetLandmarks;
@@ -1651,7 +1674,7 @@ public class Transformation {
 	 * @return under-constrained flag
 	 */
 	private boolean computeCoefficientsScaleWithRegularization(final int intervals, final double[] dx, final double[] dy,
-	    final double[][] cx, final double[][] cy, boolean bIsReverse) {
+			final double[][] cx, final double[][] cy, boolean bIsReverse) {
 
 		double P11[][] = this.P11_TargetToSource;
 		double P12[][] = this.P12_TargetToSource;
@@ -1776,9 +1799,9 @@ public class Transformation {
 	 * @return energy function value
 	 */
 	private double optimizeCoeffs(int intervals, double thChangef, double[][] cxTargetToSource,
-	    double[][] cyTargetToSource, double[][] cxSourceToTarget, double[][] cySourceToTarget) {
-		if (plugin != null && plugin.isPluginInterrumped())
-			return 0.0;
+			double[][] cyTargetToSource, double[][] cxSourceToTarget, double[][] cySourceToTarget) {
+		if (Thread.currentThread().isInterrupted())
+			return 0d;
 
 		if (sourceModel.isSubOutput()) {
 			System.out.println(" -----\n Intervals = " + intervals + "x" + intervals);
@@ -1831,19 +1854,32 @@ public class Transformation {
 			}
 
 		/* Prepare the precomputed weights for interpolation */
-		this.swxTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, 0);
-		this.swyTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, halfM);
+		this.swxTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, 0, (progress, message, data) -> {
+			notifyProgress(progress, "Computing x weights (t->s): " + message);
+			return false;
+		});
+		this.swyTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, halfM, (progress, message, data) -> {
+			notifyProgress(progress, "Computing y weights (t->s): " + message);
+			return false;
+		});
 		this.swxTargetToSource.precomputedPrepareForInterpolation(targetModel.getCurrentHeight(),
-		    targetModel.getCurrentWidth(), intervals);
+				targetModel.getCurrentWidth(), intervals);
 		this.swyTargetToSource.precomputedPrepareForInterpolation(targetModel.getCurrentHeight(),
-		    targetModel.getCurrentWidth(), intervals);
+				targetModel.getCurrentWidth(), intervals);
 
-		this.swxSourceToTarget = new BSplineModel(x, intervals + 3, intervals + 3, quarterM);
-		this.swySourceToTarget = new BSplineModel(x, intervals + 3, intervals + 3, threeQuarterM);
+		this.swxSourceToTarget = new BSplineModel(x, intervals + 3, intervals + 3, quarterM, (progress, message, data) -> {
+			notifyProgress(progress, "Computing x weights (s->t): " + message);
+			return false;
+		});
+		this.swySourceToTarget = new BSplineModel(x, intervals + 3, intervals + 3, threeQuarterM,
+				(progress, message, data) -> {
+					notifyProgress(progress, "Computing y weights (s->t): " + message);
+					return false;
+				});
 		this.swxSourceToTarget.precomputedPrepareForInterpolation(sourceModel.getCurrentHeight(),
-		    sourceModel.getCurrentWidth(), intervals);
+				sourceModel.getCurrentWidth(), intervals);
 		this.swySourceToTarget.precomputedPrepareForInterpolation(sourceModel.getCurrentHeight(),
-		    sourceModel.getCurrentWidth(), intervals);
+				sourceModel.getCurrentWidth(), intervals);
 
 		/* First computation of the energy */
 		f = energyFunction(x, intervals, grad, false, false);
@@ -1873,13 +1909,12 @@ public class Transformation {
 		// Maximum iteration number
 		int maxiter = MAXITER_OPTIMCOEFF * (sourceModel.getCurrentDepth() + 1);
 
-		ProgressBar.stepProgressBar();
+		processedLoad++;
+		notifyProgress(processedLoad / (double) totalWorkload, "Optimizing coefficients...");
 
 		int last_successful_iter = 0;
 
-		boolean stop = plugin != null && plugin.isPluginInterrumped();
-
-		while (iter < maxiter && !stop) {
+		while (iter < maxiter && !Thread.currentThread().isInterrupted()) {
 			/* Compute new x ------------------------------------------------- */
 			Marquardt_it(x, optimize, grad, hess, lambda);
 
@@ -1911,7 +1946,8 @@ public class Transformation {
 			iter++;
 			if (showMarquardtOptim)
 				System.out.println("f(" + iter + ")=" + f + " lambda=" + lambda);
-			ProgressBar.stepProgressBar();
+			processedLoad++;
+			notifyProgress(processedLoad / (double) totalWorkload, String.format("Optimizing coefficients (%d)...", iter));
 
 			/* Update lambda -------------------------------------------------- */
 			if (rescuedf > f) {
@@ -2022,8 +2058,6 @@ public class Transformation {
 				if (lambda < FIRSTLAMBDA)
 					lambda = FIRSTLAMBDA;
 			}
-
-			stop = plugin != null && plugin.isPluginInterrumped();
 		}
 
 		// Copy the values back to the input arrays
@@ -2036,7 +2070,8 @@ public class Transformation {
 				cySourceToTarget[i][j] = x[threeQuarterM + p];
 			}
 
-		ProgressBar.skipProgressBar(maxiter - iter);
+		processedLoad += maxiter - iter;
+		notifyProgress(processedLoad / (double) totalWorkload, "Coefficients optimized");
 		return f;
 	}
 
@@ -2057,7 +2092,7 @@ public class Transformation {
 	 * @return value of the energy function for these deformation coefficients
 	 */
 	private double energyFunction(final double[] c, final int intervals, double[] grad, final boolean only_image,
-	    final boolean show_error) {
+			final boolean show_error) {
 		final int M = c.length / 2;
 		final int halfM = M / 2;
 		double[] x1 = new double[M];
@@ -2133,7 +2168,7 @@ public class Transformation {
 	 */
 
 	private double evaluateSimilarityMultiThread(final double[] c, final int intervals, double[] grad,
-	    final boolean only_image, boolean bIsReverse) {
+			final boolean only_image, boolean bIsReverse) {
 
 		// Auxiliary variables for changing from source to target and inversely
 		final BSplineModel auxTarget = (!bIsReverse) ? targetModel : sourceModel;
@@ -2218,7 +2253,7 @@ public class Transformation {
 
 				// Create threads and start them.
 				threads[i] = new Thread(new EvaluateSimilarityTile(auxTarget, auxSource, auxTargetMsk, auxSourceMsk, swx, swy,
-				    auxFactorWidth, auxFactorHeight, intervals, grad_thread[i], result[i], rects[i]));
+						auxFactorWidth, auxFactorHeight, intervals, grad_thread[i], result[i], rects[i]));
 				threads[i].start();
 			}
 
@@ -2255,8 +2290,8 @@ public class Transformation {
 			for (int i = 0; i < Nk; i++)
 				for (int j = 0; j < Nk; j++) {
 					regularization += c[i] * P11[i][j] * c[j] + // c1^t P11 c1
-					    c[Nk + i] * P22[i][j] * c[Nk + j] + // c2^t P22 c2
-					    c[i] * P12[i][j] * c[Nk + j];// c1^t P12 c2
+							c[Nk + i] * P22[i][j] * c[Nk + j] + // c2^t P22 c2
+							c[i] * P12[i][j] * c[Nk + j];// c1^t P12 c2
 					vgradreg[i] += 2 * P11[i][j] * c[j]; // 2 P11 c1
 					vgradreg[Nk + i] += 2 * P22[i][j] * c[Nk + j]; // 2 P22 c2
 					vgradreg[i] += P12[i][j] * c[Nk + j]; // P12 c2
@@ -2440,9 +2475,9 @@ public class Transformation {
 		 *          rectangle containing the area of the image to be evaluated
 		 */
 		EvaluateSimilarityTile(final BSplineModel auxTarget, final BSplineModel auxSource, final ROI2D auxTargetMsk,
-		    final ROI2D auxSourceMsk, final BSplineModel swx, final BSplineModel swy, final double auxFactorWidth,
-		    final double auxFactorHeight, final int intervals, final double[] grad, final double[] result,
-		    final Rectangle rect) {
+				final ROI2D auxSourceMsk, final BSplineModel swx, final BSplineModel swy, final double auxFactorWidth,
+				final double auxFactorHeight, final int intervals, final double[] grad, final double[] result,
+				final Rectangle rect) {
 			this.auxTarget = auxTarget;
 			this.auxSource = auxSource;
 
@@ -2487,7 +2522,7 @@ public class Transformation {
 			int n = 0;
 
 			final double[] I1D = new double[2]; // Space for the first derivatives of
-			                                    // I1
+																					// I1
 
 			final double[] targetCurrentImage = auxTarget.getCurrentImage();
 
@@ -2758,10 +2793,10 @@ public class Transformation {
 			block_height++;
 
 		int nThreads = nproc; /*
-		                       * (nproc > 1) ? (nproc / 2) : 1; if
-		                       * (this.accurate_mode == MainDialog.MONO_MODE)
-		                       * nThreads *= 2;
-		                       */
+													 * (nproc > 1) ? (nproc / 2) : 1; if
+													 * (this.accurate_mode == MainDialog.MONO_MODE)
+													 * nThreads *= 2;
+													 */
 
 		Thread[] threads = new Thread[nThreads];
 		Rectangle[] rects = new Rectangle[nThreads];
@@ -2782,8 +2817,8 @@ public class Transformation {
 			ibi_tile[i] = new IcyBufferedImage(rects[i].width, rects[i].height, 1, DataType.FLOAT);
 
 			threads[i] = new Thread(new OutputTileMaker(swx, swy, auxSource, auxTarget, auxSourceMsk, auxTargetMsk,
-			    auxFactorWidth * subFactorWidth, auxFactorHeight * subFactorHeight, auxTargetCurrentHeight,
-			    auxTargetCurrentWidth, rects[i], ibi_tile[i]));
+					auxFactorWidth * subFactorWidth, auxFactorHeight * subFactorHeight, auxTargetCurrentHeight,
+					auxTargetCurrentWidth, rects[i], ibi_tile[i]));
 			threads[i].start();
 		}
 		for (int i = 0; i < nThreads; i++) {
@@ -2861,7 +2896,7 @@ public class Transformation {
 					final double up_xh = xh / auxFactorWidth;
 					final double up_yh = yh / auxFactorHeight;
 					MiscTools.drawLine(transformedImage, (int) Math.round(up_x), (int) Math.round(up_y), (int) Math.round(up_xh),
-					    (int) Math.round(up_yh), grid_colour);
+							(int) Math.round(up_yh), grid_colour);
 				}
 
 				// Draw vertical line
@@ -2876,7 +2911,7 @@ public class Transformation {
 					double up_xv = xv / auxFactorWidth;
 					double up_yv = yv / auxFactorHeight;
 					MiscTools.drawLine(transformedImage, (int) Math.round(up_x), (int) Math.round(up_y), (int) Math.round(up_xv),
-					    (int) Math.round(up_yv), grid_colour);
+							(int) Math.round(up_yv), grid_colour);
 				}
 			}
 
@@ -2944,9 +2979,9 @@ public class Transformation {
 		 *          processor to be updated
 		 */
 		OutputTileMaker(final BSplineModel swx, final BSplineModel swy, final BSplineModel auxSource,
-		    final BSplineModel auxTarget, final ROI2D auxSourceMsk, final ROI2D auxTargetMsk, final double auxFactorWidth,
-		    final double auxFactorHeight, final int auxTargetCurrentHeight, final int auxTargetCurrentWidth,
-		    final Rectangle rect, final IcyBufferedImage fp) {
+				final BSplineModel auxTarget, final ROI2D auxSourceMsk, final ROI2D auxTargetMsk, final double auxFactorWidth,
+				final double auxFactorHeight, final int auxTargetCurrentHeight, final int auxTargetCurrentWidth,
+				final Rectangle rect, final IcyBufferedImage fp) {
 			this.swx = swx;
 			this.swy = swy;
 			this.auxSource = auxSource;
@@ -3003,11 +3038,11 @@ public class Transformation {
 							// fp.putPixelValue(u_rect, v_rect, tImage[uv] - sourceValue);
 							f_array[u_rect + v_offset] = (float) (tImage[uv] - sourceValue);
 						} else
-						  // fp.putPixelValue(u_rect, v_rect, 0);
-						  f_array[u_rect + v_offset] = 0;
+							// fp.putPixelValue(u_rect, v_rect, 0);
+							f_array[u_rect + v_offset] = 0;
 					} else
-					  // fp.putPixelValue(u_rect, v_rect, 0);
-					  f_array[u_rect + v_offset] = 0;
+						// fp.putPixelValue(u_rect, v_rect, 0);
+						f_array[u_rect + v_offset] = 0;
 				}
 			}
 
@@ -3083,7 +3118,7 @@ public class Transformation {
 
 			// Create threads and start them.
 			threads[i] = new Thread(new EvaluateConsistencyTile(this, grad_direct[i], grad_inverse[i], result[i],
-			    rect_target[i], rect_source[i]));
+					rect_target[i], rect_source[i]));
 			threads[i].start();
 		}
 
@@ -3172,7 +3207,7 @@ public class Transformation {
 		 *          rectangle marking the source area to be evaluated
 		 */
 		EvaluateConsistencyTile(Transformation transf, double[] grad_direct, double[] grad_inverse, double[] result,
-		    Rectangle rect_target, Rectangle rect_source) {
+				Rectangle rect_target, Rectangle rect_source) {
 			this.transf = transf;
 
 			this.grad_direct = grad_direct;
@@ -3219,7 +3254,7 @@ public class Transformation {
 				for (int u = rect_target.x; u < XdimT; u++) {
 					// Check if this point is in the target mask
 					if (this.transf.targetMask == null || this.transf.targetMask.contains(u / this.transf.targetFactorWidth,
-					    v / this.transf.targetFactorHeight)) {
+							v / this.transf.targetFactorHeight)) {
 
 						final int x = (int) Math.round(swx_direct.precomputedInterpolateI(u, v));
 						final int y = (int) Math.round(swy_direct.precomputedInterpolateI(u, v));
@@ -3308,7 +3343,7 @@ public class Transformation {
 				for (int u = rect_source.x; u < XdimS; u++) {
 					// Check if this point is in the target mask
 					if (this.transf.sourceMask == null || this.transf.sourceMask.contains(u / this.transf.sourceFactorWidth,
-					    v / this.transf.sourceFactorHeight)) {
+							v / this.transf.sourceFactorHeight)) {
 						final int x = (int) Math.round(swx_inverse.precomputedInterpolateI(u, v));
 						final int y = (int) Math.round(swy_inverse.precomputedInterpolateI(u, v));
 
@@ -3401,14 +3436,14 @@ public class Transformation {
 	 * @return energy function value
 	 */
 	private double optimizeCoeffs(int intervals, double thChangef, double[][] cxTargetToSource,
-	    double[][] cyTargetToSource) {
+			double[][] cyTargetToSource) {
 		if (sourceModel.isSubOutput()) {
 			System.out.println(" -----\n Intervals = " + intervals + "x" + intervals);
 			System.out.println(" Source Image Size = " + this.sourceCurrentWidth + "x" + this.sourceCurrentHeight);
 		}
 
-		if (plugin != null && plugin.isPluginInterrumped())
-			return 0.0;
+		if (Thread.currentThread().isInterrupted())
+			return 0d;
 
 		final double TINY = FLT_EPSILON;
 		final double EPS = 3.0e-8F;
@@ -3450,12 +3485,18 @@ public class Transformation {
 			}
 
 		/* Prepare the precomputed weights for interpolation */
-		this.swxTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, 0);
-		this.swyTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, halfM);
+		this.swxTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, 0, (progress, message, data) -> {
+			notifyProgress(progress, "Preparing precomputed x weights (t->s): " + message);
+			return false;
+		});
+		this.swyTargetToSource = new BSplineModel(x, intervals + 3, intervals + 3, halfM, (progress, message, data) -> {
+			notifyProgress(progress, "Preparing precomputed y weights (t->s): " + message);
+			return false;
+		});
 		this.swxTargetToSource.precomputedPrepareForInterpolation(targetModel.getCurrentHeight(),
-		    targetModel.getCurrentWidth(), intervals);
+				targetModel.getCurrentWidth(), intervals);
 		this.swyTargetToSource.precomputedPrepareForInterpolation(targetModel.getCurrentHeight(),
-		    targetModel.getCurrentWidth(), intervals);
+				targetModel.getCurrentWidth(), intervals);
 
 		// First computation of the energy (similarity + landmarks + regularization)
 		// f = evaluateSimilarity(x, intervals, grad, false, false, false);
@@ -3486,13 +3527,12 @@ public class Transformation {
 		// Maximum iteration number
 		int maxiter = MAXITER_OPTIMCOEFF * (sourceModel.getCurrentDepth() + 1);
 
-		ProgressBar.stepProgressBar();
+		processedLoad++;
+		notifyProgress(processedLoad / (double) totalWorkload, "Optimizing coefficients...");
 
 		int last_successful_iter = 0;
 
-		boolean stop = plugin != null && plugin.isPluginInterrumped();
-
-		while (iter < maxiter && !stop) {
+		while (iter < maxiter && !Thread.currentThread().isInterrupted()) {
 			/* Compute new x ------------------------------------------------- */
 			Marquardt_it(x, optimize, grad, hess, lambda);
 
@@ -3526,7 +3566,9 @@ public class Transformation {
 			iter++;
 			if (showMarquardtOptim)
 				System.out.println("f(" + iter + ")=" + f + " lambda=" + lambda);
-			ProgressBar.stepProgressBar();
+			processedLoad++;
+			notifyProgress(processedLoad / (double) totalWorkload,
+					String.format("Optimizing coefficients (iteration %d)...", iter));
 
 			/* Update lambda -------------------------------------------------- */
 			if (rescuedf > f) {
@@ -3632,8 +3674,6 @@ public class Transformation {
 				if (lambda < FIRSTLAMBDA)
 					lambda = FIRSTLAMBDA;
 			}
-
-			stop = plugin != null && plugin.isPluginInterrumped();
 		}
 
 		// Copy the values back to the input arrays
@@ -3644,7 +3684,8 @@ public class Transformation {
 				cyTargetToSource[i][j] = x[halfM + p];
 			}
 
-		ProgressBar.skipProgressBar(maxiter - iter);
+		processedLoad += maxiter - iter;
+		notifyProgress(processedLoad / (double) totalWorkload, "Coefficients optimized...");
 		return f;
 	}
 
@@ -3738,29 +3779,26 @@ public class Transformation {
 	 * @param intervals
 	 *          number of intervals in the deformation
 	 * @param cx
-	 *          x- deformation coefficients
+	 *          x- deformation spline coefficients
 	 * @param cy
-	 *          y- deformation coefficients
+	 *          y- deformation spline coefficients
 	 * @param bIsReverse
 	 *          flag to determine the transformation direction
 	 *          (target-source=FALSE or source-target=TRUE)
 	 */
-	private void showTransformationMultiThread(final int intervals, final double[][] cx, // Input,
-	                                                                                     // spline
-	                                                                                     // coefficients
-	    final double[][] cy, boolean bIsReverse) {
+	private void showTransformationMultiThread(final int intervals, final double[][] cx, final double[][] cy,
+			boolean bIsReverse) {
 
 		Sequence outputSeq = (!bIsReverse) ? this.outputSeq1 : this.outputSeq2;
 
 		// Calculate tranformation results
-		ProgressBar.setProgressBarMessage("Calculating result window...");
+		notifyProgress(processedLoad / (double) totalWorkload, "Computing result window...");
 		Sequence result_imp = applyTransformationMultiThread(intervals, cx, cy, bIsReverse);
 
-		plugin.removeSequence(outputSeq);
-
-		outputSeq = result_imp;
-
-		plugin.addSequence(outputSeq);
+		if (!Icy.getMainInterface().isHeadLess()) {
+			Icy.getMainInterface().closeSequence(outputSeq);
+			Icy.getMainInterface().addSequence(result_imp);
+		}
 
 	}
 
@@ -3780,9 +3818,9 @@ public class Transformation {
 	 * @return output images (depending on the output level)
 	 */
 	private Sequence applyTransformationMultiThread(final int intervals, final double[][] cx, // Input,
-	                                                                                          // spline
-	                                                                                          // coefficients
-	    final double[][] cy, boolean bIsReverse) {
+																																														// spline
+																																														// coefficients
+			final double[][] cy, boolean bIsReverse) {
 		// BSplineModel auxTarget = targetModel;
 		// BSplineModel auxSource = sourceModel;
 		ROI2D auxTargetMsk = targetMask;
@@ -3806,113 +3844,25 @@ public class Transformation {
 		final String s = bIsReverse ? new String("Target") : new String("Source");
 
 		// Create transformation B-spline models
-		BSplineModel swx = new BSplineModel(cx);
-		BSplineModel swy = new BSplineModel(cy);
+		BSplineModel swx = new BSplineModel(cx, (progress, message, data) -> {
+			notifyProgress(progress, "Computing x - transformation model: " + message);
+			return false;
+		});
+		BSplineModel swy = new BSplineModel(cy, (progress, message, data) -> {
+			notifyProgress(progress, "Computing y - transformation model: " + message);
+			return false;
+		});
 
-		// We compute the deformation (transformation_x and transformation_y) on the
-		// fly
-
-		// /* GRAY SCALE IMAGES */
-		// if(!(originalIP instanceof ColorProcessor))
-		// {
-		// final FloatProcessor fp = new FloatProcessor(auxTargetWidth,
-		// auxTargetHeight);
-		// final FloatProcessor fp_mask = new FloatProcessor(auxTargetWidth,
-		// auxTargetHeight);
-		// final FloatProcessor fp_target = new FloatProcessor(auxTargetWidth,
-		// auxTargetHeight, auxTarget.getOriginalImage());
-		//
-		//
-		// // take original processor if necessary
-		// if(auxSource.getOriginalImageWidth() > auxSource.getWidth())
-		// {
-		// auxSource = new BSplineModel( originalIP, false, 1);
-		// auxSource.setPyramidDepth(0);
-		// auxSource.startPyramids();
-		//
-		// // Join thread
-		// try {
-		// auxSource.getThread().join();
-		// } catch (InterruptedException e) {
-		// IJ.error("Unexpected interruption exception " + e);
-		// }
-		// }
-		//
-		// // Check the number of processors in the computer
-		// int nproc = Runtime.getRuntime().availableProcessors();
-		//
-		// // We will use threads to display parts of the output image
-		// int block_height = auxTargetHeight / nproc;
-		// if (auxTargetHeight % 2 != 0)
-		// block_height++;
-		//
-		//
-		// int nThreads = nproc; /*(nproc > 1) ? (nproc / 2) : 1;
-		// if (this.accurate_mode == MainDialog.MONO_MODE)
-		// nThreads *= 2;*/
-		//
-		//
-		// Thread[] threads = new Thread[nThreads];
-		// Rectangle[] rects = new Rectangle[nThreads];
-		// FloatProcessor[] fp_tile = new FloatProcessor[nThreads];
-		// FloatProcessor[] fp_mask_tile = new FloatProcessor[nThreads];
-		//
-		// for (int i=0; i<nThreads; i++)
-		// {
-		// // last block size is the rest of the window
-		// int y_start = i*block_height;
-		//
-		// if (nThreads-1 == i)
-		// block_height = auxTargetHeight - i*block_height;
-		//
-		// rects[i] = new Rectangle(0, y_start, auxTargetWidth, block_height);
-		//
-		// //IJ.log("block = 0 " + (i*block_height) + " " + auxTargetWidth + " " +
-		// block_height );
-		//
-		// fp_tile[i] = new FloatProcessor(rects[i].width, rects[i].height);
-		// fp_mask_tile[i] = new FloatProcessor(rects[i].width, rects[i].height);
-		//
-		// threads[i] = new Thread(new GrayscaleResultTileMaker(swx, swy, auxSource,
-		// auxTargetWidth, auxTargetHeight,
-		// auxTargetMsk, auxSourceMsk,
-		// rects[i], fp_tile[i], fp_mask_tile[i]));
-		// threads[i].start();
-		// }
-		//
-		// for (int i=0; i<nThreads; i++)
-		// {
-		// try {
-		// threads[i].join();
-		// threads[i] = null;
-		// } catch (InterruptedException e) {
-		// e.printStackTrace();
-		// }
-		// }
-		//
-		// for (int i=0; i<nThreads; i++)
-		// {
-		// fp.insert(fp_tile[i], rects[i].x, rects[i].y);
-		// fp_tile[i] = null;
-		// fp_mask.insert(fp_mask_tile[i], rects[i].x, rects[i].y);
-		// fp_mask_tile[i] = null;
-		// rects[i] = null;
-		// }
-		//
-		// fp.resetMinAndMax();
-		//
-		// // Add slices to result stack
-		// is.addSlice("Registered " + s + " Image", fp);
-		// //if (outputLevel > -1)
-		// is.addSlice("Target Image", fp_target);
-		// //if (outputLevel > -1)
-		// is.addSlice("Warped Source Mask",fp_mask);
-		// }
-		// else /* COLOR IMAGES */
+		/* COLOR IMAGES */
 		{
 			BSplineModel[] sourceModels = new BSplineModel[originalIBI.getSizeC()];
 			for (int c = 0; c < originalIBI.getSizeC(); c++) {
-				sourceModels[c] = new BSplineModel(IcyBufferedImageUtil.extractChannel(originalIBI, c), false, 1);
+				final int cf = c;
+				sourceModels[c] = new BSplineModel(IcyBufferedImageUtil.extractChannel(originalIBI, c), false, 1,
+						(progress, message, data) -> {
+							notifyProgress(progress, String.format("Computing source model c(%d): ", cf) + message);
+							return false;
+						});
 				sourceModels[c].setPyramidDepth(0);
 				sourceModels[c].startPyramids();
 			}
@@ -3928,9 +3878,9 @@ public class Transformation {
 
 			// Calculate warped RGB image
 			IcyBufferedImage ibi = new IcyBufferedImage(auxTargetWidth, auxTargetHeight, originalIBI.getSizeC(),
-			    originalIBI.getDataType_());
+					originalIBI.getDataType_());
 			IcyBufferedImage ibi_mask = new IcyBufferedImage(auxTargetWidth, auxTargetHeight, originalIBI.getSizeC(),
-			    originalIBI.getDataType_());
+					originalIBI.getDataType_());
 
 			// Check the number of processors in the computer
 			int nproc = Runtime.getRuntime().availableProcessors();
@@ -3941,10 +3891,10 @@ public class Transformation {
 				block_height++;
 
 			int nThreads = nproc; /*
-			                       * (nproc > 1) ? (nproc / 2) : 1; if
-			                       * (this.accurate_mode == MainDialog.MONO_MODE)
-			                       * nThreads *= 2;
-			                       */
+														 * (nproc > 1) ? (nproc / 2) : 1; if
+														 * (this.accurate_mode == MainDialog.MONO_MODE)
+														 * nThreads *= 2;
+														 */
 
 			Thread[] threads = new Thread[nThreads];
 			Rectangle[] rects = new Rectangle[nThreads];
@@ -3964,12 +3914,12 @@ public class Transformation {
 				// block_height );
 
 				ibi_tile[i] = new IcyBufferedImage(rects[i].width, rects[i].height, originalIBI.getSizeC(),
-				    originalIBI.getDataType_());
+						originalIBI.getDataType_());
 				ibi_mask_tile[i] = new IcyBufferedImage(rects[i].width, rects[i].height, originalIBI.getSizeC(),
-				    originalIBI.getDataType_());
+						originalIBI.getDataType_());
 
 				threads[i] = new Thread(new ColorResultTileMaker(swx, swy, sourceModels, auxTargetWidth, auxTargetHeight,
-				    auxTargetMsk, auxSourceMsk, rects[i], ibi_tile[i], ibi_mask_tile[i]));
+						auxTargetMsk, auxSourceMsk, rects[i], ibi_tile[i], ibi_mask_tile[i]));
 				threads[i].start();
 			}
 
@@ -4063,8 +4013,8 @@ public class Transformation {
 		 *          mask color processor to be updated
 		 */
 		ColorResultTileMaker(BSplineModel swx, BSplineModel swy, BSplineModel[] sourceModels, int auxTargetCurrentWidth,
-		    int auxTargetCurrentHeight, ROI2D auxTargetMsk, ROI2D auxSourceMsk, Rectangle rect, IcyBufferedImage fpB,
-		    IcyBufferedImage cp_mask) {
+				int auxTargetCurrentHeight, ROI2D auxTargetMsk, ROI2D auxSourceMsk, Rectangle rect, IcyBufferedImage fpB,
+				IcyBufferedImage cp_mask) {
 			this.swx = swx;
 			this.swy = swy;
 			this.sourceModels = sourceModels;
@@ -4112,7 +4062,7 @@ public class Transformation {
 						if (auxSourceMsk == null || auxSourceMsk.contains(x, y)) {
 							for (int c = 0; c < ibiTile.getSizeC(); c++) {
 								ibiData[c][u_rect + v_offset] = sourceModels[c].prepareForInterpolationAndInterpolateI(x, y, false,
-								    ORIGINAL);
+										ORIGINAL);
 								ibiMaskData[c][u_rect + v_offset] = ibiMaskTile.getDataTypeMax();
 							}
 						} else {
@@ -4196,7 +4146,7 @@ public class Transformation {
 
 		// Set it to the image stack
 		IcyBufferedImage fp = new IcyBufferedImage(auxTargetCurrentWidth, auxTargetCurrentHeight, is.getSizeC(),
-		    is.getDataType_());
+				is.getDataType_());
 		double[][] fpData = Array2DUtil.arrayToDoubleArray(fp.getDataXYC(), fp.isSignedDataType());
 		for (int v = 0; v < auxTargetCurrentHeight; v++)
 			for (int u = 0; u < auxTargetCurrentWidth; u++)
@@ -4226,7 +4176,7 @@ public class Transformation {
 	 *          target-source=FALSE)
 	 */
 	private void computeDeformation(final int intervals, final double[][] cx, final double[][] cy,
-	    final double[][] transformation_x, final double[][] transformation_y, boolean bIsReverse) {
+			final double[][] transformation_x, final double[][] transformation_y, boolean bIsReverse) {
 
 		int auxTargetCurrentHeight = this.targetCurrentHeight;
 		int auxTargetCurrentWidth = this.targetCurrentWidth;
@@ -4253,10 +4203,10 @@ public class Transformation {
 		 */
 
 		Thread x_thread = new Thread(
-		    new ConcurrentDeformation(cx, auxTargetCurrentHeight, auxTargetCurrentWidth, transformation_x, intervals));
+				new ConcurrentDeformation(cx, auxTargetCurrentHeight, auxTargetCurrentWidth, transformation_x, intervals));
 
 		Thread y_thread = new Thread(
-		    new ConcurrentDeformation(cy, auxTargetCurrentHeight, auxTargetCurrentWidth, transformation_y, intervals));
+				new ConcurrentDeformation(cy, auxTargetCurrentHeight, auxTargetCurrentWidth, transformation_y, intervals));
 
 		x_thread.start();
 		y_thread.start();
@@ -4283,7 +4233,7 @@ public class Transformation {
 		final int intervals;
 
 		ConcurrentDeformation(double[][] c, int auxTargetCurrentHeight, int auxTargetCurrentWidth,
-		    double[][] transformation, int intervals) {
+				double[][] transformation, int intervals) {
 			this.c = c;
 			this.auxTargetCurrentWidth = auxTargetCurrentWidth;
 			this.auxTargetCurrentHeight = auxTargetCurrentHeight;
@@ -4297,7 +4247,10 @@ public class Transformation {
 		 */
 		public void run() {
 			// Set these coefficients to an interpolator
-			BSplineModel sw = new BSplineModel(c);
+			BSplineModel sw = new BSplineModel(c, (progress, message, data) -> {
+				notifyProgress(progress, message);
+				return false;
+			});
 
 			// Compute the transformation mapping
 			for (int v = 0; v < auxTargetCurrentHeight; v++) {
@@ -4361,7 +4314,7 @@ public class Transformation {
 					final double xh = transformation_x[v][uh];
 					final double yh = transformation_y[v][uh];
 					MiscTools.drawLine(transformedImage, (int) Math.round(x), (int) Math.round(y), (int) Math.round(xh),
-					    (int) Math.round(yh), 0);
+							(int) Math.round(yh), 0);
 				}
 
 				// Draw vertical line
@@ -4370,13 +4323,13 @@ public class Transformation {
 					final double xv = transformation_x[vv][u];
 					final double yv = transformation_y[vv][u];
 					MiscTools.drawLine(transformedImage, (int) Math.round(x), (int) Math.round(y), (int) Math.round(xv),
-					    (int) Math.round(yv), 0);
+							(int) Math.round(yv), 0);
 				}
 			}
 
 		// Set it to the image stack
 		IcyBufferedImage fp = new IcyBufferedImage(auxTargetCurrentWidth, auxTargetCurrentHeight, is.getSizeC(),
-		    is.getDataType_());
+				is.getDataType_());
 		double[][] fpData = Array2DUtil.arrayToDoubleArray(fp.getDataXYC(), fp.isSignedDataType());
 		for (int v = 0; v < auxTargetCurrentHeight; v++)
 			for (int u = 0; u < auxTargetCurrentWidth; u++)
@@ -4401,8 +4354,8 @@ public class Transformation {
 
 		// size correction factor
 		int sizeCorrectionFactor = 0; // this.targetHeight / (1024 * (int)
-		                              // Math.pow(2,
-		                              // this.maxImageSubsamplingFactor));
+																	// Math.pow(2,
+																	// this.maxImageSubsamplingFactor));
 		// System.out.println("Size correction factor = " + sizeCorrectionFactor);
 
 		targetCurrentHeight = targetModel.getCurrentHeight();
@@ -4532,10 +4485,10 @@ public class Transformation {
 					// FROM TARGET TO SOURCE.
 					if (divWeight == 0 && curlWeight == 0)
 						underconstrained = computeCoefficientsScale(intervals, dxTargetToSource, dyTargetToSource,
-						    newcxTargetToSource, newcyTargetToSource, false);
+								newcxTargetToSource, newcyTargetToSource, false);
 					else
 						underconstrained = computeCoefficientsScaleWithRegularization(intervals, dxTargetToSource, dyTargetToSource,
-						    newcxTargetToSource, newcyTargetToSource, false);
+								newcxTargetToSource, newcyTargetToSource, false);
 
 					// Incorporate information from the previous scale
 					if (!underconstrained || (step == 0 && landmarkWeight != 0)) {
@@ -4550,10 +4503,10 @@ public class Transformation {
 					underconstrained = true;
 					if (divWeight == 0 && curlWeight == 0)
 						underconstrained = computeCoefficientsScale(intervals, dxSourceToTarget, dySourceToTarget,
-						    newcxSourceToTarget, newcySourceToTarget, true);
+								newcxSourceToTarget, newcySourceToTarget, true);
 					else
 						underconstrained = computeCoefficientsScaleWithRegularization(intervals, dxSourceToTarget, dySourceToTarget,
-						    newcxSourceToTarget, newcySourceToTarget, true);
+								newcxSourceToTarget, newcySourceToTarget, true);
 
 					// Incorporate information from the previous scale
 					if (!underconstrained || (step == 0 && landmarkWeight != 0)) {
@@ -4568,7 +4521,7 @@ public class Transformation {
 				// Optimize deformation coefficients
 				// if (imageWeight!=0)
 				optimizeCoeffs(intervals, stopThreshold, cxTargetToSource, cyTargetToSource, cxSourceToTarget,
-				    cySourceToTarget);
+						cySourceToTarget);
 			}
 
 			// Prepare for next iteration
@@ -4657,7 +4610,7 @@ public class Transformation {
 
 			// In accurate_mode reduce the stopping threshold for the last iteration
 			if ((state == 0 || state == 1) && s == maxScaleDeformation && currentDepth == minScaleImage + 1
-			    && accurateMode == 1)
+					&& accurateMode == 1)
 				stopThreshold /= 10;
 
 		} // end while (state != -1).
@@ -4666,7 +4619,7 @@ public class Transformation {
 		if (sourceModel.getOriginalImageWidth() > this.sourceCurrentWidth) {
 			if (sourceModel.isSubOutput() || targetModel.isSubOutput())
 				System.out.println("Adapting coefficients from " + this.sourceCurrentWidth + " to "
-				    + sourceModel.getOriginalImageWidth() + "...");
+						+ sourceModel.getOriginalImageWidth() + "...");
 			// Adapt the transformation to the new image size
 			double targetFactorY = (targetModel.getOriginalImageHeight() - 1) / (targetCurrentHeight - 1);
 			double targetFactorX = (targetModel.getOriginalImageWidth() - 1) / (targetCurrentWidth - 1);
@@ -4725,17 +4678,20 @@ public class Transformation {
 
 	private void applyTransformationMT(Sequence source, Sequence target, int intervals, double[][] cx, double[][] cy) {
 		// Apply transformation
-		MiscTools.applyTransformationToSourceMT(source, target, intervals, cx, cy);
+		MiscTools.applyTransformationToSourceMT(source, target, intervals, cx, cy, (progress, message, data) -> {
+			notifyProgress(progress, "Applying transformation: " + message);
+			return false;
+		});
 	}
 
 	public Sequence getRegisteredSource(String srcResultPath, String srcPath, String transformedSrcPath, String tgtPath) {
 		return BigImageTools.applyTransformationToImage(srcResultPath, srcPath, transformedSrcPath, tgtPath, intervals,
-		    cxTargetToSource, cyTargetToSource, new Dimension(targetWidth, targetHeight));
+				cxTargetToSource, cyTargetToSource, new Dimension(targetWidth, targetHeight), progressListener);
 	}
 
 	public Sequence getRegisteredTarget(String tgtResultPath, String srcPath, String tgtPath, String transformedTgtPath) {
 		return BigImageTools.applyTransformationToImage(tgtResultPath, tgtPath, transformedTgtPath, srcPath, intervals,
-		    cxSourceToTarget, cySourceToTarget, new Dimension(sourceWidth, sourceHeight));
+				cxSourceToTarget, cySourceToTarget, new Dimension(sourceWidth, sourceHeight), progressListener);
 	}
 
 	public double[][] getCxSourceToTarget() {
@@ -4759,20 +4715,25 @@ public class Transformation {
 	}
 
 	public void saveBigRegisteredSource(String srcResultPath, String transformedSrcResultPath, String srcPath,
-	    String transformedSrcPath, String tgtPath, Rectangle tile)
-	    throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
+			String transformedSrcPath, String tgtPath, Rectangle tile)
+			throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
 		BigImageTools.applyAndSaveTransformationToBigImage(srcResultPath, transformedSrcResultPath, srcPath,
-		    transformedSrcPath, tgtPath, intervals, cxTargetToSource, cyTargetToSource,
-		    new Dimension(targetWidth, targetHeight), plugin, tile);
+				transformedSrcPath, tgtPath, intervals, cxTargetToSource, cyTargetToSource,
+				new Dimension(targetWidth, targetHeight), tile, (progress, message, data) -> {
+					notifyProgress(progress, "Saving source: " + message);
+					return false;
+				});
 	}
 
 	public void saveBigRegisteredTarget(String tgtResultPath, String transformedTgtResultPath, String tgtPath,
-	    String transformedTgtPath, String srcPath, Rectangle tile)
-	    throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
+			String transformedTgtPath, String srcPath, Rectangle tile)
+			throws ServiceException, IOException, FormatException, InterruptedException, ExecutionException {
 		BigImageTools.applyAndSaveTransformationToBigImage(tgtResultPath, transformedTgtResultPath, tgtPath,
-		    transformedTgtPath, srcPath, intervals, cxSourceToTarget, cySourceToTarget,
-		    new Dimension(targetWidth, targetHeight), plugin, tile);
+				transformedTgtPath, srcPath, intervals, cxSourceToTarget, cySourceToTarget,
+				new Dimension(targetWidth, targetHeight), tile, (progress, message, data) -> {
+					notifyProgress(progress, "Saving target: " + message);
+					return false;
+				});
 	}
-
 
 }

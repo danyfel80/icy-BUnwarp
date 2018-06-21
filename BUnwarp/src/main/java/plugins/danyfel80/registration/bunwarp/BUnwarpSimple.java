@@ -30,50 +30,49 @@ import plugins.kernel.roi.roi2d.ROI2DPoint;
 import plugins.kernel.roi.roi2d.ROI2DPolygon;
 
 /**
- * BUnwarp Plugin based on ImageJ plugin "bUnwarpJ" by Ignacio
- * Arganda-Carreras and Jan Kybic which extends previous UnwarpJ project by
- * Carlos Oscar Sanchez Sorzano.
- * Adapted by Daniel Gonzalez Obando
+ * BUnwarp Plugin based on ImageJ plugin "bUnwarpJ" by Ignacio Arganda-Carreras
+ * and Jan Kybic which extends previous UnwarpJ project by Carlos Oscar Sanchez
+ * Sorzano. Adapted by Daniel Gonzalez Obando
  * 
  * @author Daniel Felipe Gonzalez Obando
  */
 public class BUnwarpSimple extends BUnwarp {
 
 	// Input variables
-	// Images
-	// - Source image
+	// - Images
+	// -- Source image
 	EzVarSequence inSrcSeq = new EzVarSequence("Source");
-	// - Target image
+	// -- Target image
 	EzVarSequence inTgtSeq = new EzVarSequence("Target");
 
-	// Parameters
-	// - Registration mode
+	// -Parameters
+	// -- Registration mode
 	EzVarEnum<RegistrationModeEnum> inMode = new EzVarEnum<>("Mode", RegistrationModeEnum.values(),
 			RegistrationModeEnum.ACCURATE);
-	// - Subsampling factor
+	// -- Subsampling factor
 	EzVarInteger inSubsampleFactor = new EzVarInteger("Image Subsampling Factor", 0, 0, 7, 1);
 
 	// - Advanced Parameters
-	// - Source transformation target image
+	// -- Source transformation target image
 	EzVarSequence inSrcTgtSeq = new EzVarSequence("Transformation Source");
-	// - Target transformation target image
+	// -- Target transformation target image
 	EzVarSequence inTgtTgtSeq = new EzVarSequence("Transformation Target");
 
-	// - Initial deformation
+	// -- Initial deformation resolution
 	EzVarEnum<MinimumScaleDeformationEnum> inIniDef = new EzVarEnum<>("Initial deformation",
 			MinimumScaleDeformationEnum.values(), MinimumScaleDeformationEnum.VERY_COARSE);
-	// - Final deformation
+	// -- Final deformation resolution
 	EzVarEnum<MaximumScaleDeformationEnum> inFnlDef = new EzVarEnum<>("Final Deformation",
 			MaximumScaleDeformationEnum.values(), MaximumScaleDeformationEnum.FINE);
 
-	// Weights
-	// - Divergence Weight
+	// - Weights
+	// -- Divergence Weight
 	EzVarDouble inDivWeight = new EzVarDouble("Divergence Weight");
-	// - Curl Weight
+	// -- Curl Weight
 	EzVarDouble inCurlWeight = new EzVarDouble("Curl Weight");
-	// - Landmark Weight
+	// -- Landmark Weight
 	EzVarDouble inLandmarkWeight = new EzVarDouble("Landmark Weight");
-	// - Image Weight
+	// -- Image Weight
 	EzVarDouble inImageWeight = new EzVarDouble("Image Weight");
 	// - Consistency Weight
 	EzVarDouble inConsistencyWeight = new EzVarDouble("Consistency Weight");
@@ -86,39 +85,32 @@ public class BUnwarpSimple extends BUnwarp {
 	// - Show process
 	EzVarBoolean inShowProcess = new EzVarBoolean("Show Process", false);
 
-	EzGroup	outputSequenceGroup	= new EzGroup("Transformed Output", inSrcTgtSeq, inTgtTgtSeq);
-	EzGroup	advancedParamsGroup	= new EzGroup("Advanced Parameters", inIniDef, inFnlDef, outputSequenceGroup,
+	EzGroup outputSequenceGroup = new EzGroup("Transformed Output", inSrcTgtSeq, inTgtTgtSeq);
+	EzGroup advancedParamsGroup = new EzGroup("Advanced Parameters", inIniDef, inFnlDef, outputSequenceGroup,
 			weightsGroup, inStopThreshold, inShowProcess);
 
 	// Output variables
 
-	VarSequence	outSrcSeq	= new VarSequence("Source Registered", (Sequence) null);
-	VarSequence	outTgtSeq	= new VarSequence("Target Registered", (Sequence) null);
+	VarSequence outSrcSeq = new VarSequence("Source Registered", (Sequence) null);
+	VarSequence outTgtSeq = new VarSequence("Target Registered", (Sequence) null);
 
-	Var<double[][]>	outCxSourceToTarget	= new Var<double[][]>("Cx Source to Target", new double[1][1]);
-	Var<double[][]>	outCySourceToTarget	= new Var<double[][]>("Cy Source to Target", new double[1][1]);
-	Var<double[][]>	outCxTargetToSource	= new Var<double[][]>("Cx Target to Source", new double[1][1]);
-	Var<double[][]>	outCyTargetToSource	= new Var<double[][]>("Cy Target to Source", new double[1][1]);
-	VarInteger			outIntervals				= new VarInteger("Transform intervals", 0);
+	Var<double[][]> outCxSourceToTarget = new Var<double[][]>("Cx Source to Target", new double[1][1]);
+	Var<double[][]> outCySourceToTarget = new Var<double[][]>("Cy Source to Target", new double[1][1]);
+	Var<double[][]> outCxTargetToSource = new Var<double[][]>("Cx Target to Source", new double[1][1]);
+	Var<double[][]> outCyTargetToSource = new Var<double[][]>("Cy Target to Source", new double[1][1]);
+	VarInteger outIntervals = new VarInteger("Transform intervals", 0);
 
 	// Internal variables
-	Sequence	srcSeq;
-	Sequence	tgtSeq;
-	Sequence	srcTgtSeq;
-	Sequence	tgtTgtSeq;
+	Sequence srcSeq;
+	Sequence tgtSeq;
+	Sequence srcTgtSeq;
+	Sequence tgtTgtSeq;
 
-	IcyBufferedImage	originalSrcIBI;
-	IcyBufferedImage	originalTgtIBI;
+	IcyBufferedImage originalSrcImage;
+	IcyBufferedImage originalTgtImage;
 
-	BUnwarpper	bu;
-	Thread			but;
+	BUnwarpper bu;
 
-	/*
-	 * (non-Javadoc)
-	 * @see
-	 * plugins.adufour.blocks.lang.Block#declareInput(plugins.adufour.blocks.util.
-	 * VarList)
-	 */
 	@Override
 	public void declareInput(VarList inputMap) {
 		inputMap.add(inSrcSeq.name, inSrcSeq.getVariable());
@@ -145,12 +137,6 @@ public class BUnwarpSimple extends BUnwarp {
 		inStopThreshold.setValue(1e-2);
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * @see
-	 * plugins.adufour.blocks.lang.Block#declareOutput(plugins.adufour.blocks.util
-	 * .VarList)
-	 */
 	@Override
 	public void declareOutput(VarList outputMap) {
 		outputMap.add(outSrcSeq.getName(), outSrcSeq);
@@ -163,10 +149,6 @@ public class BUnwarpSimple extends BUnwarp {
 		outputMap.add(outIntervals.getName(), outIntervals);
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * @see plugins.adufour.ezplug.EzPlug#initialize()
-	 */
 	@Override
 	protected void initialize() {
 		inSrcSeq.setToolTipText("Source(floating) sequence used to perform the registration.");
@@ -200,10 +182,13 @@ public class BUnwarpSimple extends BUnwarp {
 
 		addEzComponent(inSrcSeq);
 		addEzComponent(inTgtSeq);
+		inSrcSeq.addVarChangeListener((sourceVar, newSeq) -> inSrcTgtSeq.setValue(newSeq));
+		inTgtSeq.addVarChangeListener((sourceVar, newSeq) -> inTgtTgtSeq.setValue(newSeq));
 		// addEzComponent(inSrcTgtSeq);
 		// addEzComponent(inTgtTgtSeq);
 		addEzComponent(inMode);
 		addEzComponent(inSubsampleFactor);
+
 		outputSequenceGroup.setFoldedState(true);
 		weightsGroup.setFoldedState(true);
 		advancedParamsGroup.setFoldedState(true);
@@ -226,102 +211,94 @@ public class BUnwarpSimple extends BUnwarp {
 		inMode.setValue(RegistrationModeEnum.MONO);
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * @see plugins.adufour.ezplug.EzPlug#execute()
-	 */
 	@Override
 	protected void execute() {
-		this.isPluginInterrupted = false;
-		if (validateInput() != 0) {
-			return;
-		}
-		srcSeq = inSrcSeq.getValue();
-		tgtSeq = inTgtSeq.getValue();
-		srcTgtSeq = inSrcTgtSeq.getValue();
-		tgtTgtSeq = inTgtTgtSeq.getValue();
-		if (srcTgtSeq == null) srcTgtSeq = srcSeq;
-		if (tgtTgtSeq == null) tgtTgtSeq = tgtSeq;
-
-		originalSrcIBI = srcSeq.getFirstImage();
-		originalTgtIBI = tgtSeq.getFirstImage();
-
-		List<? extends ROI> srcLandmarks = srcSeq.getROIs(ROI2DPoint.class);
-		List<? extends ROI> tgtLandmarks = tgtSeq.getROIs(ROI2DPoint.class);
-
-		Comparator<ROI> comp = new Comparator<ROI>() {
-			@Override
-			public int compare(ROI o1, ROI o2) {
-				return o1.getName().compareTo(o2.getName());
-			}
-		};
-
-		srcLandmarks.sort(comp);
-		tgtLandmarks.sort(comp);
-
-		ROI2DPolygon srcMask = null;
-		ROI2DPolygon tgtMask = null;
-		if (srcSeq.getROICount(ROI2DPolygon.class) > 0) {
-			srcMask = (ROI2DPolygon) srcSeq.getROIs(ROI2DPolygon.class).get(0);
-		}
-		if (tgtSeq.getROICount(ROI2DPolygon.class) > 0) {
-			tgtMask = (ROI2DPolygon) tgtSeq.getROIs(ROI2DPolygon.class).get(0);
-		}
-		if (srcMask == null) {
-			List<Point2D> pts = new ArrayList<>();
-			pts.add(new Point2D.Double(0, 0));
-			pts.add(new Point2D.Double(0, srcSeq.getHeight()));
-			pts.add(new Point2D.Double(srcSeq.getWidth(), srcSeq.getHeight()));
-			pts.add(new Point2D.Double(srcSeq.getWidth(), 0));
-			srcMask = new ROI2DPolygon(pts);
-		}
-
-		if (tgtMask == null) {
-			List<Point2D> pts = new ArrayList<>();
-			pts.add(new Point2D.Double(0, 0));
-			pts.add(new Point2D.Double(0, tgtSeq.getHeight()));
-			pts.add(new Point2D.Double(tgtSeq.getWidth(), tgtSeq.getHeight()));
-			pts.add(new Point2D.Double(tgtSeq.getWidth(), 0));
-			tgtMask = new ROI2DPolygon(pts);
-		}
-
-		@SuppressWarnings("unchecked")
-		BUnwarpper buLocal = new BUnwarpper(srcSeq, tgtSeq, (List<ROI2DPoint>) srcLandmarks,
-				(List<ROI2DPoint>) tgtLandmarks, srcMask, tgtMask, inSubsampleFactor.getValue(),
-				inIniDef.getValue().getNumber(), inFnlDef.getValue().getNumber(), 0, inDivWeight.getValue(),
-				inCurlWeight.getValue(), inLandmarkWeight.getValue(), inImageWeight.getValue(), inConsistencyWeight.getValue(),
-				inStopThreshold.getValue(), inShowProcess.getValue() ? 2 : 1, inShowProcess.getValue(),
-				inMode.getValue().getNumber(), this);
-		bu = buLocal;
-		but = new Thread(bu);
-		but.start();
 		try {
-			but.join();
-			but = null;
-		} catch (InterruptedException e) {
-			System.err.println("Thread interrupted: " + e.getMessage());
-		}
-		if (!this.isPluginInterrupted) {
-			Sequence srcTgtCopySeq = SequenceUtil.getCopy(srcTgtSeq);
-			bu.getRegisteredSource(srcTgtCopySeq);
-			outSrcSeq.setValue(srcTgtSeq);
-			addSequence(srcTgtCopySeq);
-
-			outCxSourceToTarget.setValue(bu.getCxSourceToTarget());
-			outCySourceToTarget.setValue(bu.getCxSourceToTarget());
-			outIntervals.setValue(bu.getIntervals());
-
-			if (inMode.getValue() != RegistrationModeEnum.MONO) {
-				Sequence tgtTgtCopySeq = SequenceUtil.getCopy(tgtTgtSeq);
-				bu.getRegisteredTarget(tgtTgtCopySeq);
-				outTgtSeq.setValue(tgtTgtCopySeq);
-				addSequence(tgtTgtCopySeq);
-
-				outCxTargetToSource.setValue(bu.getCxSourceToTarget());
-				outCyTargetToSource.setValue(bu.getCxSourceToTarget());
+			notifyProgress(Double.NaN, "Starting process...");
+			if (validateInput() != 0) {
+				return;
 			}
-		}
+			this.srcSeq = inSrcSeq.getValue();
+			this.tgtSeq = inTgtSeq.getValue();
+			this.srcTgtSeq = inSrcTgtSeq.getValue();
+			this.tgtTgtSeq = inTgtTgtSeq.getValue();
+			if (srcTgtSeq == null)
+				this.srcTgtSeq = srcSeq;
+			if (tgtTgtSeq == null)
+				this.tgtTgtSeq = tgtSeq;
 
+			this.originalSrcImage = srcSeq.getFirstImage();
+			this.originalTgtImage = tgtSeq.getFirstImage();
+
+			List<ROI2DPoint> srcLandmarks = srcSeq.getROIs(ROI2DPoint.class, false);
+			List<ROI2DPoint> tgtLandmarks = tgtSeq.getROIs(ROI2DPoint.class, false);
+
+			Comparator<ROI> comp = new Comparator<ROI>() {
+				@Override
+				public int compare(ROI o1, ROI o2) {
+					return o1.getName().compareTo(o2.getName());
+				}
+			};
+
+			srcLandmarks.sort(comp);
+			tgtLandmarks.sort(comp);
+
+			ROI2DPolygon srcMask = srcSeq.getROIs(ROI2DPolygon.class, false).stream().findFirst().orElse(null);
+			ROI2DPolygon tgtMask = tgtSeq.getROIs(ROI2DPolygon.class, false).stream().findFirst().orElse(null);
+
+			if (srcMask == null) {
+				List<Point2D> pts = new ArrayList<>();
+				pts.add(new Point2D.Double(0, 0));
+				pts.add(new Point2D.Double(0, srcSeq.getHeight()));
+				pts.add(new Point2D.Double(srcSeq.getWidth(), srcSeq.getHeight()));
+				pts.add(new Point2D.Double(srcSeq.getWidth(), 0));
+				srcMask = new ROI2DPolygon(pts);
+			}
+
+			if (tgtMask == null) {
+				List<Point2D> pts = new ArrayList<>();
+				pts.add(new Point2D.Double(0, 0));
+				pts.add(new Point2D.Double(0, tgtSeq.getHeight()));
+				pts.add(new Point2D.Double(tgtSeq.getWidth(), tgtSeq.getHeight()));
+				pts.add(new Point2D.Double(tgtSeq.getWidth(), 0));
+				tgtMask = new ROI2DPolygon(pts);
+			}
+
+			BUnwarpper buLocal = new BUnwarpper(srcSeq, tgtSeq, srcLandmarks, tgtLandmarks, srcMask, tgtMask,
+					inSubsampleFactor.getValue(), inIniDef.getValue().getNumber(), inFnlDef.getValue().getNumber(), 0,
+					inDivWeight.getValue(), inCurlWeight.getValue(), inLandmarkWeight.getValue(), inImageWeight.getValue(),
+					inConsistencyWeight.getValue(), inStopThreshold.getValue(), inShowProcess.getValue() ? 2 : 1,
+					inShowProcess.getValue(), inMode.getValue().getNumber(), (progress, message, data) -> {
+						notifyProgress(progress, message);
+						return false;
+					});
+			bu = buLocal;
+			bu.run();
+
+			if (!Thread.currentThread().isInterrupted()) {
+				Sequence srcTgtCopySeq = SequenceUtil.getCopy(srcTgtSeq);
+				bu.getRegisteredSource(srcTgtCopySeq);
+				outSrcSeq.setValue(srcTgtSeq);
+				addSequence(srcTgtCopySeq);
+
+				outCxSourceToTarget.setValue(bu.getCxSourceToTarget());
+				outCySourceToTarget.setValue(bu.getCxSourceToTarget());
+				outIntervals.setValue(bu.getIntervals());
+
+				if (inMode.getValue() != RegistrationModeEnum.MONO) {
+					Sequence tgtTgtCopySeq = SequenceUtil.getCopy(tgtTgtSeq);
+					bu.getRegisteredTarget(tgtTgtCopySeq);
+					outTgtSeq.setValue(tgtTgtCopySeq);
+					addSequence(tgtTgtCopySeq);
+
+					outCxTargetToSource.setValue(bu.getCxSourceToTarget());
+					outCyTargetToSource.setValue(bu.getCxSourceToTarget());
+				}
+			}
+		} finally {
+			notifyProgress(0, "");
+			Runtime.getRuntime().gc();
+		}
 	}
 
 	/**
@@ -343,50 +320,22 @@ public class BUnwarpSimple extends BUnwarp {
 		return 0;
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * @see plugins.adufour.ezplug.EzPlug#stopExecution()
-	 */
-	@Override
-	public void stopExecution() {
-		isPluginInterrupted = true;
-		if (but != null && but.isAlive()) {
-			try {
-				but.join();
-				but = null;
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
-	}
-
-	/*
-	 * (non-Javadoc)
-	 * @see plugins.adufour.ezplug.EzPlug#clean()
-	 */
-	@Override
-	public void clean() {}
-
-	/*
-	 * (non-Javadoc)
-	 * @see plugins.danyfel80.registration.bunwarp.BUnwarp#restoreAll()
-	 */
 	@Override
 	public void restoreAll() {
-		ungrayInputImages();
-		if (getUI() != null) {
-			getUI().setProgressBarMessage("");
-			getUI().setProgressBarValue(0);
-		}
-		Runtime.getRuntime().gc();
+		// ungrayInputImages();
+		// if (getUI() != null) {
+		// getUI().setProgressBarMessage("");
+		// getUI().setProgressBarValue(0);
+		// }
+		// Runtime.getRuntime().gc();
 	}
-
-	/**
-	 * Restore original input sequences.
-	 */
-	private void ungrayInputImages() {
-		srcSeq.setImage(0, 0, originalSrcIBI);
-		tgtSeq.setImage(0, 0, originalTgtIBI);
-	};
+	//
+	// /**
+	// * Restore original input sequences.
+	// */
+	// private void ungrayInputImages() {
+	// srcSeq.setImage(0, 0, originalSrcImage);
+	// tgtSeq.setImage(0, 0, originalTgtImage);
+	// };
 
 }

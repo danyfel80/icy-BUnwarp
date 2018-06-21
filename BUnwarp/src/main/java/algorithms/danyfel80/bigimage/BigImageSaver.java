@@ -7,17 +7,19 @@ import java.io.IOException;
 
 import icy.file.FileUtil;
 import icy.image.IcyBufferedImage;
+import icy.image.IcyBufferedImageUtil;
 import icy.sequence.MetaDataUtil;
 import icy.type.DataType;
 import icy.util.OMEUtil;
 import loci.common.services.ServiceException;
 import loci.formats.FormatException;
 import loci.formats.IFormatWriter;
-import loci.formats.ome.OMEXMLMetadataImpl;
+import loci.formats.meta.MetadataRetrieve;
 import loci.formats.out.OMETiffWriter;
 import loci.formats.out.TiffWriter;
 import loci.formats.tiff.IFD;
 import loci.formats.tiff.TiffCompression;
+import ome.xml.meta.OMEXMLMetadata;
 
 /**
  * This class allows to save big images by tiles.
@@ -27,17 +29,17 @@ import loci.formats.tiff.TiffCompression;
 public class BigImageSaver {
 	private File outFile;
 
-	private int				sizeX;
-	private int				sizeY;
-	private int				sizeC;
-	private DataType	dataType;
+	private int sizeX;
+	private int sizeY;
+	private int sizeC;
+	private DataType dataType;
 
-	private int	tileSizeX;
-	private int	tileSizeY;
-	private IFD	ifd;
+	private int tileSizeX = 256;
+	private int tileSizeY = 256;
+	private IFD ifd;
 
-	private boolean	isSeparateChannels;
-	private boolean	isLittleEndian;
+	private boolean isSeparateChannels;
+	private boolean isLittleEndian;
 
 	private TiffWriter writer;
 
@@ -47,13 +49,17 @@ public class BigImageSaver {
 
 	public BigImageSaver(File outFile, Dimension tgtDim, int sizeC, DataType dataType, Dimension tileSize)
 			throws ServiceException, FormatException, IOException {
+
+		int width = tileSize.width;
+		int height = tileSize.height;
+		if (width % 256 != 0 || height % 256 != 0) {
+			throw new FormatException("tile size must be multiple of 256 on width and height.");
+		}
 		this.outFile = outFile;
 		this.sizeX = tgtDim.width;
 		this.sizeY = tgtDim.height;
 		this.sizeC = sizeC;
 		this.dataType = dataType;
-		this.tileSizeX = tileSize.width;
-		this.tileSizeY = tileSize.height;
 		initializeWriter();
 		writer.setSeries(0);
 	}
@@ -62,11 +68,11 @@ public class BigImageSaver {
 		writer = new OMETiffWriter();
 		writer.setCompression(TiffCompression.LZW.getCodecName());
 
-		OMEXMLMetadataImpl mdi = OMEUtil.createOMEMetadata();
+		OMEXMLMetadata mdi = OMEUtil.createOMEXMLMetadata();
 		this.isSeparateChannels = getSeparateChannelFlag(writer, sizeC, dataType);
 		MetaDataUtil.setMetaData(mdi, sizeX, sizeY, sizeC, 1, 1, dataType, isSeparateChannels);
 
-		writer.setMetadataRetrieve(mdi);
+		writer.setMetadataRetrieve((MetadataRetrieve) mdi);
 		writer.setWriteSequentially(true);
 		writer.setInterleaved(false);
 		writer.setBigTiff(true);
@@ -90,11 +96,13 @@ public class BigImageSaver {
 	 * Return the separate channel flag from specified writer and color space
 	 */
 	private static boolean getSeparateChannelFlag(IFormatWriter writer, int numChannel, DataType dataType) {
-		// OMETiffWriter fixed, we can now always separate channel for this writer
-		// Note: not working on big images.
-		//if (writer instanceof OMETiffWriter) return true;
-
-		// others writers does not support separated channel
+		// Only if we have more than 1 channel
+		if (numChannel > 1) {
+			// Only channel amount is different than three and data type size is more
+			// than 1 byte
+			return (numChannel != 3) || (dataType.getSize() > 1);
+		}
+		// Otherwise use fused channels
 		return false;
 	}
 
@@ -107,27 +115,59 @@ public class BigImageSaver {
 
 		byte[] data = null;
 
+		int tx = 0, ty = 0;
+		if (srcIBI != null) {
+			tx = (srcIBI.getWidth() + tileSizeX - 1) / tileSizeX;
+			ty = (srcIBI.getHeight() + tileSizeY - 1) / tileSizeY;
+		}
+
 		// separated channel data
 		if (isSeparateChannels) {
 			for (int c = 0; c < sizeC; c++) {
-
 				if (srcIBI != null) {
-					data = srcIBI.getRawData(c, isLittleEndian);
-					writer.saveBytes(c, data, ifd, tgtPoint.x, tgtPoint.y, srcIBI.getSizeX(), srcIBI.getSizeY());
+					for (int ti = 0; ti < tx; ti++) {
+						int currentTilePosX = ti * tileSizeX;
+						int currTileSizeX = (currentTilePosX + tileSizeX < srcIBI.getWidth()) ? tileSizeX
+								: srcIBI.getWidth() - currentTilePosX;
+						for (int tj = 0; tj < ty; tj++) {
+							int currentTilePosY = tj * tileSizeY;
+							int currTileSizeY = (currentTilePosY + tileSizeY < srcIBI.getHeight()) ? tileSizeY
+									: srcIBI.getHeight() - currentTilePosY;
+							IcyBufferedImage srcTile = IcyBufferedImageUtil.getSubImage(srcIBI, currentTilePosX, currentTilePosY,
+									currTileSizeX, currTileSizeY);
+							data = srcIBI.getRawData(c, isLittleEndian);
+							writer.saveBytes(c, data, ifd, tgtPoint.x + currentTilePosX, tgtPoint.y + currentTilePosY,
+									srcTile.getSizeX(), srcTile.getSizeY());
+						}
+					}
 				}
 			}
-		} else {
+		}
+		// All Channels in the same data block
+		else {
 			if (srcIBI != null) {
-				data = srcIBI.getRawData(isLittleEndian);
-				try {
-				writer.saveBytes(0, data, ifd, tgtPoint.x, tgtPoint.y, srcIBI.getSizeX(), srcIBI.getSizeY());
-				}
-				catch (Exception e) {
-					System.out.println(data);
-					System.out.println(ifd);
-					System.out.println(tgtPoint);
-					System.out.println(srcIBI.getBounds());
-					throw e;
+				for (int ti = 0; ti < tx; ti++) {
+					int currentTilePosX = ti * tileSizeX;
+					int currTileSizeX = (currentTilePosX + tileSizeX < srcIBI.getWidth()) ? tileSizeX
+							: srcIBI.getWidth() - currentTilePosX;
+					for (int tj = 0; tj < ty; tj++) {
+						int currentTilePosY = tj * tileSizeY;
+						int currTileSizeY = (currentTilePosY + tileSizeY < srcIBI.getHeight()) ? tileSizeY
+								: srcIBI.getHeight() - currentTilePosY;
+						IcyBufferedImage srcTile = IcyBufferedImageUtil.getSubImage(srcIBI, currentTilePosX, currentTilePosY,
+								currTileSizeX, currTileSizeY);
+						data = srcTile.getRawData(isLittleEndian);
+						try {
+							writer.saveBytes(0, data, ifd, tgtPoint.x + currentTilePosX, tgtPoint.y + currentTilePosY,
+									srcTile.getSizeX(), srcTile.getSizeY());
+						} catch (Exception e) {
+							System.out.println(data);
+							System.out.println(ifd);
+							System.out.println(tgtPoint);
+							System.out.println(srcIBI.getBounds());
+							throw e;
+						}
+					}
 				}
 			}
 		}
