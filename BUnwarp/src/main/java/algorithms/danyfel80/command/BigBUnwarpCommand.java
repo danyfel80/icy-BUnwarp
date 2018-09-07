@@ -18,17 +18,6 @@
  */
 package algorithms.danyfel80.command;
 
-import java.util.List;
-
-import org.apache.commons.io.FilenameUtils;
-
-import algorithms.danyfel80.registration.bunwarp.MaximumScaleDeformationEnum;
-import algorithms.danyfel80.registration.bunwarp.MinimumScaleDeformationEnum;
-import algorithms.danyfel80.registration.bunwarp.RegistrationModeEnum;
-import algorithms.danyfel80.registration.bunwarp.big.BigBUnwarpper;
-import plugins.kernel.roi.roi2d.ROI2DPoint;
-import plugins.kernel.roi.roi2d.ROI2DPolygon;
-
 /**
  * @author Daniel Felipe Gonzalez Obando
  *
@@ -37,9 +26,9 @@ public class BigBUnwarpCommand implements CommandProcess<String> {
 
 	private static final String COMMAND = "big-unwarp";
 	private static final String NAME = "Big Unwarp";
-	private static final String[] ARGS_DESCRIPTION = new String[] { "sourceImg", "targetImg", "transformedSourceImg",
+	private static final String[] ARGS_DESCRIPTION = new String[] {"sourceImg", "targetImg", "transformedSourceImg",
 			"transformedTargetImg", "subsampleFactor", "minimumDeformation(0-3)", "maximumDeformation(0-4)", "wDiv", "wCurl",
-			"wImg", "wConsistency", "stopThreshold", "registrationMode(0: fast, 1:accurate, 2:mono)" };
+			"wImg", "wConsistency", "stopThreshold", "registrationMode(0: fast, 1:accurate, 2:mono)"};
 	private static final String DESCRIPTION = "Performs large image registration using the BUnwarp method from Argandas";
 
 	private String[] args;
@@ -72,79 +61,80 @@ public class BigBUnwarpCommand implements CommandProcess<String> {
 
 	@Override
 	public String call() throws Exception {
-		String srcPath = this.args[0];
-		String tgtPath = this.args[1];
-
-		String transformedSrcPath = this.args[2];
-		String transformedTgtPath = this.args[3];
-
-		String srcResultPath;
-		String tgtResultPath;
-		String transformedSrcResultPath;
-		String transformedTgtResultPath;
-
-		int subsampleFactor = Integer.parseInt(this.args[4]);
-		MinimumScaleDeformationEnum iniDef = MinimumScaleDeformationEnum.values()[Integer.parseInt(this.args[5])];
-		MaximumScaleDeformationEnum finDef = MaximumScaleDeformationEnum.values()[Integer.parseInt(this.args[6])];
-
-		double divWeight = Double.parseDouble(this.args[7]);
-		double curlWeight = Double.parseDouble(this.args[8]);
-		double imageWeight = Double.parseDouble(this.args[9]);
-		double consistencyWeight = Double.parseDouble(this.args[10]);
-
-		double stopThreshold = Double.parseDouble(this.args[11]);
-
-		RegistrationModeEnum mode = RegistrationModeEnum.values()[Integer.parseInt(this.args[12])];
-
-		srcResultPath = FilenameUtils.getFullPath(srcPath);
-		srcResultPath += FilenameUtils.getBaseName(srcPath);
-		srcResultPath += "_BUnwarp.tif";
-		// srcResultPath += FilenameUtils.getExtension(srcPath);
-
-		tgtResultPath = FilenameUtils.getFullPath(tgtPath);
-		tgtResultPath += FilenameUtils.getBaseName(tgtPath);
-		tgtResultPath += "_BUnwarp.tif";
-		// tgtResultPath += FilenameUtils.getExtension(tgtPath);
-
-		transformedSrcResultPath = FilenameUtils.getFullPath(transformedSrcPath);
-		transformedSrcResultPath += FilenameUtils.getBaseName(transformedSrcPath);
-		transformedSrcResultPath += "_BUnwarp.tif";
-		// transformedSrcResultPath +=
-		// FilenameUtils.getExtension(transformedSrcPath);
-
-		transformedTgtResultPath = FilenameUtils.getFullPath(transformedTgtPath);
-		transformedTgtResultPath += FilenameUtils.getBaseName(transformedTgtPath);
-		transformedTgtResultPath += "_BUnwarp.tif";
-		// transformedTgtResultPath +=
-		// FilenameUtils.getExtension(transformedTgtPath);
-
-		long startTime = System.nanoTime();
-
-		List<ROI2DPoint> srcLandmarks = null;
-		List<ROI2DPoint> tgtLandmarks = null;
-
-		ROI2DPolygon srcMask = null;
-		ROI2DPolygon tgtMask = null;
-
-		BigBUnwarpper bu = new BigBUnwarpper(srcPath, tgtPath, transformedSrcPath, transformedTgtPath, srcResultPath,
-				tgtResultPath, transformedSrcResultPath, transformedTgtResultPath, srcLandmarks, tgtLandmarks, srcMask, tgtMask,
-				subsampleFactor, iniDef.getNumber(), finDef.getNumber(), divWeight, curlWeight,
-				0/* inLandmarkWeight.getValue() */, imageWeight, consistencyWeight, stopThreshold, false, mode.getNumber(),
-				(progress, message, data) -> {
-					return false;
-				});
-		Thread but = new Thread(bu);
-		but.start();
-		try {
-			but.join();
-			but = null;
-		} catch (InterruptedException e) {
-			System.err.println("Thread interrupted: " + e.getMessage());
-		}
-
-		long endTime = System.nanoTime();
-		long totalTime = (endTime - startTime);
-		return String.format("Done (%d millisecs)", totalTime / 1000000);
+		return null;
+		//		String srcPath = this.args[0];
+		//		String tgtPath = this.args[1];
+		//
+		//		String transformedSrcPath = this.args[2];
+		//		String transformedTgtPath = this.args[3];
+		//
+		//		String srcResultPath;
+		//		String tgtResultPath;
+		//		String transformedSrcResultPath;
+		//		String transformedTgtResultPath;
+		//
+		//		int subsampleFactor = Integer.parseInt(this.args[4]);
+		//		MinimumScaleDeformationEnum iniDef = MinimumScaleDeformationEnum.values()[Integer.parseInt(this.args[5])];
+		//		MaximumScaleDeformationEnum finDef = MaximumScaleDeformationEnum.values()[Integer.parseInt(this.args[6])];
+		//
+		//		double divWeight = Double.parseDouble(this.args[7]);
+		//		double curlWeight = Double.parseDouble(this.args[8]);
+		//		double imageWeight = Double.parseDouble(this.args[9]);
+		//		double consistencyWeight = Double.parseDouble(this.args[10]);
+		//
+		//		double stopThreshold = Double.parseDouble(this.args[11]);
+		//
+		//		RegistrationModeEnum mode = RegistrationModeEnum.values()[Integer.parseInt(this.args[12])];
+		//
+		//		srcResultPath = FilenameUtils.getFullPath(srcPath);
+		//		srcResultPath += FilenameUtils.getBaseName(srcPath);
+		//		srcResultPath += "_BUnwarp.tif";
+		//		// srcResultPath += FilenameUtils.getExtension(srcPath);
+		//
+		//		tgtResultPath = FilenameUtils.getFullPath(tgtPath);
+		//		tgtResultPath += FilenameUtils.getBaseName(tgtPath);
+		//		tgtResultPath += "_BUnwarp.tif";
+		//		// tgtResultPath += FilenameUtils.getExtension(tgtPath);
+		//
+		//		transformedSrcResultPath = FilenameUtils.getFullPath(transformedSrcPath);
+		//		transformedSrcResultPath += FilenameUtils.getBaseName(transformedSrcPath);
+		//		transformedSrcResultPath += "_BUnwarp.tif";
+		//		// transformedSrcResultPath +=
+		//		// FilenameUtils.getExtension(transformedSrcPath);
+		//
+		//		transformedTgtResultPath = FilenameUtils.getFullPath(transformedTgtPath);
+		//		transformedTgtResultPath += FilenameUtils.getBaseName(transformedTgtPath);
+		//		transformedTgtResultPath += "_BUnwarp.tif";
+		//		// transformedTgtResultPath +=
+		//		// FilenameUtils.getExtension(transformedTgtPath);
+		//
+		//		long startTime = System.nanoTime();
+		//
+		//		List<ROI2DPoint> srcLandmarks = null;
+		//		List<ROI2DPoint> tgtLandmarks = null;
+		//
+		//		ROI2DPolygon srcMask = null;
+		//		ROI2DPolygon tgtMask = null;
+		//
+		//		BigBUnwarpper bu = new BigBUnwarpper(srcPath, tgtPath, transformedSrcPath, transformedTgtPath, srcResultPath,
+		//				tgtResultPath, transformedSrcResultPath, transformedTgtResultPath, srcLandmarks, tgtLandmarks, srcMask, tgtMask,
+		//				subsampleFactor, iniDef.getNumber(), finDef.getNumber(), divWeight, curlWeight,
+		//				0/* inLandmarkWeight.getValue() */, imageWeight, consistencyWeight, stopThreshold, false, mode.getNumber(),
+		//				(progress, message, data) -> {
+		//					return false;
+		//				});
+		//		Thread but = new Thread(bu);
+		//		but.start();
+		//		try {
+		//			but.join();
+		//			but = null;
+		//		} catch (InterruptedException e) {
+		//			System.err.println("Thread interrupted: " + e.getMessage());
+		//		}
+		//
+		//		long endTime = System.nanoTime();
+		//		long totalTime = (endTime - startTime);
+		//		return String.format("Done (%d millisecs)", totalTime / 1000000);
 	}
 
 }

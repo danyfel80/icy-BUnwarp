@@ -1,11 +1,7 @@
 apply plugin: 'java-library'
 apply plugin: 'eclipse'
 
-version = '1.0.1.0'
-
-task wrapper(type: Wrapper) {
-	gradleVersion = '4.3'
-}
+version = '1.1.0'
 
 configurations {
 	extraLibs // configuration that holds jars to include in the jar
@@ -15,14 +11,6 @@ repositories {
 	jcenter()
 	mavenCentral()
 	
-	maven {
-		name 'Unidata'
-		url 'https://artifacts.unidata.ucar.edu/content/repositories/unidata-releases'
-	}
-	maven {
-		url 'https://artifacts.openmicroscopy.org/artifactory/maven/'
-	}
-	
 	flatDir {
 		dirs "$rootProject.projectDir/jars/BigImageTools"
 	}
@@ -31,22 +19,29 @@ repositories {
 println "ICY_HOME=${System.env.ICY_HOME}"
 dependencies {
 	// 1.1 External libraries
-	//implementation 'ome:bio-formats-tools:5.7.2'
-	//implementation 'javax.vecmath:vecmath:1.5.2'
 	extraLibs 'org.ehcache:ehcache:3.4.0'
 	extraLibs 'javax.cache:cache-api:1.0.0'
-	extraLibs ':BigImageTools:1.0.0'
+	extraLibs 'org.apache.commons:commons-math3:3.0'
 	
 	configurations.implementation.extendsFrom(configurations.extraLibs)
 
 	// 1.2. Icy libraries
 	implementation files("${System.env.ICY_HOME}/icy.jar") // Icy core
+	
+	implementation files("${System.env.ICY_HOME}/lib/bioformats.jar") // bioformats
+	implementation files("${System.env.ICY_HOME}/lib/vecmath.jar") // vecmath
+		implementation files("${System.env.ICY_HOME}/lib/jai_core.jar") // JAI
+	
 	implementation files("${System.env.ICY_HOME}/plugins/adufour/ezplug/EzPlug.jar") // EzPlug
 	implementation files("${System.env.ICY_HOME}/plugins/adufour/blocks/Blocks.jar") // Blocks
 	implementation files("${System.env.ICY_HOME}/plugins/adufour/protocols/Protocols.jar") // Protocols
 	implementation files("${System.env.ICY_HOME}/plugins/adufour/thresholder/Thresholder.jar") // Thresholder
-	implementation files("${System.env.ICY_HOME}/lib/bioformats.jar") // bioformats
-	implementation files("${System.env.ICY_HOME}/lib/vecmath.jar") // substance UI
+	implementation files("${System.env.ICY_HOME}/plugins/danyfel80/bigimage/io/BigImageTools.jar") // Big image tools
+	
+	//extraLibs ':BigImageTools:0.2.1'
+	
+	testImplementation 'org.hamcrest:hamcrest-all:1.3'
+	testImplementation 'junit:junit:4.12'
 }
 
 // Make an icy plugin project
