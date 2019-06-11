@@ -374,8 +374,10 @@ public class BUnwarpRegistrationBig {
 		} catch (Exception e) {
 			throw new BUnwarpRegistrationBigException("Could not import input images.", e);
 		}
+		
 		if (Thread.interrupted())
 			throw new InterruptedException();
+		
 		try {
 			performRegistration();
 		} catch (InterruptedException e) {
@@ -383,8 +385,10 @@ public class BUnwarpRegistrationBig {
 		} catch (Exception e) {
 			throw new BUnwarpRegistrationBigException("Could not perform the registration.", e);
 		}
+		
 		if (Thread.interrupted())
 			throw new InterruptedException();
+		
 		try {
 			applyTransformationOnTransformedImages();
 		} catch (InterruptedException e) {
@@ -396,33 +400,30 @@ public class BUnwarpRegistrationBig {
 
 	private void importSubsampledSequences() throws Exception {
 		importSubsampledSourceSequence();
-		notifyProgressOutput(subsampledSourceSequence);
 		importSubsampledTargetSequence();
-		notifyProgressOutput(subsampledTargetSequence);
 	}
 
 	private void importSubsampledSourceSequence() throws Exception {
 		subsampledSourceResolution = LargeSequenceHelper.getResolutionLevel(getSourceFile(), REGISTERED_MAX_DIMENSION);
-		LargeSequenceImporter importer = new LargeSequenceImporter();
-		importer.setFilePath(getSourceFile().toPath());
-		importer.setTargetResolution(subsampledSourceResolution);
-		importer.addProgressListener((progress, message, data) -> {
-			notifyProgress(progress, String.format("Loading source image (%s)", message));
-			return true;
-		});
-		subsampledSourceSequence = importer.call();
+		subsampledSourceSequence = importSubsampledSequence(getSourceFile(), subsampledSourceResolution, "source");
+		notifyProgressOutput(subsampledSourceSequence);
 	}
 
 	private void importSubsampledTargetSequence() throws Exception {
 		subsampledTargetResolution = LargeSequenceHelper.getResolutionLevel(getTargetFile(), REGISTERED_MAX_DIMENSION);
+		subsampledTargetSequence = importSubsampledSequence(getTargetFile(), subsampledTargetResolution, "target");
+		notifyProgressOutput(subsampledTargetSequence);
+	}
+	
+	private Sequence importSubsampledSequence(File file, int resolution, String label) throws Exception {
 		LargeSequenceImporter importer = new LargeSequenceImporter();
-		importer.setFilePath(getTargetFile().toPath());
-		importer.setTargetResolution(subsampledTargetResolution);
+		importer.setFilePath(file.toPath());
+		importer.setTargetResolution(subsampledSourceResolution);
 		importer.addProgressListener((progress, message, data) -> {
-			notifyProgress(progress, String.format("Loading target image (%s)", message));
+			notifyProgress(progress, String.format("Loading "+label+" image (%s)", message));
 			return true;
 		});
-		subsampledTargetSequence = importer.call();
+		return importer.call();
 	}
 
 	private void performRegistration() throws BUnwarpRegistrationBigException, InterruptedException {
