@@ -4,6 +4,9 @@ import java.awt.Dimension;
 import java.awt.geom.Point2D;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -17,16 +20,25 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+
 import algorithms.danyfel80.io.sequence.large.LargeSequenceExporter;
 import algorithms.danyfel80.io.sequence.large.LargeSequenceHelper;
 import algorithms.danyfel80.io.sequence.large.LargeSequenceImporter;
 import danyfel80.registration.bspline.classic.BUnwarpRegistration;
 import danyfel80.registration.bspline.classic.DeformationScale;
 import danyfel80.registration.bspline.classic.RegistrationMode;
+import danyfel80.registration.bspline.classic.Transformation;
+import icy.common.exception.UnsupportedFormatException;
 import icy.common.listener.DetailedProgressListener;
+import icy.file.FileUtil;
+import icy.roi.ROI;
 import icy.sequence.MetaDataUtil;
 import icy.sequence.Sequence;
+import icy.sequence.SequenceUtil;
 import icy.type.DataType;
+import icy.util.XMLUtil;
 import loci.formats.ome.OMEXMLMetadata;
 import plugins.kernel.roi.roi2d.ROI2DArea;
 import plugins.kernel.roi.roi2d.ROI2DPoint;
@@ -367,35 +379,42 @@ public class BUnwarpRegistrationBig {
 	}
 
 	public void compute() throws BUnwarpRegistrationBigException, InterruptedException {
+		long startTime = System.currentTimeMillis();
+		long endTime;
 		try {
 			importSubsampledSequences();
-		} catch (InterruptedException e) {
-			throw e;
 		} catch (Exception e) {
 			throw new BUnwarpRegistrationBigException("Could not import input images.", e);
 		}
-		
+		endTime = System.currentTimeMillis();
+		System.out.println("Images loaded: " + (endTime - startTime) + "ms");
+
 		if (Thread.interrupted())
 			throw new InterruptedException();
-		
+
+		startTime = System.currentTimeMillis();
 		try {
 			performRegistration();
-		} catch (InterruptedException e) {
-			throw e;
 		} catch (Exception e) {
 			throw new BUnwarpRegistrationBigException("Could not perform the registration.", e);
 		}
-		
+		endTime = System.currentTimeMillis();
+		System.out.println("Transformation computed: " + (endTime - startTime) + "ms");
+
 		if (Thread.interrupted())
 			throw new InterruptedException();
-		
+
+		startTime = System.currentTimeMillis();
 		try {
 			applyTransformationOnTransformedImages();
 		} catch (InterruptedException e) {
-			throw e;
+			throw new BUnwarpRegistrationBigException("Could not apply transformation to large images: Interrupted", e);
 		} catch (Exception e) {
-			throw new BUnwarpRegistrationBigException("Could not apply transformation to large images.", e);
+			throw new BUnwarpRegistrationBigException("Could not apply transformation to large images:\n" + e.getMessage(),
+					e);
 		}
+		endTime = System.currentTimeMillis();
+		System.out.println("Registered images saved: " + (endTime - startTime) + "ms");
 	}
 
 	private void importSubsampledSequences() throws Exception {
@@ -406,21 +425,27 @@ public class BUnwarpRegistrationBig {
 	private void importSubsampledSourceSequence() throws Exception {
 		subsampledSourceResolution = LargeSequenceHelper.getResolutionLevel(getSourceFile(), REGISTERED_MAX_DIMENSION);
 		subsampledSourceSequence = importSubsampledSequence(getSourceFile(), subsampledSourceResolution, "source");
+		List<ROI> rois = subsampledSourceSequence.getROIs();
+		subsampledSourceSequence = SequenceUtil.convertToType(subsampledSourceSequence, DataType.UBYTE, true, true);
+		subsampledSourceSequence.addROIs(rois, false);
 		notifyProgressOutput(subsampledSourceSequence);
 	}
 
 	private void importSubsampledTargetSequence() throws Exception {
 		subsampledTargetResolution = LargeSequenceHelper.getResolutionLevel(getTargetFile(), REGISTERED_MAX_DIMENSION);
 		subsampledTargetSequence = importSubsampledSequence(getTargetFile(), subsampledTargetResolution, "target");
+		List<ROI> rois = subsampledTargetSequence.getROIs();
+		subsampledTargetSequence = SequenceUtil.convertToType(subsampledTargetSequence, DataType.UBYTE, true, true);
+		subsampledTargetSequence.addROIs(rois, false);
 		notifyProgressOutput(subsampledTargetSequence);
 	}
-	
+
 	private Sequence importSubsampledSequence(File file, int resolution, String label) throws Exception {
 		LargeSequenceImporter importer = new LargeSequenceImporter();
 		importer.setFilePath(file.toPath());
 		importer.setTargetResolution(subsampledSourceResolution);
 		importer.addProgressListener((progress, message, data) -> {
-			notifyProgress(progress, String.format("Loading "+label+" image (%s)", message));
+			notifyProgress(progress, String.format("Loading " + label + " image (%s)", message));
 			return true;
 		});
 		return importer.call();
@@ -501,32 +526,40 @@ public class BUnwarpRegistrationBig {
 	}
 
 	private void applyTransformationOnTransformedImages() throws InterruptedException {
-		ThreadPoolExecutor transformExportThreads = (ThreadPoolExecutor) Executors.newFixedThreadPool(2);
+		ThreadPoolExecutor transformExportThreads = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		Future<Void> transformationOnSourceFuture = transformExportThreads.submit(getTransformationOnSourceImageTask());
-		Future<Void> transformationOnTargetFuture = null;
-		if (getRegistrationMode() != RegistrationMode.MONO) {
-			transformationOnTargetFuture = transformExportThreads.submit(getTransformationOnTargetImageTask());
-		}
 		transformExportThreads.shutdown();
 		try {
 			try {
 				transformationOnSourceFuture.get();
 			} catch (ExecutionException e) {
-				if (transformationOnTargetFuture != null)
-					transformationOnTargetFuture.cancel(true);
-				throw new BUnwarpRegistrationBigException("Could not save transformed source image", e);
-			}
-			if (transformationOnTargetFuture != null) {
-				try {
-					transformationOnTargetFuture.get();
-				} catch (ExecutionException e) {
-					throw new BUnwarpRegistrationBigException("Could not save transformed target image", e);
-				}
+				throw new BUnwarpRegistrationBigException("Could not save transformed source image:\n" + e.getMessage(), e);
 			}
 		} finally {
 			transformExportThreads.shutdownNow();
-			if (!transformExportThreads.awaitTermination(1, TimeUnit.SECONDS)) {
-				throw new BUnwarpRegistrationBigException("Transformation writer thread still did not finished.");
+			if (!transformExportThreads.awaitTermination(10, TimeUnit.SECONDS)) {
+				throw new BUnwarpRegistrationBigException(
+						"Transformation writer thread still did not finished writing source image.");
+			}
+		}
+
+		if (getRegistrationMode() != RegistrationMode.MONO) {
+			transformExportThreads = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
+			Future<Void> transformationOnTargetFuture = transformExportThreads.submit(getTransformationOnTargetImageTask());
+			transformExportThreads.shutdown();
+			try {
+				try {
+					transformationOnTargetFuture.get();
+				} catch (ExecutionException e) {
+					throw new BUnwarpRegistrationBigException("Could not save transformed target image:\n" + e.getMessage(), e);
+				}
+
+			} finally {
+				transformExportThreads.shutdownNow();
+				if (!transformExportThreads.awaitTermination(10, TimeUnit.SECONDS)) {
+					throw new BUnwarpRegistrationBigException(
+							"Transformation writer thread still did not finished writing target image.");
+				}
 			}
 		}
 
@@ -565,6 +598,8 @@ public class BUnwarpRegistrationBig {
 			} finally {
 				tileProvider.close();
 			}
+			applyTransformationOnSourceROIs();
+
 		} catch (InterruptedException e) {
 			throw e;
 		} catch (Exception e) {
@@ -603,6 +638,64 @@ public class BUnwarpRegistrationBig {
 		return sourceTileProvider;
 	}
 
+	private void applyTransformationOnSourceROIs() throws InterruptedException, IOException {
+		OMEXMLMetadata outputSourceImageMetadata;
+		OMEXMLMetadata outputTargetImageMetadata;
+		OMEXMLMetadata outputSourceTImageMetadata;
+		try {
+			outputSourceImageMetadata = (OMEXMLMetadata) LargeSequenceHelper.getImageMetadata(transformedSourceFile);
+			outputTargetImageMetadata = (OMEXMLMetadata) LargeSequenceHelper.getImageMetadata(transformedTargetFile);
+			outputSourceTImageMetadata = (OMEXMLMetadata) LargeSequenceHelper.getImageMetadata(transformedSourceOutputFile);
+		} catch (UnsupportedFormatException | IOException e) {
+			throw new IOException("Could not read source output image metadata", e);
+		}
+		Sequence tempTOutputS = new Sequence(outputSourceTImageMetadata,
+				MetaDataUtil.getName(outputSourceTImageMetadata, 0));
+		tempTOutputS.setFilename(transformedSourceOutputFile.getPath());
+
+		List<ROI2DPoint> sourceRois = retrieveRoisFromFileXML(transformedSourceFile.toPath());
+		Point2D outputSourceSize = new Point2D.Double(MetaDataUtil.getSizeX(outputSourceImageMetadata, 0),
+				MetaDataUtil.getSizeY(outputSourceImageMetadata, 0));
+		Point2D subsampledSourceSize = new Point2D.Double(subsampledSourceSequence.getWidth(),
+				subsampledSourceSequence.getHeight());
+		Point2D outputTargetSize = new Point2D.Double(MetaDataUtil.getSizeX(outputTargetImageMetadata, 0),
+				MetaDataUtil.getSizeY(outputTargetImageMetadata, 0));
+		Point2D subsampledTargetSize = new Point2D.Double(subsampledTargetSequence.getWidth(),
+				subsampledTargetSequence.getHeight());
+		sourceRois = transformSourceRois(sourceRois, registration.getTransformation(), outputSourceSize,
+				subsampledSourceSize, outputTargetSize, subsampledTargetSize);
+		tempTOutputS.addROIs(sourceRois, false);
+		tempTOutputS.saveXMLData();
+	}
+
+	private List<ROI2DPoint> retrieveRoisFromFileXML(Path file) {
+		String fileName = FileUtil.getFileName(file.toString(), false);
+		Path xmlFile = file.resolveSibling(fileName + ".xml");
+		if (Files.exists(xmlFile)) {
+			Document xml = XMLUtil.loadDocument(xmlFile.toFile());
+			Element rootElement = XMLUtil.getRootElement(xml);
+			Element roisElement = XMLUtil.getElement(rootElement, "rois");
+			List<ROI2DPoint> rois = ROI.loadROIsFromXML(roisElement).stream().filter(r -> r instanceof ROI2DPoint)
+					.map(r -> (ROI2DPoint) r).collect(Collectors.toList());
+			return rois;
+		}
+		return Collections.emptyList();
+	}
+
+	private List<ROI2DPoint> transformSourceRois(List<ROI2DPoint> sourceRois, Transformation transformation,
+			Point2D outputSourceSize, Point2D subsampledSourceSize, Point2D outputTargetSize, Point2D subsampledTargetSize) {
+		return sourceRois.stream().map(r -> {
+			Point2D pos = r.getPosition2D();
+			double[] tPos = new double[] {pos.getX() * subsampledTargetSize.getX() / outputTargetSize.getX(),
+					pos.getY() * subsampledTargetSize.getY() / outputTargetSize.getY()};
+			transformation.transform(tPos[0], tPos[1], tPos, true);
+			ROI2DPoint nr = new ROI2DPoint((tPos[0] * outputSourceSize.getX()) / subsampledSourceSize.getX(),
+					(tPos[1] * outputSourceSize.getY()) / subsampledSourceSize.getY());
+			nr.setName(r.getName());
+			return nr;
+		}).collect(Collectors.toList());
+	}
+
 	private void applyTransformationOnTransformedTargetImage() throws InterruptedException {
 		try (LargeSequenceExporter targetExporter = new LargeSequenceExporter()) {
 			targetExporter.setOutputFilePath(getTransformedTargetOutputFile().toPath());
@@ -622,6 +715,8 @@ public class BUnwarpRegistrationBig {
 			} finally {
 				tileProvider.close();
 			}
+			applyTransformationOnTargetROIs();
+
 		} catch (InterruptedException e) {
 			throw e;
 		} catch (Exception e) {
@@ -658,5 +753,47 @@ public class BUnwarpRegistrationBig {
 		targetTileProvider.setSubsampledSourceSize(subsampledTargetSequence.getDimension2D());
 		targetTileProvider.setSubsampledTargetSize(subsampledSourceSequence.getDimension2D());
 		return targetTileProvider;
+	}
+
+	private void applyTransformationOnTargetROIs() throws IOException {
+		OMEXMLMetadata outputTargetImageMetadata;
+		OMEXMLMetadata outputSourceImageMetadata;
+		OMEXMLMetadata outputTargetTImageMetadata;
+		try {
+			outputTargetImageMetadata = (OMEXMLMetadata) LargeSequenceHelper.getImageMetadata(transformedTargetFile);
+			outputSourceImageMetadata = (OMEXMLMetadata) LargeSequenceHelper.getImageMetadata(transformedSourceFile);
+			outputTargetTImageMetadata = (OMEXMLMetadata) LargeSequenceHelper.getImageMetadata(transformedTargetOutputFile);
+		} catch (UnsupportedFormatException | IOException e) {
+			throw new IOException("Could not read target output image metadata", e);
+		}
+		Sequence tempTOutputT = new Sequence(outputTargetTImageMetadata,
+				MetaDataUtil.getName(outputTargetTImageMetadata, 0));
+		tempTOutputT.setFilename(transformedTargetOutputFile.getPath());
+
+		List<ROI2DPoint> targetRois = retrieveRoisFromFileXML(transformedTargetFile.toPath());
+		Point2D outputTargetSize = new Point2D.Double(MetaDataUtil.getSizeX(outputTargetImageMetadata, 0),
+				MetaDataUtil.getSizeY(outputTargetImageMetadata, 0));
+		Point2D subsampledTargetSize = new Point2D.Double(subsampledTargetSequence.getWidth(),
+				subsampledTargetSequence.getHeight());
+		Point2D outputSourceSize = new Point2D.Double(MetaDataUtil.getSizeX(outputSourceImageMetadata, 0),
+				MetaDataUtil.getSizeY(outputSourceImageMetadata, 0));
+		Point2D subsampledSourceSize = new Point2D.Double(subsampledSourceSequence.getWidth(),
+				subsampledSourceSequence.getHeight());
+		targetRois = transformTargetRois(targetRois, registration.getTransformation(), outputTargetSize,
+				subsampledTargetSize, outputSourceSize, subsampledSourceSize);
+		tempTOutputT.addROIs(targetRois, false);
+		tempTOutputT.saveXMLData();
+	}
+
+	private List<ROI2DPoint> transformTargetRois(List<ROI2DPoint> targetRois, Transformation transformation,
+			Point2D outputTargetSize, Point2D subsampledTargetSize, Point2D outputSourceSize, Point2D subsampledSourceSize) {
+		return targetRois.stream().map(r -> {
+			Point2D pos = r.getPosition2D();
+			double[] tPos = new double[] {(pos.getX() * subsampledSourceSize.getX()) / outputSourceSize.getX(),
+					(pos.getY() * subsampledSourceSize.getY()) / outputSourceSize.getY()};
+			transformation.transform(tPos[0], tPos[1], tPos, false);
+			return new ROI2DPoint((tPos[0] * outputTargetSize.getX()) / subsampledTargetSize.getX(),
+					(tPos[1] * outputTargetSize.getY()) / subsampledTargetSize.getY());
+		}).collect(Collectors.toList());
 	}
 }

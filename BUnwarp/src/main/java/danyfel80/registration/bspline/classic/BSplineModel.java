@@ -704,9 +704,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	public void interpolateD(double[] D) {
 		// Only SplineDegree=3 is implemented
-		D[0] = D[1] = 0.0F;
+		D[0] = D[1] = 0d;
 		for (int j = 0; j < 4; j++) {
-			double sx = 0.0F, sy = 0.0F;
+			double sx = 0d, sy = 0d;
 			int iy = yIndex[j];
 			if (iy != -1) {
 				int p = iy * widthToUse;
@@ -738,9 +738,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	public void interpolateD2(double[] D2) {
 		// Only SplineDegree=3 is implemented
-		D2[0] = D2[1] = D2[2] = 0.0F;
+		D2[0] = D2[1] = D2[2] = 0d;
 		for (int j = 0; j < 4; j++) {
-			double sxy = 0.0F, sxx = 0.0F, syy = 0.0F;
+			double sxy = 0d, sxx = 0d, syy = 0d;
 			int iy = yIndex[j];
 			if (iy != -1) {
 				int p = iy * widthToUse;
@@ -772,9 +772,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	public double interpolateDx() {
 		// Only SplineDegree=3 is implemented
-		double ival = 0.0F;
+		double ival = 0d;
 		for (int j = 0; j < 4; j++) {
-			double s = 0.0F;
+			double s = 0d;
 			int iy = yIndex[j];
 			if (iy != -1) {
 				int p = iy * widthToUse;
@@ -800,9 +800,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	public double interpolateDxDx() {
 		// Only SplineDegree=3 is implemented
-		double ival = 0.0F;
+		double ival = 0d;
 		for (int j = 0; j < 4; j++) {
-			double s = 0.0F;
+			double s = 0d;
 			int iy = yIndex[j];
 			if (iy != -1) {
 				int p = iy * widthToUse;
@@ -828,9 +828,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	public double interpolateDxDy() {
 		// Only SplineDegree=3 is implemented
-		double ival = 0.0F;
+		double ival = 0d;
 		for (int j = 0; j < 4; j++) {
-			double s = 0.0F;
+			double s = 0d;
 			int iy = yIndex[j];
 			if (iy != -1) {
 				int p = iy * widthToUse;
@@ -856,9 +856,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	public double interpolateDy() {
 		// Only SplineDegree=3 is implemented
-		double ival = 0.0F;
+		double ival = 0d;
 		for (int j = 0; j < 4; j++) {
-			double s = 0.0F;
+			double s = 0d;
 			int iy = yIndex[j];
 			if (iy != -1) {
 				int p = iy * widthToUse;
@@ -884,9 +884,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	public double interpolateDyDy() {
 		// Only SplineDegree=3 is implemented
-		double ival = 0.0F;
+		double ival = 0d;
 		for (int j = 0; j < 4; j++) {
-			double s = 0.0F;
+			double s = 0d;
 			int iy = yIndex[j];
 			if (iy != -1) {
 				int p = iy * widthToUse;
@@ -912,9 +912,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	public double interpolateI() {
 		// Only SplineDegree=3 is implemented
-		double ival = 0.0F;
+		double ival = 0d;
 		for (int j = 0; j < 4; j++) {
-			double s = 0.0F;
+			double s = 0d;
 			int iy = yIndex[j];
 			if (iy != -1) {
 				int p = iy * widthToUse;
@@ -1007,7 +1007,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 
 		// Set X indexes
 		// p is the index of the rightmost influencing spline
-		int p = (0.0 <= x)? (ix + 2): (ix + 1);
+		int p = (0d <= x)? (ix + 2): (ix + 1);
 		for (int k = 0; k < 4; p--, k++) {
 			if (coefficientsAreMirrored) {
 				int q = (p < 0)? (-1 - p): (p);
@@ -1019,7 +1019,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		}
 
 		// Set Y indexes
-		p = (0.0 <= y)? (iy + 2): (iy + 1);
+		p = (0d <= y)? (iy + 2): (iy + 1);
 		for (int k = 0; k < 4; p--, k++) {
 			if (coefficientsAreMirrored) {
 				int q = (p < 0)? (-1 - p): (p);
@@ -1031,20 +1031,20 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		}
 
 		// Compute how much the sample depart from an integer position
-		double ex = x - ((0.0 <= x)? (ix): (ix - 1));
-		double ey = y - ((0.0 <= y)? (iy): (iy - 1));
+		double ex = x - ((0d <= x)? (ix): (ix - 1));
+		double ey = y - ((0d <= y)? (iy): (iy - 1));
 
 		// Set X weights for the image and derivative interpolation
-		double s = 1.0F - ex;
-		dxWeight[0] = 0.5F * ex * ex;
-		xWeight[0] = ex * dxWeight[0] / 3.0F; // Bspline03(x-ix-2)
-		dxWeight[3] = -0.5F * s * s;
-		xWeight[3] = s * dxWeight[3] / -3.0F; // Bspline03(x-ix+1)
-		dxWeight[1] = 1.0F - 2.0F * dxWeight[0] + dxWeight[3];
+		double s = 1d - ex;
+		dxWeight[0] = 0.5d * ex * ex;
+		xWeight[0] = ex * dxWeight[0] / 3d; // Bspline03(x-ix-2)
+		dxWeight[3] = -0.5d * s * s;
+		xWeight[3] = s * dxWeight[3] / -3d; // Bspline03(x-ix+1)
+		dxWeight[1] = 1d - 2d * dxWeight[0] + dxWeight[3];
 		//xWeight[1]  = 2.0F / 3.0F + (1.0F + ex) * dxWeight[3]; // Bspline03(x-ix-1);
 		xWeight[1] = MathTools.Bspline03(x - ix - 1);
-		dxWeight[2] = 1.5F * ex * (ex - 4.0F / 3.0F);
-		xWeight[2] = 2.0F / 3.0F - (2.0F - ex) * dxWeight[0]; // Bspline03(x-ix)
+		dxWeight[2] = 1.5d * ex * (ex - 4d / 3d);
+		xWeight[2] = 2d / 3d - (2d - ex) * dxWeight[0]; // Bspline03(x-ix)
 
 		d2xWeight[0] = ex;
 		d2xWeight[1] = s - 2 * ex;
@@ -1052,15 +1052,15 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		d2xWeight[3] = s;
 
 		// Set Y weights for the image and derivative interpolation
-		double t = 1.0F - ey;
-		dyWeight[0] = 0.5F * ey * ey;
-		yWeight[0] = ey * dyWeight[0] / 3.0F;
-		dyWeight[3] = -0.5F * t * t;
-		yWeight[3] = t * dyWeight[3] / -3.0F;
-		dyWeight[1] = 1.0F - 2.0F * dyWeight[0] + dyWeight[3];
-		yWeight[1] = 2.0F / 3.0F + (1.0F + ey) * dyWeight[3];
-		dyWeight[2] = 1.5F * ey * (ey - 4.0F / 3.0F);
-		yWeight[2] = 2.0F / 3.0F - (2.0F - ey) * dyWeight[0];
+		double t = 1d - ey;
+		dyWeight[0] = 0.5d * ey * ey;
+		yWeight[0] = ey * dyWeight[0] / 3d;
+		dyWeight[3] = -0.5d * t * t;
+		yWeight[3] = t * dyWeight[3] / -3d;
+		dyWeight[1] = 1d - 2d * dyWeight[0] + dyWeight[3];
+		yWeight[1] = 2d / 3d + (1d + ey) * dyWeight[3];
+		dyWeight[2] = 1.5d * ey * (ey - 4d / 3d);
+		yWeight[2] = 2d / 3d - (2d - ey) * dyWeight[0];
 
 		d2yWeight[0] = ey;
 		d2yWeight[1] = t - 2 * ey;
@@ -1128,7 +1128,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 
 		// Set X indexes
 		// p is the index of the rightmost influencing spline
-		int p = (0.0 <= x)? (ix + 2): (ix + 1);
+		int p = (0d <= x)? (ix + 2): (ix + 1);
 		for (int k = 0; k < 4; p--, k++) {
 			if (coefficientsAreMirrored) {
 				int q = (p < 0)? (-1 - p): (p);
@@ -1140,7 +1140,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		}
 
 		// Set Y indexes
-		p = (0.0 <= y)? (iy + 2): (iy + 1);
+		p = (0d <= y)? (iy + 2): (iy + 1);
 		for (int k = 0; k < 4; p--, k++) {
 			if (coefficientsAreMirrored) {
 				int q = (p < 0)? (-1 - p): (p);
@@ -1152,20 +1152,20 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		}
 
 		// Compute how much the sample depart from an integer position
-		double ex = x - ((0.0 <= x)? (ix): (ix - 1));
-		double ey = y - ((0.0 <= y)? (iy): (iy - 1));
+		double ex = x - ((0d <= x)? (ix): (ix - 1));
+		double ey = y - ((0d <= y)? (iy): (iy - 1));
 
 		// Set X weights for the image and derivative interpolation
-		double s = 1.0F - ex;
-		dxWeight[0] = 0.5F * ex * ex;
-		xWeight[0] = ex * dxWeight[0] / 3.0F; // Bspline03(x-ix-2)
-		dxWeight[3] = -0.5F * s * s;
-		xWeight[3] = s * dxWeight[3] / -3.0F; // Bspline03(x-ix+1)
-		dxWeight[1] = 1.0F - 2.0F * dxWeight[0] + dxWeight[3];
+		double s = 1d - ex;
+		dxWeight[0] = 0.5d * ex * ex;
+		xWeight[0] = ex * dxWeight[0] / 3d; // Bspline03(x-ix-2)
+		dxWeight[3] = -0.5d * s * s;
+		xWeight[3] = s * dxWeight[3] / -3d; // Bspline03(x-ix+1)
+		dxWeight[1] = 1d - 2d * dxWeight[0] + dxWeight[3];
 		//xWeight[1]  = 2.0F / 3.0F + (1.0F + ex) * dxWeight[3]; // Bspline03(x-ix-1);
 		xWeight[1] = MathTools.Bspline03(x - ix - 1);
-		dxWeight[2] = 1.5F * ex * (ex - 4.0F / 3.0F);
-		xWeight[2] = 2.0F / 3.0F - (2.0F - ex) * dxWeight[0]; // Bspline03(x-ix)
+		dxWeight[2] = 1.5d * ex * (ex - 4d / 3d);
+		xWeight[2] = 2d / 3d - (2d - ex) * dxWeight[0]; // Bspline03(x-ix)
 
 		//d2xWeight[0] = ex;
 		//d2xWeight[1] = s-2*ex;
@@ -1173,15 +1173,15 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		//d2xWeight[3] = s;
 
 		// Set Y weights for the image and derivative interpolation
-		double t = 1.0F - ey;
-		dyWeight[0] = 0.5F * ey * ey;
-		yWeight[0] = ey * dyWeight[0] / 3.0F;
-		dyWeight[3] = -0.5F * t * t;
-		yWeight[3] = t * dyWeight[3] / -3.0F;
-		dyWeight[1] = 1.0F - 2.0F * dyWeight[0] + dyWeight[3];
-		yWeight[1] = 2.0F / 3.0F + (1.0F + ey) * dyWeight[3];
-		dyWeight[2] = 1.5F * ey * (ey - 4.0F / 3.0F);
-		yWeight[2] = 2.0F / 3.0F - (2.0F - ey) * dyWeight[0];
+		double t = 1d - ey;
+		dyWeight[0] = 0.5d * ey * ey;
+		yWeight[0] = ey * dyWeight[0] / 3d;
+		dyWeight[3] = -0.5d * t * t;
+		yWeight[3] = t * dyWeight[3] / -3d;
+		dyWeight[1] = 1d - 2d * dyWeight[0] + dyWeight[3];
+		yWeight[1] = 2d / 3d + (1d + ey) * dyWeight[3];
+		dyWeight[2] = 1.5d * ey * (ey - 4d / 3d);
+		yWeight[2] = 2d / 3d - (2d - ey) * dyWeight[0];
 
 		//d2yWeight[0] = ey;
 		//d2yWeight[1] = t-2*ey;
@@ -1189,9 +1189,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		//d2yWeight[3] = t;
 
 		// Only SplineDegree=3 is implemented
-		double ival = 0.0F;
+		double ival = 0d;
 		for (int j = 0; j < 4; j++) {
-			s = 0.0F;
+			s = 0d;
 			iy = yIndex[j];
 			if (iy != -1) {
 				p = iy * widthToUse;
@@ -1277,7 +1277,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 
 		// Set X indexes
 		// p is the index of the rightmost influencing spline
-		int p = (0.0 <= x)? (ix + 2): (ix + 1);
+		int p = (0d <= x)? (ix + 2): (ix + 1);
 		for (int k = 0; k < 4; p--, k++) {
 			if (coefficientsAreMirrored) {
 				int q = (p < 0)? (-1 - p): (p);
@@ -1289,7 +1289,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		}
 
 		// Set Y indexes
-		p = (0.0 <= y)? (iy + 2): (iy + 1);
+		p = (0d <= y)? (iy + 2): (iy + 1);
 		for (int k = 0; k < 4; p--, k++) {
 			if (coefficientsAreMirrored) {
 				int q = (p < 0)? (-1 - p): (p);
@@ -1301,20 +1301,20 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		}
 
 		// Compute how much the sample depart from an integer position
-		double ex = x - ((0.0 <= x)? (ix): (ix - 1));
-		double ey = y - ((0.0 <= y)? (iy): (iy - 1));
+		double ex = x - ((0d <= x)? (ix): (ix - 1));
+		double ey = y - ((0d <= y)? (iy): (iy - 1));
 
 		// Set X weights for the image and derivative interpolation
-		double s = 1.0F - ex;
-		dxWeight[0] = 0.5F * ex * ex;
-		xWeight[0] = ex * dxWeight[0] / 3.0F; // Bspline03(x-ix-2)
-		dxWeight[3] = -0.5F * s * s;
-		xWeight[3] = s * dxWeight[3] / -3.0F; // Bspline03(x-ix+1)
-		dxWeight[1] = 1.0F - 2.0F * dxWeight[0] + dxWeight[3];
+		double s = 1d - ex;
+		dxWeight[0] = 0.5d * ex * ex;
+		xWeight[0] = ex * dxWeight[0] / 3d; // Bspline03(x-ix-2)
+		dxWeight[3] = -0.5d * s * s;
+		xWeight[3] = s * dxWeight[3] / -3d; // Bspline03(x-ix+1)
+		dxWeight[1] = 1d - 2d * dxWeight[0] + dxWeight[3];
 		//xWeight[1]  = 2.0F / 3.0F + (1.0F + ex) * dxWeight[3]; // Bspline03(x-ix-1);
 		xWeight[1] = MathTools.Bspline03(x - ix - 1);
-		dxWeight[2] = 1.5F * ex * (ex - 4.0F / 3.0F);
-		xWeight[2] = 2.0F / 3.0F - (2.0F - ex) * dxWeight[0]; // Bspline03(x-ix)
+		dxWeight[2] = 1.5d * ex * (ex - 4d / 3d);
+		xWeight[2] = 2d / 3d - (2d - ex) * dxWeight[0]; // Bspline03(x-ix)
 
 		//d2xWeight[0] = ex;
 		//d2xWeight[1] = s-2*ex;
@@ -1322,15 +1322,15 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		//d2xWeight[3] = s;
 
 		// Set Y weights for the image and derivative interpolation
-		double t = 1.0F - ey;
-		dyWeight[0] = 0.5F * ey * ey;
-		yWeight[0] = ey * dyWeight[0] / 3.0F;
-		dyWeight[3] = -0.5F * t * t;
-		yWeight[3] = t * dyWeight[3] / -3.0F;
-		dyWeight[1] = 1.0F - 2.0F * dyWeight[0] + dyWeight[3];
-		yWeight[1] = 2.0F / 3.0F + (1.0F + ey) * dyWeight[3];
-		dyWeight[2] = 1.5F * ey * (ey - 4.0F / 3.0F);
-		yWeight[2] = 2.0F / 3.0F - (2.0F - ey) * dyWeight[0];
+		double t = 1d - ey;
+		dyWeight[0] = 0.5d * ey * ey;
+		yWeight[0] = ey * dyWeight[0] / 3d;
+		dyWeight[3] = -0.5d * t * t;
+		yWeight[3] = t * dyWeight[3] / -3d;
+		dyWeight[1] = 1d - 2d * dyWeight[0] + dyWeight[3];
+		yWeight[1] = 2d / 3d + (1d + ey) * dyWeight[3];
+		dyWeight[2] = 1.5d * ey * (ey - 4d / 3d);
+		yWeight[2] = 2d / 3d - (2d - ey) * dyWeight[0];
 
 		//d2yWeight[0] = ey;
 		//d2yWeight[1] = t-2*ey;
@@ -1338,9 +1338,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		//d2yWeight[3] = t;
 
 		// Image value: Only SplineDegree=3 is implemented
-		double ival = 0.0F;
+		double ival = 0d;
 		for (int j = 0; j < 4; j++) {
-			s = 0.0F;
+			s = 0d;
 			iy = yIndex[j];
 			if (iy != -1) {
 				p = iy * widthToUse;
@@ -1360,9 +1360,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		}
 
 		// Derivatives: Only SplineDegree=3 is implemented
-		D[0] = D[1] = 0.0F;
+		D[0] = D[1] = 0d;
 		for (int j = 0; j < 4; j++) {
-			double sx = 0.0F, sy = 0.0F;
+			double sx = 0d, sy = 0d;
 			iy = yIndex[j];
 			if (iy != -1) {
 				p = iy * widthToUse;
@@ -1501,9 +1501,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	public void precomputed_interpolateD(double[] D, int u, int v) {
 		// Only SplineDegree=3 is implemented
-		D[0] = D[1] = 0.0F;
+		D[0] = D[1] = 0d;
 		for (int j = 0; j < 4; j++) {
-			double sx = 0.0F, sy = 0.0F;
+			double sx = 0d, sy = 0d;
 			int iy = prec_yIndex[v][j];
 			if (iy != -1) {
 				int p = iy * widthToUse;
@@ -1538,9 +1538,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	public void precomputed_interpolateD2(double[] D2, int u, int v) {
 		// Only SplineDegree=3 is implemented
-		D2[0] = D2[1] = D2[2] = 0.0F;
+		D2[0] = D2[1] = D2[2] = 0d;
 		for (int j = 0; j < 4; j++) {
-			double sxy = 0.0F, sxx = 0.0F, syy = 0.0F;
+			double sxy = 0d, sxx = 0d, syy = 0d;
 			int iy = prec_yIndex[v][j];
 			if (iy != -1) {
 				int p = iy * widthToUse;
@@ -1576,9 +1576,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	public double precomputed_interpolateI(int u, int v) {
 		// Only SplineDegree=3 is implemented
-		double ival = 0.0F;
+		double ival = 0d;
 		for (int j = 0; j < 4; j++) {
-			double s = 0.0F;
+			double s = 0d;
 			int iy = prec_yIndex[v][j];
 			if (iy != -1) {
 				int p = iy * widthToUse;
@@ -1623,8 +1623,8 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		// Fill the precomputed weights and indexes for the Y axis
 		for (int v = 0; v < Ydim; v++) {
 			// Express the current point in Spline units
-			final double tv = (double) (v * intervals) / (double) (Ydim - 1) + 1.0F;
-			final double tu = 1.0F;
+			final double tv = (double) (v * intervals) / (double) (Ydim - 1) + 1d;
+			final double tu = 1d;
 
 			// Compute all weights and indexes
 			prepareForInterpolation(tu, tv, ORIGINAL);
@@ -1641,8 +1641,8 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		// Fill the precomputed weights and indexes for the X axis
 		for (int u = 0; u < Xdim; u++) {
 			// Express the current point in Spline units
-			final double tv = 1.0F;
-			final double tu = (double) (u * intervals) / (double) (Xdim - 1) + 1.0F;
+			final double tv = 1d;
+			final double tu = (double) (u * intervals) / (double) (Xdim - 1) + 1d;
 
 			// Compute all weights and indexes
 			prepareForInterpolation(tu, tv, ORIGINAL);
@@ -1674,7 +1674,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 
 			// Copy the pixel array and scale if necessary
 			if (this.maxImageSubsamplingFactor != 0 && this.maxImageSubsamplingFactor != 1) {
-				final double scaleFactor =  (1.0d / this.maxImageSubsamplingFactor);
+				final double scaleFactor =  (1d / this.maxImageSubsamplingFactor);
 				this.ip = MiscTools.scale(ip, scaleFactor);
 				this.width = ip.getWidth();
 				this.height = ip.getHeight();
@@ -1817,19 +1817,19 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		switch (degree) {
 		case 3:
 			h = new double[2];
-			h[0] = 2.0 / 3.0;
-			h[1] = 1.0 / 6.0;
+			h[0] = 2d / 3d;
+			h[1] = 1d / 6d;
 			break;
 		case 7:
 			h = new double[4];
-			h[0] = 151.0 / 315.0;
-			h[1] = 397.0 / 1680.0;
-			h[2] = 1.0 / 42.0;
-			h[3] = 1.0 / 5040.0;
+			h[0] = 151d / 315d;
+			h[1] = 397d / 1680d;
+			h[2] = 1d / 42d;
+			h[3] = 1d / 5040d;
 			break;
 		default:
 			h = new double[1];
-			h[0] = 1.0;
+			h[0] = 1d;
 		}
 		for (int y = 0; ((y < height) && (!t.isInterrupted())); y++) {
 			extractRow(basic, y, hLine);
@@ -2116,12 +2116,12 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		final double[] vLine = new double[height];
 		for (int y = 0; (y < height); y++) {
 			extractRow(image, y, hLine);
-			samplesToInterpolationCoefficient1D(hLine, 3, 0.0);
+			samplesToInterpolationCoefficient1D(hLine, 3, 0d);
 			putRow(basic, y, hLine);
 		}
 		for (int x = 0; (x < width); x++) {
 			extractColumn(basic, width, x, vLine);
-			samplesToInterpolationCoefficient1D(vLine, 3, 0.0);
+			samplesToInterpolationCoefficient1D(vLine, 3, 0d);
 			putColumn(basic, width, x, vLine);
 		}
 		return (basic);
@@ -2150,12 +2150,12 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		final double[] vLine = new double[height];
 		for (int y = 0; ((y < height) && (!t.isInterrupted())); y++) {
 			extractRow(cardinal, y, hLine);
-			samplesToInterpolationCoefficient1D(hLine, degree, 0.0);
+			samplesToInterpolationCoefficient1D(hLine, degree, 0d);
 			putRow(basic, y, hLine);
 		}
 		for (int x = 0; ((x < width) && (!t.isInterrupted())); x++) {
 			extractColumn(basic, width, x, vLine);
-			samplesToInterpolationCoefficient1D(vLine, degree, 0.0);
+			samplesToInterpolationCoefficient1D(vLine, degree, 0d);
 			putColumn(basic, width, x, vLine);
 		}
 		return (basic);
@@ -2205,7 +2205,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	private double getInitialAntiCausalCoefficientMirrorOffBounds(final double[] c, final double z,
 			final double tolerance) {
-		return (z * c[c.length - 1] / (z - 1.0));
+		return (z * c[c.length - 1] / (z - 1d));
 	} /* end getInitialAntiCausalCoefficientMirrorOffBounds */
 
 	//------------------------------------------------------------------
@@ -2220,9 +2220,9 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	private double getInitialCausalCoefficientMirrorOffBounds(final double[] c, final double z, final double tolerance) {
 		double z1 = z;
 		double zn = Math.pow(z, c.length);
-		double sum = (1.0 + z) * (c[0] + zn * c[c.length - 1]);
+		double sum = (1d + z) * (c[0] + zn * c[c.length - 1]);
 		int horizon = c.length;
-		if (0.0 < tolerance) {
+		if (0d < tolerance) {
 			horizon = 2 + (int) (Math.log(tolerance) / Math.log(Math.abs(z)));
 			horizon = (horizon < c.length)? (horizon): (c.length);
 		}
@@ -2232,7 +2232,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 			zn = zn / z;
 			sum = sum + (z1 + zn) * c[n];
 		}
-		return (sum / (1.0 - Math.pow(z, 2 * c.length)));
+		return (sum / (1d - Math.pow(z, 2 * c.length)));
 	} /* end getInitialCausalCoefficientMirrorOffBounds */
 
 	//------------------------------------------------------------------
@@ -2276,7 +2276,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 * @param s
 	 */
 	private void reduceDual1D(final double[] c, final double[] s) {
-		final double h[] = {6.0 / 16.0, 4.0 / 16.0, 1.0 / 16.0};
+		final double h[] = {6d / 16d, 4d / 16d, 1d / 16d};
 		if (2 <= s.length) {
 			s[0] = h[0] * c[0] + h[1] * (c[0] + c[1]) + h[2] * (c[1] + c[2]);
 			for (int i = 2, j = 1; (j < (s.length - 1)); i += 2, j++) {
@@ -2295,7 +2295,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 				s[0] = h[0] * c[0] + h[1] * (c[0] + c[1]) + h[2] * (c[1] + c[2]);
 				break;
 			case 2:
-				s[0] = h[0] * c[0] + h[1] * (c[0] + c[1]) + 2.0 * h[2] * c[1];
+				s[0] = h[0] * c[0] + h[1] * (c[0] + c[1]) + 2d * h[2] * c[1];
 				break;
 			default:
 			}
@@ -2313,11 +2313,11 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 	 */
 	private void samplesToInterpolationCoefficient1D(final double[] c, final int degree, final double tolerance) {
 		double[] z = new double[0];
-		double lambda = 1.0;
+		double lambda = 1d;
 		switch (degree) {
 		case 3:
 			z = new double[1];
-			z[0] = Math.sqrt(3.0) - 2.0;
+			z[0] = Math.sqrt(3d) - 2d;
 			break;
 		case 7:
 			z = new double[3];
@@ -2333,7 +2333,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 		}
 		// compute the overall gain
 		for (int k = 0; (k < z.length); k++) {
-			lambda *= (1.0 - z[k]) * (1.0 - 1.0 / z[k]);
+			lambda *= (1d - z[k]) * (1d - 1d / z[k]);
 		}
 		// apply the gain
 		for (int n = 0; (n < c.length); n++) {
@@ -2374,7 +2374,7 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 				}
 				s[s.length - 1] = h[0] * c[c.length - 1] + h[1] * (c[c.length - 2] + c[c.length - 1]);
 			} else {
-				s[0] = (h[0] + 2.0 * h[1]) * c[0];
+				s[0] = (h[0] + 2d * h[1]) * c[0];
 			}
 			break;
 		case 4:
@@ -2408,16 +2408,16 @@ public class BSplineModel implements Runnable { /* begin class BSplineModel */
 					s[3] = h[0] * c[3] + h[1] * (c[2] + c[3]) + h[2] * (c[1] + c[2]) + h[3] * (c[0] + c[1]);
 					break;
 				case 3:
-					s[0] = h[0] * c[0] + h[1] * (c[0] + c[1]) + h[2] * (c[1] + c[2]) + 2.0 * h[3] * c[2];
-					s[1] = h[0] * c[1] + (h[1] + h[2]) * (c[0] + c[2]) + 2.0 * h[3] * c[1];
-					s[2] = h[0] * c[2] + h[1] * (c[1] + c[2]) + h[2] * (c[0] + c[1]) + 2.0 * h[3] * c[0];
+					s[0] = h[0] * c[0] + h[1] * (c[0] + c[1]) + h[2] * (c[1] + c[2]) + 2d * h[3] * c[2];
+					s[1] = h[0] * c[1] + (h[1] + h[2]) * (c[0] + c[2]) + 2d * h[3] * c[1];
+					s[2] = h[0] * c[2] + h[1] * (c[1] + c[2]) + h[2] * (c[0] + c[1]) + 2d * h[3] * c[0];
 					break;
 				case 2:
-					s[0] = (h[0] + h[1] + h[3]) * c[0] + (h[1] + 2.0 * h[2] + h[3]) * c[1];
-					s[1] = (h[0] + h[1] + h[3]) * c[1] + (h[1] + 2.0 * h[2] + h[3]) * c[0];
+					s[0] = (h[0] + h[1] + h[3]) * c[0] + (h[1] + 2d * h[2] + h[3]) * c[1];
+					s[1] = (h[0] + h[1] + h[3]) * c[1] + (h[1] + 2d * h[2] + h[3]) * c[0];
 					break;
 				case 1:
-					s[0] = (h[0] + 2.0 * (h[1] + h[2] + h[3])) * c[0];
+					s[0] = (h[0] + 2d * (h[1] + h[2] + h[3])) * c[0];
 					break;
 				default:
 				}

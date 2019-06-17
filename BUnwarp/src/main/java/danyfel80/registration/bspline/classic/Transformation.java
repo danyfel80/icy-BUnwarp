@@ -1138,7 +1138,7 @@ public class Transformation { /* begin class Transformation */
 		swy.prepareForInterpolation(tu, tv, ORIGINAL);
 		xyF[1] = swy.interpolateI() * samplingFactor;
 	}
-
+	
 	/*
 	 * ....................................................................
 	 * Private methods
