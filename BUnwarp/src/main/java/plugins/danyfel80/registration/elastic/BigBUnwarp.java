@@ -281,7 +281,7 @@ public class BigBUnwarp extends EzPlug implements EzStoppable, Block {
 				return true;
 			});
 		} else {
-			final DecimalFormat formatter = new java.text.DecimalFormat("000.##");
+			final DecimalFormat formatter = new java.text.DecimalFormat("000.");
 			registration.addProgressListener((double progress, String message, Object data) -> {
 				System.out.format("Registering %s%%: %s\n", formatter.format(progress * 100d), message);
 				return true;
