@@ -304,7 +304,7 @@ public class SimpleBUnwarp extends EzPlug implements EzStoppable, Block {
 		} else {
 			final DecimalFormat formatter = new java.text.DecimalFormat("000.##");
 			registration.addProgressListener((double progress, String message, Object data) -> {
-				System.out.format("Registering %s%%: %s\n", formatter.format(progress*100d), message);
+				System.out.format("Registering %s%%: %s\n", formatter.format(progress * 100d), message);
 				return true;
 			});
 		}
@@ -328,18 +328,23 @@ public class SimpleBUnwarp extends EzPlug implements EzStoppable, Block {
 	}
 
 	private void showResults() {
-		Sequence transformedSource = registration.getDirectResult();
-		transformedSource.setName(registration.getSourceSequence().getName() + "_Warped");
+		Sequence transformedInputSource = registration.getDirectResult();
+		transformedInputSource.setName(registration.getSourceSequence().getName() + "_Warped");
+		Sequence transformedSource = registration.getTransformedDirectResult();
+
 		if (!isHeadLess()) {
+			addSequence(transformedInputSource);
 			addSequence(transformedSource);
 		} else {
 			varResultSourceSequence.setValue(transformedSource);
 			varResultTransformation.setValue(registration.getTransformation());
 		}
 		if (registration.getRegistrationMode() != RegistrationMode.MONO) {
-			Sequence transformedTarget = registration.getIndirectResult();
-			transformedTarget.setName(registration.getTargetSequence().getName() + "_Warped");
+			Sequence transformedInputTarget = registration.getIndirectResult();
+			transformedInputTarget.setName(registration.getTargetSequence().getName() + "_Warped");
+			Sequence transformedTarget = registration.getTransformedIndirectResult();
 			if (!isHeadLess()) {
+				addSequence(transformedInputTarget);
 				addSequence(transformedTarget);
 			} else {
 				varResultTargetSequence.setValue(transformedTarget);

@@ -8,6 +8,7 @@ import java.util.Set;
 import algorithms.danyfel80.io.sequence.cursor.IcyBufferedImageCursor;
 import icy.common.listener.DetailedProgressListener;
 import icy.image.IcyBufferedImage;
+import icy.image.IcyBufferedImageUtil;
 import icy.sequence.Sequence;
 import icy.type.DataType;
 import plugins.kernel.roi.roi2d.ROI2DArea;
@@ -46,6 +47,9 @@ public class BUnwarpRegistration {
 	private Transformation transformation;
 	private Sequence directResult;
 	private Sequence indirectResult;
+
+	private Sequence resultTransformedSourceSequence;
+	private Sequence resultTransformedTargetSequence;
 
 	/**
 	 * @return The sourceSequence.
@@ -378,7 +382,8 @@ public class BUnwarpRegistration {
 		adjustConsistencyWeight();
 		createTransformation();
 		computeTransformation();
-		restablishOriginalImages();
+		
+		
 	}
 
 	private void copyOriginalImages() {
@@ -572,6 +577,8 @@ public class BUnwarpRegistration {
 		} else {
 			transformation.doBidirectionalRegistration();
 		}
+		
+		restablishOriginalImages();
 
 		if (sourceBSplineModel.isSubOutput()) {
 			notifyProgress(Double.NaN, "Calculating final transformed source image");
@@ -592,6 +599,104 @@ public class BUnwarpRegistration {
 	private void restablishOriginalImages() {
 		getSourceSequence().setImage(0, 0, originalSourceImage);
 		getTargetSequence().setImage(0, 0, originalTargetImage);
+	}
+
+	public Sequence getTransformedDirectResult() {
+		BSplineModel xDeformationModel = new BSplineModel(getTransformation().getDirectDeformationCoefficientsX());
+		BSplineModel yDeformationModel = new BSplineModel(getTransformation().getDirectDeformationCoefficientsY());
+		BSplineModel[] transformedSourceModel = new BSplineModel[getTransformedSourceSequence().getSizeC()];
+		for (int c = 0; c < transformedSourceModel.length; c++) {
+			transformedSourceModel[c] = new BSplineModel(
+					IcyBufferedImageUtil.extractChannel(getTransformedSourceSequence().getFirstImage(), c), false, 0);
+			transformedSourceModel[c].setPyramidDepth(0);
+			transformedSourceModel[c].startPyramids();
+		}
+
+		try {
+			for (int c = 0; c < transformedSourceModel.length; c++) {
+				transformedSourceModel[c].getThread().join();
+			}
+		} catch (InterruptedException e) {
+			System.out.println("Should never reach this");
+			e.printStackTrace();
+		}
+
+		IcyBufferedImage transformedSourceImage = new IcyBufferedImage(getTransformedTargetSequence().getWidth(),
+				getTransformedTargetSequence().getHeight(), getTransformedSourceSequence().getSizeC(),
+				getTransformedSourceSequence().getDataType_());
+
+		IcyBufferedImageCursor cursor = new IcyBufferedImageCursor(transformedSourceImage);
+
+		double sourceYScaleFactor = (xDeformationModel.getHeight() - 3) / (double) (transformedSourceImage.getHeight() - 1);
+		double sourceXScaleFactor = (xDeformationModel.getWidth() - 3) / (double) (transformedSourceImage.getWidth() - 1);
+		for (int j = 0; j < transformedSourceImage.getHeight(); j++) {
+			double scaledY = (j * sourceYScaleFactor) + 1;
+			for (int i = 0; i < transformedSourceImage.getWidth(); i++) {
+				double scaledX = (i * sourceXScaleFactor) + 1;
+				double interpolatedX = xDeformationModel.prepareForInterpolationAndInterpolateI(scaledX, scaledY, false, false);
+				double interpolatedY = yDeformationModel.prepareForInterpolationAndInterpolateI(scaledX, scaledY, false, false);
+				if (interpolatedX >= 0 && interpolatedX < getTransformedSourceSequence().getWidth() && interpolatedY >= 0
+						&& interpolatedY < getTransformedSourceSequence().getHeight()) {
+					for (int c = 0; c < transformedSourceModel.length; c++) {
+						cursor.setSafe(i, j, c, transformedSourceModel[c].prepareForInterpolationAndInterpolateI(interpolatedX,
+								interpolatedY, false, false));
+					}
+				}
+			}
+		}
+		cursor.commitChanges();
+		resultTransformedSourceSequence = new Sequence(getTransformedSourceSequence().getName() + "_Transformed",
+				transformedSourceImage);
+		return resultTransformedSourceSequence;
+	}
+
+	public Sequence getTransformedIndirectResult() {
+		BSplineModel xDeformationModel = new BSplineModel(getTransformation().getInverseDeformationCoefficientsX());
+		BSplineModel yDeformationModel = new BSplineModel(getTransformation().getInverseDeformationCoefficientsY());
+		BSplineModel[] transformedTargetModel = new BSplineModel[getTransformedTargetSequence().getSizeC()];
+		for (int c = 0; c < transformedTargetModel.length; c++) {
+			transformedTargetModel[c] = new BSplineModel(
+					IcyBufferedImageUtil.extractChannel(getTransformedTargetSequence().getFirstImage(), c), false, 0);
+			transformedTargetModel[c].setPyramidDepth(0);
+			transformedTargetModel[c].startPyramids();
+		}
+
+		try {
+			for (int c = 0; c < transformedTargetModel.length; c++) {
+				transformedTargetModel[c].getThread().join();
+			}
+		} catch (InterruptedException e) {
+			System.out.println("Should never reach this");
+			e.printStackTrace();
+		}
+
+		IcyBufferedImage transformedTargetImage = new IcyBufferedImage(getTransformedSourceSequence().getWidth(),
+				getTransformedSourceSequence().getHeight(), getTransformedTargetSequence().getSizeC(),
+				getTransformedTargetSequence().getDataType_());
+
+		IcyBufferedImageCursor cursor = new IcyBufferedImageCursor(transformedTargetImage);
+
+		double targetYScaleFactor = (xDeformationModel.getHeight() - 3) / (double) (transformedTargetImage.getHeight() - 1);
+		double targetXScaleFactor = (xDeformationModel.getWidth() - 3) / (double) (transformedTargetImage.getWidth() - 1);
+		for (int j = 0; j < transformedTargetImage.getHeight(); j++) {
+			double scaledY = (j * targetYScaleFactor) + 1;
+			for (int i = 0; i < transformedTargetImage.getWidth(); i++) {
+				double scaledX = (i * targetXScaleFactor) + 1;
+				double interpolatedX = xDeformationModel.prepareForInterpolationAndInterpolateI(scaledX, scaledY, false, false);
+				double interpolatedY = yDeformationModel.prepareForInterpolationAndInterpolateI(scaledX, scaledY, false, false);
+				if (interpolatedX >= 0 && interpolatedX < getTransformedTargetSequence().getWidth() && interpolatedY >= 0
+						&& interpolatedY < getTransformedTargetSequence().getHeight()) {
+					for (int c = 0; c < transformedTargetModel.length; c++) {
+						cursor.setSafe(i, j, c, transformedTargetModel[c].prepareForInterpolationAndInterpolateI(interpolatedX,
+								interpolatedY, false, false));
+					}
+				}
+			}
+		}
+		cursor.commitChanges();
+		resultTransformedTargetSequence = new Sequence(getTransformedTargetSequence().getName() + "_Transformed",
+				transformedTargetImage);
+		return resultTransformedTargetSequence;
 	}
 
 }

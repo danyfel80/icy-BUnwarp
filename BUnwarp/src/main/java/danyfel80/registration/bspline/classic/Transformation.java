@@ -1138,7 +1138,7 @@ public class Transformation { /* begin class Transformation */
 		swy.prepareForInterpolation(tu, tv, ORIGINAL);
 		xyF[1] = swy.interpolateI() * samplingFactor;
 	}
-
+	
 	/*
 	 * ....................................................................
 	 * Private methods
@@ -3372,7 +3372,7 @@ public class Transformation { /* begin class Transformation */
 
 		for (int v = 0; v < auxTargetCurrentHeight; v++)
 			for (int u = 0; u < auxTargetCurrentWidth; u++)
-				transformedImage[v][u] = 255;
+				transformedImage[v][u] = 1;
 
 		// Ask for memory for the transformation
 		double[][] transformation_x = new double[auxTargetCurrentHeight][auxTargetCurrentWidth];
@@ -3402,10 +3402,13 @@ public class Transformation { /* begin class Transformation */
 
 		// Gray scale images
 		if (this.originalSourceIP.getSizeC() == 1)
-			is.getVolumetricImage(0).setImage(is.getSizeZ(0), fp);
-		else // Color images
-			is.getVolumetricImage(0).setImage(is.getSizeZ(0),
-					IcyBufferedImage.createFrom(IcyBufferedImageUtil.getARGBImage(fp)));
+			is.addImage(fp);//getVolumetricImage(0).setImage(is.getSizeZ(0), fp);
+		else {// Color images
+			
+			is.addImage(IcyBufferedImageUtil.convertToType(IcyBufferedImage.createFrom(Arrays.asList(fp, fp, fp)),//IcyBufferedImage.createFrom(IcyBufferedImageUtil.getARGBImage(fp)),
+					is.getDataType_(), false));//getVolumetricImage(0).setImage(is.getSizeZ(0),
+			//IcyBufferedImage.createFrom(IcyBufferedImageUtil.getARGBImage(fp)));
+		}
 	}
 
 	/*-------------------------------------------------------------------*/
@@ -3532,8 +3535,6 @@ public class Transformation { /* begin class Transformation */
 
 				rects[i] = new Rectangle(0, y_start, auxTargetWidth, block_height);
 
-				//System.out.println("block = 0 " + (i*block_height) + " " + auxTargetWidth + " " + block_height );
-
 				fp_tile[i] = new IcyBufferedImage(rects[i].width, rects[i].height, 1, DataType.DOUBLE);
 				fp_mask_tile[i] = new IcyBufferedImage(rects[i].width, rects[i].height, 1, DataType.DOUBLE);
 
@@ -3576,13 +3577,13 @@ public class Transformation { /* begin class Transformation */
 			fpCursor.commitChanges();
 			fpMaskCursor.commitChanges();
 
-			is.addVolumetricImage();
+			//is.addVolumetricImage();
 			// Add slices to result stack
-			is.getVolumetricImage(0).setImage(is.getSizeZ(0), fp);
+			is.addImage(fp);
 			//if (outputLevel > -1)
-			is.getVolumetricImage(0).setImage(is.getSizeZ(0), fp_target);
+			is.addImage(fp_target);
 			//if (outputLevel > -1)
-			is.getVolumetricImage(0).setImage(is.getSizeZ(0), fp_mask);
+			is.addImage(fp_mask);
 		} else /* COLOR IMAGES */
 		{
 			// red
@@ -3643,8 +3644,6 @@ public class Transformation { /* begin class Transformation */
 
 				rects[i] = new Rectangle(0, y_start, auxTargetWidth, block_height);
 
-				//System.out.println("block = 0 " + (i*block_height) + " " + auxTargetWidth + " " + block_height );
-
 				fpR_tile[i] = new IcyBufferedImage(rects[i].width, rects[i].height, 1, DataType.DOUBLE);
 				fpG_tile[i] = new IcyBufferedImage(rects[i].width, rects[i].height, 1, DataType.DOUBLE);
 				fpB_tile[i] = new IcyBufferedImage(rects[i].width, rects[i].height, 1, DataType.DOUBLE);
@@ -3700,7 +3699,7 @@ public class Transformation { /* begin class Transformation */
 			is.addImage(cp);
 			//if (outputLevel > -1)
 			IcyBufferedImage originalImage = bIsReverse? this.originalSourceIP: this.originalTargetIP;
-			is.addImage(originalImage);
+			is.addImage(IcyBufferedImageUtil.convertToType(originalImage, is.getDataType_(), false));
 			//if (outputLevel > -1)
 			is.addImage(cp_mask);
 
