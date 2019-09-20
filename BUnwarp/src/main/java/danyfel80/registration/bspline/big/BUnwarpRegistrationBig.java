@@ -792,8 +792,10 @@ public class BUnwarpRegistrationBig {
 			double[] tPos = new double[] {(pos.getX() * subsampledSourceSize.getX()) / outputSourceSize.getX(),
 					(pos.getY() * subsampledSourceSize.getY()) / outputSourceSize.getY()};
 			transformation.transform(tPos[0], tPos[1], tPos, false);
-			return new ROI2DPoint((tPos[0] * outputTargetSize.getX()) / subsampledTargetSize.getX(),
+			ROI2DPoint nr = new ROI2DPoint((tPos[0] * outputTargetSize.getX()) / subsampledTargetSize.getX(),
 					(tPos[1] * outputTargetSize.getY()) / subsampledTargetSize.getY());
+			nr.setName(r.getName());
+			return nr;
 		}).collect(Collectors.toList());
 	}
 }

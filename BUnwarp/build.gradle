@@ -3,6 +3,9 @@ apply plugin: 'eclipse'
 
 version = '1.2.0'
 
+println "ICY_HOME=${System.env.ICY_HOME}"
+println project.name + " " + version
+
 configurations {
 	extraLibs // configuration that holds jars to include in the jar
 }
@@ -15,8 +18,6 @@ repositories {
 		dirs "$rootProject.projectDir/jars/BigImageTools"
 	}*/
 }
-
-println "ICY_HOME=${System.env.ICY_HOME}"
 dependencies {
 	// 1.1 External libraries
 	extraLibs 'org.ehcache:ehcache:3.4.0'
@@ -46,13 +47,15 @@ dependencies {
 
 // Make an icy plugin project
 eclipse {
-	classpath.downloadJavadoc = true
+	classpath{
+		defaultOutputDir = file("ecbuild")
+		downloadJavadoc = true
+    }
 	
 	project {
-		buildCommand 'org.eclipse.buildship.core.gradleprojectbuilder'
-		
 		natures += ['icy.icy4eclipse.core.icynature']
-		natures += ['org.eclipse.buildship.core.gradleprojectnature']
+		//natures += ['org.eclipse.buildship.core.gradleprojectnature']
+		//buildCommand 'org.eclipse.buildship.core.gradleprojectbuilder'
 	}
 }
 
