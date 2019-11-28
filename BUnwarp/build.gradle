@@ -46,25 +46,8 @@ dependencies {
 
 // Make an icy plugin project
 eclipse {
-  classpath{
-    defaultOutputDir = file("ecbuild")
-    file.whenMerged {
-      entries.each {
-        source ->
-          // This seems kludgy.  If the second test is omitted, it fails processing a 'Project Dependency' entry
-          if (source.kind == 'src' && source.toString().contains('output')) {
-            source.output = 'ecbuild'
-          }
-      }
-    }
-    downloadJavadoc = true
-  }
-  
-  project {
-    natures += ['icy.icy4eclipse.core.icynature']
-    //natures += ['org.eclipse.buildship.core.gradleprojectnature']
-    //buildCommand 'org.eclipse.buildship.core.gradleprojectbuilder'
-  }
+  classpath.downloadJavadoc = true
+  project.natures += ['icy.icy4eclipse.core.icynature']
 }
 
 jar {
